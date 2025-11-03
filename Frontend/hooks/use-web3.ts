@@ -17,6 +17,7 @@ export function useWeb3() {
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const connectWallet = useCallback(async () => {
     const ethereumProvider = getEthereumProvider();
@@ -29,6 +30,8 @@ export function useWeb3() {
       setIsConnecting(true);
       setError(null);
 
+      console.log("🔌 Connecting wallet...");
+
       // Use explicit typing for provider responses
       const existingAccounts = (await ethereumProvider.request({
         method: "eth_accounts",
@@ -38,6 +41,7 @@ export function useWeb3() {
 
       if (!accounts || accounts.length === 0) {
         try {
+          console.log("📝 Requesting account access...");
           accounts = (await ethereumProvider.request({
             method: "eth_requestAccounts",
           })) as string[];
@@ -58,22 +62,28 @@ export function useWeb3() {
       }
 
       // Create provider and get signer
+      console.log("✅ Creating provider...");
       const web3Provider = new ethers.BrowserProvider(ethereumProvider);
       const web3Signer = await web3Provider.getSigner();
       const address = await web3Signer.getAddress();
       const network = await web3Provider.getNetwork();
 
+      console.log("✅ Connected to address:", address);
+      console.log("🌐 Network:", Number(network.chainId));
+
       setProvider(web3Provider);
       setSigner(web3Signer);
       setAccount(address);
       setChainId(Number(network.chainId));
+      setIsInitialized(true);
 
       // Check if we're on the correct network
       if (Number(network.chainId) !== CHAIN_CONFIG.chainId) {
+        console.log("⚠️ Wrong network, attempting to switch...");
         await switchNetwork();
       }
     } catch (err: any) {
-      console.error("Error connecting wallet:", err);
+      console.error("❌ Error connecting wallet:", err);
       
       // Provide more user-friendly error messages
       if (err.code === 4001) {
@@ -93,13 +103,16 @@ export function useWeb3() {
     if (!ethereumProvider) return;
 
     try {
+      console.log("🔄 Switching to", CHAIN_CONFIG.chainName);
       await ethereumProvider.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: `0x${CHAIN_CONFIG.chainId.toString(16)}` }],
       });
+      console.log("✅ Network switched successfully");
     } catch (switchError: any) {
       if (switchError.code === 4902) {
         try {
+          console.log("➕ Adding network to MetaMask...");
           await ethereumProvider.request({
             method: "wallet_addEthereumChain",
             params: [
@@ -112,44 +125,61 @@ export function useWeb3() {
               },
             ],
           });
+          console.log("✅ Network added successfully");
         } catch (addError) {
-          console.error("Error adding network:", addError);
+          console.error("❌ Error adding network:", addError);
         }
       }
     }
   };
 
   const disconnectWallet = useCallback(() => {
+    console.log("🔌 Disconnecting wallet...");
     setProvider(null);
     setSigner(null);
     setAccount(null);
     setChainId(null);
+    setIsInitialized(false);
   }, []);
 
   // Initialize wallet connection on component mount if already connected
   useEffect(() => {
     const initializeWallet = async () => {
       const ethereumProvider = getEthereumProvider();
-      if (!ethereumProvider) return;
+      if (!ethereumProvider) {
+        console.log("❌ MetaMask not detected");
+        setIsInitialized(true); // Mark as initialized even without wallet
+        return;
+      }
 
       try {
+        console.log("🔍 Checking for existing wallet connection...");
         const accounts = (await ethereumProvider.request({
           method: "eth_accounts",
         })) as string[];
 
         if (accounts && accounts.length > 0) {
+          console.log("✅ Found existing connection, initializing...");
           const web3Provider = new ethers.BrowserProvider(ethereumProvider);
           const web3Signer = await web3Provider.getSigner();
           const address = await web3Signer.getAddress();
           const network = await web3Provider.getNetwork();
 
+          console.log("✅ Wallet initialized");
+          console.log("📍 Address:", address);
+          console.log("🌐 Chain ID:", Number(network.chainId));
+
           setProvider(web3Provider);
           setSigner(web3Signer);
           setAccount(address);
           setChainId(Number(network.chainId));
+        } else {
+          console.log("ℹ️ No existing wallet connection found");
         }
       } catch (error) {
-        console.error("Error initializing wallet:", error);
+        console.error("❌ Error initializing wallet:", error);
+      } finally {
+        setIsInitialized(true);
       }
     };
 
@@ -159,7 +189,7 @@ export function useWeb3() {
   // Use polling instead of event listeners to avoid the addListener issue
   useEffect(() => {
     const ethereumProvider = getEthereumProvider();
-    if (!ethereumProvider || !account) return;
+    if (!ethereumProvider || !account || !isInitialized) return;
 
     let mounted = true;
     let lastAccounts: string[] = [account!];
@@ -176,8 +206,10 @@ export function useWeb3() {
         if (JSON.stringify(accounts) !== JSON.stringify(lastAccounts)) {
           lastAccounts = accounts;
           if (accounts.length === 0) {
+            console.log("👋 Account disconnected");
             disconnectWallet();
           } else if (accounts[0] !== account) {
+            console.log("🔄 Account changed to:", accounts[0]);
             setAccount(accounts[0]);
             const web3Provider = new ethers.BrowserProvider(ethereumProvider);
             const web3Signer = await web3Provider.getSigner();
@@ -192,10 +224,17 @@ export function useWeb3() {
         if (currentChainId !== lastChainId) {
           lastChainId = currentChainId;
           const newChainId = parseInt(currentChainId, 16);
+          console.log("🔄 Chain changed to:", newChainId);
           setChainId(newChainId);
+          
+          // Reinitialize provider on chain change
+          const web3Provider = new ethers.BrowserProvider(ethereumProvider);
+          setProvider(web3Provider);
+          const web3Signer = await web3Provider.getSigner();
+          setSigner(web3Signer);
         }
       } catch (error) {
-        console.warn("Error polling provider:", error);
+        console.warn("⚠️ Error polling provider:", error);
       }
 
       if (mounted) {
@@ -208,7 +247,7 @@ export function useWeb3() {
     return () => {
       mounted = false;
     };
-  }, [account, chainId, disconnectWallet]);
+  }, [account, chainId, disconnectWallet, isInitialized]);
 
   return {
     provider,
@@ -221,15 +260,53 @@ export function useWeb3() {
     disconnectWallet,
     isCorrectNetwork: chainId === CHAIN_CONFIG.chainId,
     switchNetwork,
+    isInitialized,
   };
 }
+
 // Hook for interacting with the prediction market contract
-export function usePredictionMarket() {
-  const { signer, provider, account } = useWeb3();
+// IMPORTANT: This should receive provider and signer from props, not create its own useWeb3 instance
+export function usePredictionMarket(provider: ethers.BrowserProvider | null, signer: ethers.Signer | null, account: string | null) {
+  const [isContractReady, setIsContractReady] = useState(false);
+
+  // Check if contract is ready
+  useEffect(() => {
+    const checkContract = async () => {
+      console.log("🔍 Contract check - Provider:", !!provider, "Account:", !!account);
+      
+      if (!provider) {
+        console.log("❌ No provider for contract check");
+        setIsContractReady(false);
+        return;
+      }
+
+      try {
+        console.log("🔍 Verifying contract at:", PREDICTION_MARKET_ADDRESS);
+        const contract = new ethers.Contract(
+          PREDICTION_MARKET_ADDRESS, 
+          PREDICTION_MARKET_ABI, 
+          provider
+        );
+        
+        // Test contract by calling a view function
+        const nextId = await contract.nextMarketId();
+        console.log("✅ Contract verified! Next market ID:", Number(nextId));
+        setIsContractReady(true);
+      } catch (error) {
+        console.error("❌ Contract verification failed:", error);
+        setIsContractReady(false);
+      }
+    };
+
+    checkContract();
+  }, [provider, account]);
 
   const getContract = useCallback(
     (withSigner = true) => {
-      if (!provider) return null;
+      if (!provider) {
+        console.warn("⚠️ Provider not available for getContract");
+        return null;
+      }
       const signerOrProvider = withSigner && signer ? signer : provider;
       return new ethers.Contract(PREDICTION_MARKET_ADDRESS, PREDICTION_MARKET_ABI, signerOrProvider);
     },
@@ -255,6 +332,8 @@ export function usePredictionMarket() {
     const contract = getContract();
     if (!contract) throw new Error("Contract not initialized");
 
+    console.log("📝 Creating market:", question);
+
     const yesAmount = ethers.parseEther(initialYes);
     const noAmount = ethers.parseEther(initialNo);
     const totalValue = yesAmount + noAmount;
@@ -263,6 +342,7 @@ export function usePredictionMarket() {
       value: totalValue,
     });
 
+    console.log("⏳ Waiting for transaction:", tx.hash);
     const receipt = await tx.wait();
     
     // Parse the MarketCreated event to get the market ID
@@ -276,7 +356,9 @@ export function usePredictionMarket() {
 
     if (event) {
       const parsed = contract.interface.parseLog(event);
-      return Number(parsed?.args[0]); // Return market ID
+      const marketId = Number(parsed?.args[0]);
+      console.log("✅ Market created with ID:", marketId);
+      return marketId;
     }
 
     throw new Error("Market creation event not found");
@@ -302,7 +384,7 @@ export function usePredictionMarket() {
     return await tx.wait();
   };
 
-  // Buy YES tokens (swap NO for YES or mint complete sets and sell NO)
+  // Buy YES tokens
   const buyYes = async (marketId: number, amount: string, slippage = 1) => {
     const contract = getContract();
     if (!contract) throw new Error("Contract not initialized");
@@ -322,7 +404,7 @@ export function usePredictionMarket() {
     return await swapTx.wait();
   };
 
-  // Buy NO tokens (swap YES for NO or mint complete sets and sell YES)
+  // Buy NO tokens
   const buyNo = async (marketId: number, amount: string, slippage = 1) => {
     const contract = getContract();
     if (!contract) throw new Error("Contract not initialized");
@@ -373,10 +455,12 @@ export function usePredictionMarket() {
     const contract = getContract(false);
     if (!contract) throw new Error("Contract not initialized");
 
+    console.log(`📊 Fetching market ${marketId}...`);
     const market = await contract.getMarket(marketId);
     const [yesPrice, noPrice] = await contract.getPrice(marketId);
 
     return {
+      id: marketId,
       creator: market[0],
       question: market[1],
       endTime: Number(market[2]),
@@ -388,9 +472,47 @@ export function usePredictionMarket() {
       noPool: market[8],
       lpTotalSupply: market[9],
       totalBacking: market[10],
-      yesPrice: Number(yesPrice) / 100, // Convert from basis points
+      yesPrice: Number(yesPrice) / 100,
       noPrice: Number(noPrice) / 100,
     };
+  };
+
+  // Get all markets
+  const getAllMarkets = async () => {
+    const contract = getContract(false);
+    if (!contract) {
+      console.error("❌ Contract not available");
+      throw new Error("Contract not initialized");
+    }
+
+    try {
+      console.log("📋 Fetching all markets...");
+      const nextId = await contract.nextMarketId();
+      const marketCount = Number(nextId);
+      console.log(`Found ${marketCount} markets`);
+
+      if (marketCount === 0) {
+        console.log("ℹ️ No markets created yet");
+        return [];
+      }
+
+      const markets = [];
+      for (let i = 0; i < marketCount; i++) {
+        try {
+          const market = await getMarket(i);
+          markets.push(market);
+          console.log(`✅ Loaded market ${i}: ${market.question.substring(0, 50)}...`);
+        } catch (error) {
+          console.warn(`⚠️ Failed to fetch market ${i}:`, error);
+        }
+      }
+
+      console.log(`✅ Successfully loaded ${markets.length} markets`);
+      return markets;
+    } catch (error) {
+      console.error("❌ Error fetching markets:", error);
+      throw error;
+    }
   };
 
   // Get token balances
@@ -437,8 +559,10 @@ export function usePredictionMarket() {
     sellYes,
     sellNo,
     getMarket,
+    getAllMarkets,
     getTokenBalances,
     redeem,
     contract: getContract(false),
+    isContractReady,
   };
 }

@@ -5,7 +5,7 @@ import { useWeb3 } from './use-web3'
 import PREDICTION_MARKET_ABI from '../contracts/abi.json'
 
 // Contract address
-const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || 'YOUR_DEPLOYED_CONTRACT_ADDRESS'
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0xf8760d03840297906c5ab1f195c62fb92df6b1f0'
 
 // Types
 export enum MarketStatus {
@@ -51,20 +51,62 @@ export function usePredictionMarket() {
   const { account, provider, signer, isCorrectNetwork } = useWeb3()
   const [isLoading, setIsLoading] = useState(false)
   const [contract, setContract] = useState<ethers.Contract | null>(null)
+  const [isContractReady, setIsContractReady] = useState(false)
 
   // Initialize contract
   useEffect(() => {
-    if (provider) {
-      const predictionMarketContract = new ethers.Contract(
-        PREDICTION_MARKET_ADDRESS,
-        PREDICTION_MARKET_ABI,
-        provider
-      )
-      setContract(predictionMarketContract)
+    const initializeContract = async () => {
+      if (!provider) {
+        console.log("No provider available yet")
+        setContract(null)
+        setIsContractReady(false)
+        return
+      }
+
+      try {
+        console.log("Initializing contract with address:", PREDICTION_MARKET_ADDRESS)
+        
+        // Check if we're on the correct network
+        const network = await provider.getNetwork()
+        console.log("Current network:", network.chainId)
+        
+        // BSC Testnet chain ID is 97
+        if (network.chainId !== BigInt(97)) {
+          console.warn("Not on BSC Testnet. Current chain:", network.chainId)
+          setContract(null)
+          setIsContractReady(false)
+          return
+        }
+
+        const predictionMarketContract = new ethers.Contract(
+          PREDICTION_MARKET_ADDRESS,
+          PREDICTION_MARKET_ABI,
+          provider
+        )
+        
+        // Test the contract connection
+        try {
+          const nextId = await (predictionMarketContract as any).nextMarketId()
+          console.log("Contract connection test successful. Next market ID:", Number(nextId))
+          setContract(predictionMarketContract)
+          setIsContractReady(true)
+        } catch (testError) {
+          console.error("Contract test failed:", testError)
+          setContract(null)
+          setIsContractReady(false)
+        }
+        
+      } catch (error) {
+        console.error("Error initializing contract:", error)
+        setContract(null)
+        setIsContractReady(false)
+      }
     }
+
+    initializeContract()
   }, [provider])
 
-  // Market Creation - Simple approach with type assertions
+  // Market Creation
   const createMarket = useCallback(async (
     params: MarketCreationParams
   ): Promise<number> => {
@@ -74,7 +116,7 @@ export function usePredictionMarket() {
 
     setIsLoading(true)
     try {
-      // Create a new contract instance with signer (simpler approach)
+      // Create a new contract instance with signer
       const contractWithSigner = new ethers.Contract(
         PREDICTION_MARKET_ADDRESS,
         PREDICTION_MARKET_ABI,
@@ -172,32 +214,45 @@ export function usePredictionMarket() {
     }
   }, [contract])
 
-  // Get All Markets
+  // Get All Markets - SINGLE DEFINITION
   const getAllMarkets = useCallback(async (): Promise<Market[]> => {
-    if (!contract) throw new Error('Contract not available')
+    if (!contract || !isContractReady) {
+      console.error("Contract not available or not ready")
+      throw new Error("Contract not available - please connect to BSC Testnet and ensure contract is deployed")
+    }
 
     try {
+      console.log("Fetching next market ID...")
       const nextId = await (contract as any).nextMarketId()
       const marketCount = Number(nextId)
+      console.log(`Found ${marketCount} markets on chain`)
       
-      if (marketCount === 0) return []
+      if (marketCount === 0) {
+        console.log("No markets created yet - this is normal for new deployment")
+        return []
+      }
 
       const markets: Market[] = []
       for (let i = 0; i < marketCount; i++) {
         try {
+          console.log(`Fetching market ${i}...`)
           const market = await getMarket(i)
           markets.push(market)
+          console.log(`Successfully loaded market ${i}`)
         } catch (error) {
           console.warn(`Failed to fetch market ${i}:`, error)
+          // Continue with other markets even if one fails
         }
       }
       
+      console.log(`Successfully loaded ${markets.length} markets`)
       return markets
+      
     } catch (error) {
-      console.error('Error fetching all markets:', error)
+      console.error("Error fetching all markets:", error)
       throw error
     }
-  }, [contract, getMarket])
+  }, [contract, isContractReady, getMarket])
 
   // Get output amount for swap
   const getAmountOut = useCallback(async (
@@ -300,6 +355,7 @@ export function usePredictionMarket() {
     isLoading,
     contract,
     contractAddress: PREDICTION_MARKET_ADDRESS,
+    isContractReady,
     
     // Constants
     MarketStatus,
