@@ -1,126 +1,157 @@
-// components/create-market-modal.tsx
-"use client";
+"use client"
 
-import { useState } from "react";
-import { X, Loader2, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { useWeb3, usePredictionMarket } from "../hooks/use-web3";
+import { useState } from "react"
+import { X, Loader2, Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { useWeb3Context } from "@/lib/wallet-context"
+import { usePredictionMarket } from "@/hooks/use-predection-market"
 
 interface CreateMarketModalProps {
-  onClose: () => void;
-  onSuccess?: (marketId: number) => void;
+  onClose: () => void
+  onSuccess?: (marketId: number) => void
 }
 
 export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketModalProps) {
-  const [question, setQuestion] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [initialYes, setInitialYes] = useState("0.1");
-  const [initialNo, setInitialNo] = useState("0.1");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
+  const [question, setQuestion] = useState("")
+  const [endDate, setEndDate] = useState("")
+  const [endTime, setEndTime] = useState("")
+  const [initialYes, setInitialYes] = useState("0.1")
+  const [initialNo, setInitialNo] = useState("0.1")
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [txHash, setTxHash] = useState<string | null>(null)
 
-  const { account, connectWallet, isConnecting, isCorrectNetwork, switchNetwork } = useWeb3();
-  const { createMarket } = usePredictionMarket();
+  // Get unified Web3 context
+  const { account, connectWallet, isConnecting, isCorrectNetwork, switchNetwork } = useWeb3Context()
+  const { createMarket, isLoading, isContractReady } = usePredictionMarket()
 
-  const totalLiquidity = parseFloat(initialYes || "0") + parseFloat(initialNo || "0");
-  const yesPercent = totalLiquidity > 0 ? (parseFloat(initialYes || "0") / totalLiquidity) * 100 : 50;
-  const noPercent = 100 - yesPercent;
+  // Calculate liquidity preview
+  const totalLiquidity = parseFloat(initialYes || "0") + parseFloat(initialNo || "0")
+  const yesPercent = totalLiquidity > 0 ? (parseFloat(initialYes || "0") / totalLiquidity) * 100 : 50
+  const noPercent = 100 - yesPercent
 
   const handleCreate = async () => {
+    // Step 1: Check if wallet is connected
     if (!account) {
-      await connectWallet();
-      return;
+      await connectWallet()
+      return
     }
 
+    // Step 2: Check if on correct network
     if (!isCorrectNetwork) {
-      await switchNetwork();
-      return;
+      await switchNetwork()
+      return
     }
 
-    // Validation
+    // Step 3: Check if contract is ready
+    if (!isContractReady) {
+      setError("Contract not ready. Please wait or refresh the page.")
+      return
+    }
+
+    // Step 4: Validate question
     if (!question || question.length < 10) {
-      setError("Question must be at least 10 characters");
-      return;
+      setError("Question must be at least 10 characters")
+      return
     }
 
     if (question.length > 280) {
-      setError("Question must be less than 280 characters");
-      return;
+      setError("Question must be less than 280 characters")
+      return
     }
 
+    // Step 5: Validate end date/time
     if (!endDate || !endTime) {
-      setError("Please set an end date and time");
-      return;
+      setError("Please set an end date and time")
+      return
     }
 
-    const endDateTime = new Date(`${endDate}T${endTime}`);
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+    const endDateTime = new Date(`${endDate}T${endTime}`)
+    const now = new Date()
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
 
     if (endDateTime <= oneHourFromNow) {
-      setError("End time must be at least 1 hour from now");
-      return;
+      setError("End time must be at least 1 hour from now")
+      return
     }
 
-    const yesAmount = parseFloat(initialYes);
-    const noAmount = parseFloat(initialNo);
+    // Step 6: Validate liquidity amounts
+    const yesAmount = parseFloat(initialYes)
+    const noAmount = parseFloat(initialNo)
 
     if (yesAmount <= 0 || noAmount <= 0) {
-      setError("Both YES and NO liquidity must be greater than 0");
-      return;
+      setError("Both YES and NO liquidity must be greater than 0")
+      return
     }
 
     if (totalLiquidity < 0.01) {
-      setError("Total liquidity must be at least 0.01 BNB");
-      return;
+      setError("Total liquidity must be at least 0.01 BNB")
+      return
     }
 
-    setIsProcessing(true);
-    setError(null);
-    setTxHash(null);
+    // Step 7: Proceed with market creation
+    setIsProcessing(true)
+    setError(null)
+    setTxHash(null)
 
     try {
-      const endTimeUnix = Math.floor(endDateTime.getTime() / 1000);
-      const marketId = await createMarket(question, endTimeUnix, initialYes, initialNo);
+      const endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
+      
+      console.log("📝 Creating market with params:", {
+        question,
+        endTime: endTimeUnix,
+        initialYes,
+        initialNo
+      })
 
-      setTxHash("success");
+      const marketId = await createMarket({
+        question,
+        endTime: endTimeUnix,
+        initialYes,
+        initialNo
+      })
+
+      console.log("✅ Market created successfully:", marketId)
+      setTxHash("success")
       
       if (onSuccess) {
-        onSuccess(marketId);
+        onSuccess(marketId)
       }
 
+      // Close modal after 2 seconds
       setTimeout(() => {
-        onClose();
-      }, 2000);
+        onClose()
+      }, 2000)
     } catch (err: any) {
-      console.error("Market creation error:", err);
-      setError(err.reason || err.message || "Failed to create market");
+      console.error("❌ Market creation error:", err)
+      setError(err.reason || err.message || "Failed to create market")
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
-  };
+  }
 
   // Set minimum date to tomorrow
-  const minDate = new Date();
-  minDate.setDate(minDate.getDate() + 1);
-  const minDateString = minDate.toISOString().split("T")[0];
+  const minDate = new Date()
+  minDate.setDate(minDate.getDate() + 1)
+  const minDateString = minDate.toISOString().split("T")[0]
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
       <Card className="w-full max-w-2xl p-6 relative my-8">
-        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+        >
           <X className="w-5 h-5" />
         </button>
 
         <h2 className="text-2xl font-bold mb-6">Create Prediction Market</h2>
 
         <div className="space-y-6">
-          {/* Question */}
+          {/* Question Section */}
           <div>
             <label className="text-sm font-medium mb-2 block">
               Market Question <span className="text-red-500">*</span>
@@ -138,7 +169,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
             </div>
           </div>
 
-          {/* End Date & Time */}
+          {/* End Date & Time Section */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">
@@ -165,7 +196,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
             </div>
           </div>
 
-          {/* Initial Liquidity */}
+          {/* Initial Liquidity Section */}
           <div>
             <label className="text-sm font-medium mb-2 block">Initial Liquidity (BNB)</label>
             <div className="grid grid-cols-2 gap-4">
@@ -235,18 +266,27 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           {/* Success Display */}
           {txHash && (
             <div className="p-3 bg-green-950/20 border border-green-500 rounded-lg text-green-400 text-sm">
-              Market created successfully! Redirecting...
+              ✅ Market created successfully! Redirecting...
             </div>
           )}
 
           {/* Action Buttons */}
           <div className="flex gap-3">
-            <Button onClick={onClose} variant="outline" className="flex-1" disabled={isProcessing}>
+            <Button 
+              onClick={onClose} 
+              variant="outline" 
+              className="flex-1" 
+              disabled={isProcessing}
+            >
               Cancel
             </Button>
             
             {!account ? (
-              <Button onClick={connectWallet} className="flex-1" disabled={isConnecting}>
+              <Button 
+                onClick={connectWallet} 
+                className="flex-1" 
+                disabled={isConnecting}
+              >
                 {isConnecting ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -260,12 +300,28 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 )}
               </Button>
             ) : !isCorrectNetwork ? (
-              <Button onClick={switchNetwork} className="flex-1" variant="destructive">
+              <Button 
+                onClick={switchNetwork} 
+                className="flex-1" 
+                variant="destructive"
+              >
                 Switch to BSC Testnet
               </Button>
+            ) : !isContractReady ? (
+              <Button 
+                disabled 
+                className="flex-1"
+              >
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Loading Contract...
+              </Button>
             ) : (
-              <Button onClick={handleCreate} className="flex-1" disabled={isProcessing}>
-                {isProcessing ? (
+              <Button 
+                onClick={handleCreate} 
+                className="flex-1" 
+                disabled={isProcessing || isLoading}
+              >
+                {isProcessing || isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Creating...
@@ -289,5 +345,5 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         </div>
       </Card>
     </div>
-  );
+  )
 }

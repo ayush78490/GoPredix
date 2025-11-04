@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ArrowLeft, Volume2, TrendingUp, Loader2 } from "lucide-react"
 import Link from "next/link"
-import { usePredictionMarket, MarketStatus } from "@/hooks/use-predection-market" // or use-web3 depending on your setup
+import { usePredictionMarket, MarketStatus } from "@/hooks/use-predection-market"
 
-// Helper function to extract category from question (same as in home page)
+// Helper function to extract category from question
 const extractCategory = (question: string): string => {
   const lowerQuestion = question.toLowerCase()
   
@@ -30,10 +30,23 @@ const extractCategory = (question: string): string => {
   return "General"
 }
 
-// Convert on-chain market to frontend market format (same as in home page)
+// Convert on-chain market to frontend market format
 const convertToFrontendMarket = (market: any, id: number) => {
   const category = extractCategory(market.question)
   const resolutionDate = new Date(market.endTime * 1000)
+  const now = new Date()
+  
+  // ✅ Market is active ONLY if resolution date is in the future (ignore contract status)
+  const isActive = resolutionDate > now
+
+  console.log("🔍 Market Debug Info:", {
+    marketId: id,
+    contractStatus: market.status,
+    resolutionDate: resolutionDate.toISOString(),
+    now: now.toISOString(),
+    isActive,
+    daysLeft: Math.max(0, Math.ceil((resolutionDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+  })
 
   return {
     id: id.toString(),
@@ -42,12 +55,13 @@ const convertToFrontendMarket = (market: any, id: number) => {
     category,
     yesOdds: market.yesPrice || 50,
     noOdds: market.noPrice || 50,
-    volume: parseFloat(market.totalBacking) * 2000, // Adjust multiplier as needed
+    volume: parseFloat(market.totalBacking) * 2000,
     resolutionDate: resolutionDate.toISOString(),
     slug: `market-${id}`,
     onChainData: market,
     status: market.status,
-    isActive: market.status === MarketStatus.Open && resolutionDate > new Date()
+    isActive,
+    daysLeft: Math.max(0, Math.ceil((resolutionDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
   }
 }
 
@@ -63,7 +77,7 @@ export default function MarketPage() {
 
   const { getMarket, getAllMarkets, isContractReady } = usePredictionMarket()
 
-  // Extract market ID from slug (market-0, market-1, etc.)
+  // Extract market ID from slug
   const marketId = marketSlug ? parseInt(marketSlug.replace('market-', '')) : -1
 
   // Load market data from blockchain
@@ -78,22 +92,27 @@ export default function MarketPage() {
         setIsLoading(true)
         setError(null)
 
-        console.log(`Loading market ${marketId} from blockchain...`)
+        console.log(`📊 Loading market ${marketId} from blockchain...`)
         
-        // Option 1: Get specific market by ID
         const onChainMarket = await getMarket(marketId)
         const formattedMarket = convertToFrontendMarket(onChainMarket, marketId)
         setMarket(formattedMarket)
         
-        console.log("Market loaded successfully:", formattedMarket)
+        console.log("✅ Market loaded:", {
+          title: formattedMarket.title,
+          status: formattedMarket.status,
+          isActive: formattedMarket.isActive,
+          daysLeft: formattedMarket.daysLeft,
+          resolutionDate: formattedMarket.resolutionDate
+        })
         
       } catch (err: any) {
-        console.error("Failed to load market:", err)
+        console.error("❌ Failed to load market:", err)
         setError(err.message || "Failed to load market from blockchain")
         
         // Fallback: Try to find market in all markets
         try {
-          console.log("Trying fallback: loading all markets...")
+          console.log("🔄 Trying fallback: loading all markets...")
           const allMarkets = await getAllMarkets()
           const foundMarket = allMarkets.find((m: any, index: number) => 
             `market-${index}` === marketSlug
@@ -102,9 +121,10 @@ export default function MarketPage() {
             const formattedMarket = convertToFrontendMarket(foundMarket, marketId)
             setMarket(formattedMarket)
             setError(null)
+            console.log("✅ Market found via fallback")
           }
         } catch (fallbackError) {
-          console.error("Fallback also failed:", fallbackError)
+          console.error("❌ Fallback also failed:", fallbackError)
         }
       } finally {
         setIsLoading(false)
@@ -143,7 +163,7 @@ export default function MarketPage() {
           </Link>
           
           <div className="bg-destructive/10 border border-destructive rounded-lg p-6 text-center">
-            <p className="text-destructive font-medium">Error loading market</p>
+            <p className="text-destructive font-medium">❌ Error loading market</p>
             <p className="text-destructive/80 text-sm mt-1">{error}</p>
             <Button onClick={() => window.location.reload()} variant="outline" className="mt-4">
               Try Again
@@ -183,13 +203,10 @@ export default function MarketPage() {
     )
   }
 
-  const resolutionDate = new Date(market.resolutionDate)
-  const daysLeft = Math.max(0, Math.ceil((resolutionDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
-  
   const formatVolume = (vol: number) => {
     if (vol >= 1000000) return `$${(vol / 1000000).toFixed(1)}m`
     if (vol >= 1000) return `$${(vol / 1000).toFixed(1)}k`
-    return `$${vol}`
+    return `$${vol.toFixed(2)}`
   }
 
   const handleOpenModal = (selectedOutcome: "YES" | "NO") => {
@@ -201,6 +218,17 @@ export default function MarketPage() {
     setShowModal(false)
     setOutcome(null)
   }
+
+  const resolutionDate = new Date(market.resolutionDate)
+  
+  const getStatusBadge = () => {
+    if (market.isActive) return { text: "Active", color: "bg-green-100 text-green-800" }
+    if (market.status === MarketStatus.Resolved) return { text: "Resolved", color: "bg-blue-100 text-blue-800" }
+    if (market.status === MarketStatus.Closed) return { text: "Closed", color: "bg-gray-100 text-gray-800" }
+    return { text: "Inactive", color: "bg-yellow-100 text-yellow-800" }
+  }
+
+  const statusBadge = getStatusBadge()
 
   return (
     <main className="min-h-screen bg-background">
@@ -239,8 +267,8 @@ export default function MarketPage() {
             <p className="text-lg text-muted-foreground">{market.description}</p>
 
             {/* Market Status */}
-            <div className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              {market.isActive ? 'Active' : market.status === MarketStatus.Resolved ? 'Resolved' : 'Closed'}
+            <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${statusBadge.color}`}>
+              {statusBadge.text}
             </div>
 
             {/* Stats */}
@@ -257,7 +285,7 @@ export default function MarketPage() {
                   <TrendingUp className="w-4 h-4" />
                   Days Remaining
                 </div>
-                <p className="text-2xl font-bold">{daysLeft}d</p>
+                <p className="text-2xl font-bold">{market.daysLeft}d</p>
               </Card>
             </div>
 
@@ -273,7 +301,7 @@ export default function MarketPage() {
             <details className="mt-6 text-sm">
               <summary className="cursor-pointer text-muted-foreground">On-Chain Data (Debug)</summary>
               <pre className="mt-2 p-3 bg-muted rounded-lg overflow-auto text-xs">
-                {JSON.stringify(market.onChainData, null, 2)}
+                {JSON.stringify(market.onChainData, (key, value) => typeof value === "bigint" ? value.toString() : value, 2)}
               </pre>
             </details>
           </div>
@@ -293,13 +321,13 @@ export default function MarketPage() {
                     outcome === "YES"
                       ? "border-green-500 bg-green-950/30"
                       : market.isActive
-                      ? "border-green-900 bg-green-950/10 hover:bg-green-950/20"
-                      : "border-gray-400 bg-gray-100 cursor-not-allowed"
+                      ? "border-green-900 bg-green-950/10 hover:bg-green-950/20 cursor-pointer"
+                      : "border-gray-400 bg-gray-100 cursor-not-allowed opacity-60"
                   }`}
                 >
                   <div className="text-left">
                     <div className="text-sm text-muted-foreground mb-1">YES</div>
-                    <div className="text-3xl font-bold text-green-500">{market.yesOdds}%</div>
+                    <div className="text-3xl font-bold text-green-500">{market.yesOdds.toFixed(1)}%</div>
                     <div className="text-xs text-green-400 mt-1">${(market.yesOdds / 100).toFixed(2)} per token</div>
                     {!market.isActive && (
                       <div className="text-xs text-red-400 mt-1">Market closed</div>
@@ -315,13 +343,13 @@ export default function MarketPage() {
                     outcome === "NO"
                       ? "border-red-500 bg-red-950/30"
                       : market.isActive
-                      ? "border-red-900 bg-red-950/10 hover:bg-red-950/20"
-                      : "border-gray-400 bg-gray-100 cursor-not-allowed"
+                      ? "border-red-900 bg-red-950/10 hover:bg-red-950/20 cursor-pointer"
+                      : "border-gray-400 bg-gray-100 cursor-not-allowed opacity-60"
                   }`}
                 >
                   <div className="text-left">
                     <div className="text-sm text-muted-foreground mb-1">NO</div>
-                    <div className="text-3xl font-bold text-red-500">{market.noOdds}%</div>
+                    <div className="text-3xl font-bold text-red-500">{market.noOdds.toFixed(1)}%</div>
                     <div className="text-xs text-red-400 mt-1">${(market.noOdds / 100).toFixed(2)} per token</div>
                     {!market.isActive && (
                       <div className="text-xs text-red-400 mt-1">Market closed</div>
@@ -334,7 +362,7 @@ export default function MarketPage() {
               {outcome && market.isActive && (
                 <div className="pt-4 border-t border-border">
                   <p className="text-xs text-muted-foreground text-center">
-                    Click the button below to place your order
+                    Click the button above to place your order
                   </p>
                 </div>
               )}

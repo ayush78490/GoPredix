@@ -4,14 +4,13 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronDown } from "lucide-react"
 import Link from "next/link"
-import { useWallet } from "@/lib/wallet-context"
+import { useWeb3Context } from "@/lib/wallet-context"
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false)
-  const { account, isConnected, connect, disconnect, balance } = useWallet()
+  const { account, connectWallet, disconnectWallet } = useWeb3Context()
 
   const categories = ["All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy"]
-
   const displayAddress = account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"
 
   return (
@@ -60,21 +59,17 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-muted">
-            <span className="text-sm font-medium">Portfolio:</span>
-            <span className="text-sm font-bold">{balance ? `${balance} BNB` : "$0.00"}</span>
-          </div>
-          {isConnected ? (
+          {account ? (
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" disabled>
                 {displayAddress}
               </Button>
-              <Button size="sm" variant="outline" onClick={disconnect}>
+              <Button size="sm" variant="outline" onClick={disconnectWallet}>
                 Disconnect
               </Button>
             </div>
           ) : (
-            <Button size="sm" variant="outline" onClick={connect}>
+            <Button size="sm" variant="outline" onClick={connectWallet}>
               Connect Wallet
             </Button>
           )}

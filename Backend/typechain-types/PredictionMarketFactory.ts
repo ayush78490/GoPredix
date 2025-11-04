@@ -34,6 +34,8 @@ export interface PredictionMarketFactoryInterface extends Interface {
       | "addLiquidity"
       | "addOracle"
       | "burnCompleteSets"
+      | "buyNoWithBNB"
+      | "buyYesWithBNB"
       | "closeMarket"
       | "createMarket"
       | "disputeProposal"
@@ -72,6 +74,7 @@ export interface PredictionMarketFactoryInterface extends Interface {
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "BuyWithBNB"
       | "CompleteSetBurned"
       | "CompleteSetMinted"
       | "FeesWithdrawn"
@@ -119,6 +122,14 @@ export interface PredictionMarketFactoryInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "burnCompleteSets",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "buyNoWithBNB",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "buyYesWithBNB",
     values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
@@ -279,6 +290,14 @@ export interface PredictionMarketFactoryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "buyNoWithBNB",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "buyYesWithBNB",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "closeMarket",
     data: BytesLike
   ): Result;
@@ -375,6 +394,34 @@ export interface PredictionMarketFactoryInterface extends Interface {
     functionFragment: "withdrawFees",
     data: BytesLike
   ): Result;
+}
+
+export namespace BuyWithBNBEvent {
+  export type InputTuple = [
+    id: BigNumberish,
+    user: AddressLike,
+    buyYes: boolean,
+    bnbIn: BigNumberish,
+    tokenOut: BigNumberish
+  ];
+  export type OutputTuple = [
+    id: bigint,
+    user: string,
+    buyYes: boolean,
+    bnbIn: bigint,
+    tokenOut: bigint
+  ];
+  export interface OutputObject {
+    id: bigint;
+    user: string;
+    buyYes: boolean;
+    bnbIn: bigint;
+    tokenOut: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace CompleteSetBurnedEvent {
@@ -748,6 +795,18 @@ export interface PredictionMarketFactory extends BaseContract {
     "nonpayable"
   >;
 
+  buyNoWithBNB: TypedContractMethod<
+    [id: BigNumberish, minNoOut: BigNumberish],
+    [void],
+    "payable"
+  >;
+
+  buyYesWithBNB: TypedContractMethod<
+    [id: BigNumberish, minYesOut: BigNumberish],
+    [void],
+    "payable"
+  >;
+
   closeMarket: TypedContractMethod<[id: BigNumberish], [void], "nonpayable">;
 
   createMarket: TypedContractMethod<
@@ -1037,6 +1096,20 @@ export interface PredictionMarketFactory extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "buyNoWithBNB"
+  ): TypedContractMethod<
+    [id: BigNumberish, minNoOut: BigNumberish],
+    [void],
+    "payable"
+  >;
+  getFunction(
+    nameOrSignature: "buyYesWithBNB"
+  ): TypedContractMethod<
+    [id: BigNumberish, minYesOut: BigNumberish],
+    [void],
+    "payable"
+  >;
+  getFunction(
     nameOrSignature: "closeMarket"
   ): TypedContractMethod<[id: BigNumberish], [void], "nonpayable">;
   getFunction(
@@ -1307,6 +1380,13 @@ export interface PredictionMarketFactory extends BaseContract {
   ): TypedContractMethod<[], [void], "nonpayable">;
 
   getEvent(
+    key: "BuyWithBNB"
+  ): TypedContractEvent<
+    BuyWithBNBEvent.InputTuple,
+    BuyWithBNBEvent.OutputTuple,
+    BuyWithBNBEvent.OutputObject
+  >;
+  getEvent(
     key: "CompleteSetBurned"
   ): TypedContractEvent<
     CompleteSetBurnedEvent.InputTuple,
@@ -1413,6 +1493,17 @@ export interface PredictionMarketFactory extends BaseContract {
   >;
 
   filters: {
+    "BuyWithBNB(uint256,address,bool,uint256,uint256)": TypedContractEvent<
+      BuyWithBNBEvent.InputTuple,
+      BuyWithBNBEvent.OutputTuple,
+      BuyWithBNBEvent.OutputObject
+    >;
+    BuyWithBNB: TypedContractEvent<
+      BuyWithBNBEvent.InputTuple,
+      BuyWithBNBEvent.OutputTuple,
+      BuyWithBNBEvent.OutputObject
+    >;
+
     "CompleteSetBurned(uint256,address,uint256)": TypedContractEvent<
       CompleteSetBurnedEvent.InputTuple,
       CompleteSetBurnedEvent.OutputTuple,

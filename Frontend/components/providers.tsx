@@ -1,7 +1,7 @@
 "use client"
 
 import { ThemeProvider } from "next-themes"
-import { WalletProvider } from "@/lib/wallet-context"
+import { Web3Provider } from "@/lib/wallet-context"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -11,7 +11,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem={false}
       disableTransitionOnChange
     >
-      <WalletProvider>{children}</WalletProvider>
+      <Web3Provider>
+        {children}
+      </Web3Provider>
     </ThemeProvider>
   )
 }

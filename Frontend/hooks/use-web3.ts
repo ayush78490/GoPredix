@@ -307,6 +307,11 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
         console.warn("⚠️ Provider not available for getContract");
         return null;
       }
+      // For write operations, ensure signer exists
+      if (withSigner && !signer) {
+        console.warn("⚠️ Signer not available for write operation");
+        return null;
+      }
       const signerOrProvider = withSigner && signer ? signer : provider;
       return new ethers.Contract(PREDICTION_MARKET_ADDRESS, PREDICTION_MARKET_ABI, signerOrProvider);
     },
@@ -329,7 +334,9 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
     initialYes: string,
     initialNo: string
   ) => {
-    const contract = getContract();
+    if (!signer) throw new Error("Wallet not connected");
+    
+    const contract = getContract(true);
     if (!contract) throw new Error("Contract not initialized");
 
     console.log("📝 Creating market:", question);
@@ -366,7 +373,9 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
 
   // Mint complete sets
   const mintCompleteSets = async (marketId: number, amount: string) => {
-    const contract = getContract();
+    if (!signer) throw new Error("Wallet not connected");
+    
+    const contract = getContract(true);
     if (!contract) throw new Error("Contract not initialized");
 
     const value = ethers.parseEther(amount);
@@ -376,7 +385,9 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
 
   // Burn complete sets
   const burnCompleteSets = async (marketId: number, amount: string) => {
-    const contract = getContract();
+    if (!signer) throw new Error("Wallet not connected");
+    
+    const contract = getContract(true);
     if (!contract) throw new Error("Contract not initialized");
 
     const value = ethers.parseEther(amount);
@@ -386,7 +397,9 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
 
   // Buy YES tokens
   const buyYes = async (marketId: number, amount: string, slippage = 1) => {
-    const contract = getContract();
+    if (!signer) throw new Error("Wallet not connected");
+    
+    const contract = getContract(true);
     if (!contract) throw new Error("Contract not initialized");
 
     const amountIn = ethers.parseEther(amount);
@@ -406,7 +419,9 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
 
   // Buy NO tokens
   const buyNo = async (marketId: number, amount: string, slippage = 1) => {
-    const contract = getContract();
+    if (!signer) throw new Error("Wallet not connected");
+    
+    const contract = getContract(true);
     if (!contract) throw new Error("Contract not initialized");
 
     const amountIn = ethers.parseEther(amount);
@@ -426,7 +441,9 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
 
   // Sell YES tokens
   const sellYes = async (marketId: number, amount: string, slippage = 1) => {
-    const contract = getContract();
+    if (!signer) throw new Error("Wallet not connected");
+    
+    const contract = getContract(true);
     if (!contract) throw new Error("Contract not initialized");
 
     const amountIn = ethers.parseEther(amount);
@@ -439,7 +456,9 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
 
   // Sell NO tokens
   const sellNo = async (marketId: number, amount: string, slippage = 1) => {
-    const contract = getContract();
+    if (!signer) throw new Error("Wallet not connected");
+    
+    const contract = getContract(true);
     if (!contract) throw new Error("Contract not initialized");
 
     const amountIn = ethers.parseEther(amount);
@@ -543,7 +562,9 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
 
   // Redeem winning tokens
   const redeem = async (marketId: number) => {
-    const contract = getContract();
+    if (!signer) throw new Error("Wallet not connected");
+    
+    const contract = getContract(true);
     if (!contract) throw new Error("Contract not initialized");
 
     const tx = await contract.redeem(marketId);

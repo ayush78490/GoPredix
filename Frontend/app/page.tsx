@@ -6,7 +6,8 @@ import MarketCard from "@/components/market-card"
 import CreateMarketModal from "../components/createMarketModal"
 import { Button } from "@/components/ui/button"
 import { Search, Loader2, Plus, Wallet } from "lucide-react"
-import { useWeb3, usePredictionMarket } from "../hooks/use-web3"
+import { useWeb3Context } from "@/lib/wallet-context"
+import { usePredictionMarket } from "@/hooks/use-predection-market"
 
 const CATEGORIES = ["All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy"]
 
@@ -34,6 +35,7 @@ const extractCategory = (question: string): string => {
 const convertToFrontendMarket = (market: any) => {
   const category = extractCategory(market.question)
   const resolutionDate = new Date(market.endTime * 1000)
+  const now = new Date()
 
   return {
     id: market.id.toString(),
@@ -47,7 +49,7 @@ const convertToFrontendMarket = (market: any) => {
     slug: `market-${market.id}`,
     onChainData: market,
     status: market.status,
-    isActive: market.status === 0 && resolutionDate > new Date()
+    isActive: resolutionDate > now // ✅ ONLY check resolution date
   }
 }
 
@@ -59,8 +61,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
 
-  const { account, provider, signer, connectWallet, isCorrectNetwork, isConnecting, error: web3Error, isInitialized } = useWeb3()
-  const { getAllMarkets, isContractReady } = usePredictionMarket(provider, signer, account)
+  const { account, connectWallet, isCorrectNetwork, isConnecting, error: web3Error, isInitialized } = useWeb3Context()
+  const { getAllMarkets, isContractReady } = usePredictionMarket()
 
   // Load markets from blockchain
   const loadMarkets = async () => {
@@ -69,15 +71,8 @@ export default function Home() {
       setError(null)
       
       console.log("🔄 Loading markets...")
-      console.log("Provider:", !!provider)
       console.log("Contract Ready:", isContractReady)
       console.log("Account:", account)
-
-      if (!provider) {
-        console.log("❌ No provider available")
-        setError("Please connect your wallet to load markets")
-        return
-      }
 
       if (!isContractReady) {
         console.log("❌ Contract not ready")
@@ -95,6 +90,12 @@ export default function Home() {
       
       setMarkets(formattedMarkets)
       console.log(`✅ Loaded ${formattedMarkets.length} markets`)
+      console.log("Markets active status:", formattedMarkets.map(m => ({
+        id: m.id,
+        isActive: m.isActive,
+        resolutionDate: m.resolutionDate,
+        now: new Date().toISOString()
+      })))
       
     } catch (err: any) {
       console.error("❌ Failed to load markets:", err)
@@ -108,7 +109,6 @@ export default function Home() {
   useEffect(() => {
     console.log("=== Home Page State ===")
     console.log("Initialized:", isInitialized)
-    console.log("Provider:", !!provider)
     console.log("Contract Ready:", isContractReady)
     console.log("Account:", account)
     console.log("Correct Network:", isCorrectNetwork)
@@ -116,13 +116,6 @@ export default function Home() {
     // Wait for initialization
     if (!isInitialized) {
       console.log("⏳ Waiting for initialization...")
-      return
-    }
-
-    // If no provider after initialization, show connect prompt
-    if (!provider) {
-      setIsLoading(false)
-      setError("Please connect your wallet to view markets")
       return
     }
 
@@ -141,7 +134,7 @@ export default function Home() {
       setIsLoading(false)
       setError("Contract not ready. Please check your network connection.")
     }
-  }, [isInitialized, provider, isContractReady, isCorrectNetwork])
+  }, [isInitialized, isContractReady, isCorrectNetwork])
 
   // Filter markets based on category and search
   const filteredMarkets = markets.filter((market) => {
@@ -389,7 +382,7 @@ export default function Home() {
         {/* Error State */}
         {account && isCorrectNetwork && error && !isLoading && (
           <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6">
-            <p className="text-destructive font-medium">Error loading markets</p>
+            <p className="text-destructive font-medium">❌ Error loading markets</p>
             <p className="text-destructive/80 text-sm mt-1">{error}</p>
             <Button onClick={loadMarkets} variant="outline" size="sm" className="mt-2">
               Try Again
