@@ -1,125 +1,97 @@
-// components/trade-modal.tsx
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { X, ArrowRight, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Market } from "@/lib/markets";
-import { useWeb3, usePredictionMarket } from "../hooks/use-web3";
+import { useState } from "react"
+import { X, ArrowRight, Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { useWeb3Context } from "@/lib/wallet-context"
+
+// YOU SHOULD use the correct path for your actual hook
+import { usePredictionMarket } from "@/hooks/use-predection-market"
 
 interface TradeModalProps {
-  market: Market;
-  outcome: "YES" | "NO" | null;
-  onOutcomeChange: (outcome: "YES" | "NO") => void;
-  onClose: () => void;
+  market: any
+  outcome: "YES" | "NO" | null
+  onOutcomeChange: (outcome: "YES" | "NO") => void
+  onClose: () => void
 }
 
-export default function TradeModal({ market, outcome, onOutcomeChange, onClose }: TradeModalProps) {
-  const [amount, setAmount] = useState("");
-  const [isBuying, setIsBuying] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
-  
-  const { account, connectWallet, isConnecting, isCorrectNetwork, switchNetwork } = useWeb3();
-  const { buyYes, buyNo, sellYes, sellNo, getTokenBalances } = usePredictionMarket();
-  
-  const [balances, setBalances] = useState({ yes: "0", no: "0" });
+export default function TradeModal({ 
+  market, 
+  outcome, 
+  onOutcomeChange, 
+  onClose 
+}: TradeModalProps) {
+  const [amount, setAmount] = useState("")
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [txHash, setTxHash] = useState<string | null>(null)
 
-  // Load balances when account changes
-  useEffect(() => {
-    if (account && market.id !== undefined) {
-      loadBalances();
-    }
-  }, [account, market.id]);
+  const { account, connectWallet, isConnecting, isCorrectNetwork, switchNetwork, signer } = useWeb3Context()
+  const { contract } = usePredictionMarket() // Instead of getAmountOut, just get contract with ABI/address
 
-  const loadBalances = async () => {
-    try {
-      const tokenBalances = await getTokenBalances(market.id!);
-      setBalances(tokenBalances);
-    } catch (err) {
-      console.error("Error loading balances:", err);
-    }
-  };
-
-  const numAmount = parseFloat(amount) || 0;
-  const currentPrice = outcome === "YES" ? market.yesOdds : market.noOdds;
-  const estimatedTokens = numAmount / (currentPrice / 100);
-  const potentialPayout = isBuying ? estimatedTokens : numAmount;
-  const maxPayout = isBuying ? estimatedTokens : numAmount;
+  const numAmount = parseFloat(amount) || 0
+  const hasAmount = numAmount > 0
+  const outcomeLabel = outcome === "YES" ? "YES" : outcome === "NO" ? "NO" : "outcome"
 
   const handleTrade = async () => {
     if (!account) {
-      await connectWallet();
-      return;
+      await connectWallet()
+      return
     }
-
     if (!isCorrectNetwork) {
-      await switchNetwork();
-      return;
+      await switchNetwork()
+      return
     }
-
     if (!amount || numAmount <= 0) {
-      setError("Please enter a valid amount");
-      return;
+      setError("Please enter a valid BNB amount")
+      return
     }
-
-    // Check if market has blockchain ID
-    if (market.id === undefined) {
-      setError("This market is not yet deployed on-chain");
-      return;
+    if (!outcome) {
+      setError("Please select YES or NO")
+      return
     }
-
-    setIsProcessing(true);
-    setError(null);
-    setTxHash(null);
-
+    if (!signer || !contract) {
+      setError("Wallet provider/contract not ready")
+      return
+    }
+    setIsProcessing(true)
+    setError(null)
+    setTxHash(null)
     try {
-      let receipt;
+      const { ethers } = await import("ethers")
+      const amountInWei = ethers.parseEther(amount)
+      const minTokensOut = 0 // For slippage tolerance, use output from `getAmountOut` if desired
 
-      if (isBuying) {
-        if (outcome === "YES") {
-          receipt = await buyYes(market.id, amount);
-        } else {
-          receipt = await buyNo(market.id, amount);
-        }
+      let tx
+      if (outcome === "YES") {
+        tx = await contract.buyYesWithBNB(market.id, minTokensOut, { value: amountInWei })
       } else {
-        if (outcome === "YES") {
-          receipt = await sellYes(market.id, amount);
-        } else {
-          receipt = await sellNo(market.id, amount);
-        }
+        tx = await contract.buyNoWithBNB(market.id, minTokensOut, { value: amountInWei })
       }
-
-      setTxHash(receipt.hash);
-      await loadBalances(); // Refresh balances
-      setAmount("");
-      
-      setTimeout(() => {
-        onClose();
-      }, 2000);
+      setTxHash(tx.hash)
+      await tx.wait()
+      setAmount("")
+      setTimeout(onClose, 2000)
     } catch (err: any) {
-      console.error("Transaction error:", err);
-      setError(err.reason || err.message || "Transaction failed");
+      setError(err.reason || err.message || "Transaction failed")
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
-  };
-
-  const currentBalance = outcome === "YES" ? balances.yes : balances.no;
-  const hasBalance = parseFloat(currentBalance) > 0;
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <Card className="w-full max-w-md p-6 relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+          disabled={isProcessing}
+        >
           <X className="w-5 h-5" />
         </button>
-
         <h2 className="text-2xl font-bold mb-6">Trade on Market</h2>
-
         {/* Outcome Selector */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <button
@@ -129,117 +101,71 @@ export default function TradeModal({ market, outcome, onOutcomeChange, onClose }
                 ? "border-green-500 bg-green-950/30"
                 : "border-border bg-muted hover:bg-muted/80"
             }`}
+            disabled={isProcessing}
           >
             <div className="text-sm text-muted-foreground mb-1">YES</div>
             <div className={`text-2xl font-bold ${outcome === "YES" ? "text-green-500" : ""}`}>
-              {market.yesOdds}%
+              {market.yesOdds?.toFixed(1) || "0"}%
             </div>
           </button>
-
           <button
             onClick={() => onOutcomeChange("NO")}
             className={`p-4 rounded-lg border-2 transition-all ${
-              outcome === "NO" ? "border-red-500 bg-red-950/30" : "border-border bg-muted hover:bg-muted/80"
+              outcome === "NO" 
+                ? "border-red-500 bg-red-950/30" 
+                : "border-border bg-muted hover:bg-muted/80"
             }`}
+            disabled={isProcessing}
           >
             <div className="text-sm text-muted-foreground mb-1">NO</div>
-            <div className={`text-2xl font-bold ${outcome === "NO" ? "text-red-500" : ""}`}>{market.noOdds}%</div>
-          </button>
-        </div>
-
-        {/* Buy/Sell Toggle */}
-        <div className="flex gap-2 mb-6 p-1 bg-muted rounded-lg">
-          <button
-            onClick={() => setIsBuying(true)}
-            className={`flex-1 py-2 rounded-md font-medium transition-all ${
-              isBuying ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Buy
-          </button>
-          <button
-            onClick={() => setIsBuying(false)}
-            disabled={!hasBalance}
-            className={`flex-1 py-2 rounded-md font-medium transition-all ${
-              !isBuying ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-            } ${!hasBalance ? "opacity-50 cursor-not-allowed" : ""}`}
-          >
-            Sell
-          </button>
-        </div>
-
-        {/* Balance Display */}
-        {account && (
-          <div className="mb-4 p-3 bg-muted rounded-lg">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Your {outcome} tokens:</span>
-              <span className="font-semibold">{parseFloat(currentBalance).toFixed(4)}</span>
+            <div className={`text-2xl font-bold ${outcome === "NO" ? "text-red-500" : ""}`}>
+              {market.noOdds?.toFixed(1) || "0"}%
             </div>
-          </div>
-        )}
-
+          </button>
+        </div>
         {/* Amount Input */}
         <div className="mb-6">
           <label className="text-sm text-muted-foreground mb-2 block">
-            {isBuying ? "Amount to spend (BNB)" : `${outcome} tokens to sell`}
+            Amount to spend (BNB)
           </label>
           <Input
             type="number"
             placeholder="0.00"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={e => setAmount(e.target.value)}
             className="text-lg"
-            step="0.01"
+            step="0.001"
             min="0"
             disabled={isProcessing}
           />
+          <p className="text-xs text-muted-foreground mt-1">Min: 0.001 BNB</p>
         </div>
-
         {/* Transaction Summary */}
-        {numAmount > 0 && (
+        {hasAmount && (
           <div className="space-y-3 mb-6 p-4 bg-muted rounded-lg">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">You {isBuying ? "spend" : "receive"}:</span>
-              <span className="font-semibold">
-                {numAmount.toFixed(4)} {isBuying ? "BNB" : outcome}
-              </span>
+              <span className="text-muted-foreground">You spend:</span>
+              <span className="font-semibold">{numAmount.toFixed(4)} BNB</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">You {isBuying ? "receive" : "get back"}:</span>
-              <span className="font-semibold">
-                {(isBuying ? estimatedTokens : potentialPayout).toFixed(4)} {isBuying ? outcome : "BNB"}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm pt-3 border-t border-border">
-              <span className="text-muted-foreground">Avg. price:</span>
-              <span className="font-semibold">{(currentPrice / 100).toFixed(2)} BNB</span>
+              <span className="text-muted-foreground">Outcome:</span>
+              <span className={`font-semibold ${outcome === "YES" ? "text-green-500" : "text-red-500"}`}>{outcomeLabel}</span>
             </div>
           </div>
         )}
-
         {/* Error Display */}
         {error && (
           <div className="mb-4 p-3 bg-red-950/20 border border-red-500 rounded-lg text-red-400 text-sm">
-            {error}
+            ❌ {error}
           </div>
         )}
-
         {/* Success Display */}
         {txHash && (
           <div className="mb-4 p-3 bg-green-950/20 border border-green-500 rounded-lg text-green-400 text-sm">
-            Transaction successful!{" "}
-            <a
-              href={`https://testnet.bscscan.com/tx/${txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              View on BSCScan
-            </a>
+            ✅ Transaction successful! Closing...
           </div>
         )}
-
-        {/* Action Button */}
+        {/* Wallet Buttons*/}
         {!account ? (
           <Button onClick={connectWallet} className="w-full" size="lg" disabled={isConnecting}>
             {isConnecting ? (
@@ -260,7 +186,7 @@ export default function TradeModal({ market, outcome, onOutcomeChange, onClose }
             onClick={handleTrade}
             className="w-full"
             size="lg"
-            disabled={!amount || numAmount <= 0 || isProcessing || (!isBuying && !hasBalance)}
+            disabled={!amount || numAmount <= 0 || isProcessing || !outcome}
           >
             {isProcessing ? (
               <>
@@ -269,13 +195,12 @@ export default function TradeModal({ market, outcome, onOutcomeChange, onClose }
               </>
             ) : (
               <>
-                {isBuying ? "Buy" : "Sell"} {outcome} tokens
+                Buy {outcomeLabel} with BNB
                 <ArrowRight className="w-4 h-4 ml-2" />
               </>
             )}
           </Button>
         )}
-
         {/* Wallet Info */}
         {account && (
           <div className="mt-4 text-center text-xs text-muted-foreground">
@@ -284,5 +209,5 @@ export default function TradeModal({ market, outcome, onOutcomeChange, onClose }
         )}
       </Card>
     </div>
-  );
+  )
 }

@@ -78,7 +78,9 @@ contract OutcomeToken {
     }
 }
 
-// --------------------------------------------------------------------
+// ====================================================================
+// PREDICTION MARKET FACTORY
+// ====================================================================
 
 contract PredictionMarketFactory {
     enum MarketStatus { Open, Closed, Proposed, Disputed, Resolved }
@@ -135,6 +137,7 @@ contract PredictionMarketFactory {
     event LiquidityAdded(uint256 indexed id, address indexed provider, uint256 yesAmount, uint256 noAmount, uint256 lpTokens);
     event LiquidityRemoved(uint256 indexed id, address indexed provider, uint256 yesAmount, uint256 noAmount, uint256 lpTokens);
     event Swap(uint256 indexed id, address indexed user, bool yesIn, uint256 amountIn, uint256 amountOut, uint256 fee);
+    event BuyWithBNB(uint256 indexed id, address indexed user, bool buyYes, uint256 bnbIn, uint256 tokenOut);
     event MarketClosed(uint256 indexed id);
     event OutcomeProposed(uint256 indexed id, address indexed proposer, Outcome outcome, uint256 bond);
     event ProposalDisputed(uint256 indexed id, address indexed disputer, uint256 bond);
@@ -168,7 +171,7 @@ contract PredictionMarketFactory {
         owner = msg.sender;
         feeBps = _feeBps;
         lpFeeBps = _lpFeeBps;
-        requiredOracleVotes = 1; // Start with 1, increase as oracles are added
+        requiredOracleVotes = 1;
     }
 
     // ---------------------------------------------------------------
@@ -181,8 +184,6 @@ contract PredictionMarketFactory {
         
         isOracle[oracle] = true;
         oracles.push(oracle);
-        
-        // Require 51% of oracles to resolve
         requiredOracleVotes = (oracles.length / 2) + 1;
         
         emit OracleAdded(oracle);
@@ -193,7 +194,6 @@ contract PredictionMarketFactory {
         
         isOracle[oracle] = false;
         
-        // Remove from array
         for (uint256 i = 0; i < oracles.length; i++) {
             if (oracles[i] == oracle) {
                 oracles[i] = oracles[oracles.length - 1];
@@ -328,7 +328,95 @@ contract PredictionMarketFactory {
     }
 
     // ---------------------------------------------------------------
-    // Trading
+    // Trading: Direct BNB to Outcome Tokens (NEW!)
+    // ---------------------------------------------------------------
+
+    /// @notice Buy YES tokens with BNB in one transaction
+    function buyYesWithBNB(uint256 id, uint256 minYesOut) 
+        external 
+        payable 
+        nonReentrant 
+        marketExists(id) 
+    {
+        Market storage m = markets[id];
+        require(m.status == MarketStatus.Open, "market not open");
+        require(block.timestamp < m.endTime, "market ended");
+        require(msg.value > 0, "zero BNB");
+
+        uint256 bnbAmount = msg.value;
+
+        // Step 1: Mint complete sets (get YES + NO 1:1)
+        m.totalBacking += bnbAmount;
+        m.yesToken.mint(msg.sender, bnbAmount);
+        m.noToken.mint(msg.sender, bnbAmount);
+
+        // Step 2: Swap all NO tokens for YES
+        uint256 noAmount = bnbAmount;
+        uint256 platformFee = (noAmount * feeBps) / 10000;
+        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
+        uint256 protocolFee = platformFee - lpFee;
+        uint256 noAfterFee = noAmount - platformFee;
+
+        m.platformFees += protocolFee;
+
+        uint256 yesOut = _getAmountOut(noAfterFee, m.noPool, m.yesPool);
+        require(yesOut >= minYesOut, "slippage exceeded");
+        require(yesOut < m.yesPool, "insufficient liquidity");
+
+        // Burn the NO tokens and mint YES
+        m.noToken.burn(msg.sender, noAmount);
+        m.noPool += noAfterFee + lpFee;
+        m.yesPool -= yesOut;
+        m.yesToken.mint(msg.sender, yesOut);
+
+        emit BuyWithBNB(id, msg.sender, true, bnbAmount, yesOut);
+        emit Swap(id, msg.sender, false, noAmount, yesOut, platformFee);
+    }
+
+    /// @notice Buy NO tokens with BNB in one transaction
+    function buyNoWithBNB(uint256 id, uint256 minNoOut) 
+        external 
+        payable 
+        nonReentrant 
+        marketExists(id) 
+    {
+        Market storage m = markets[id];
+        require(m.status == MarketStatus.Open, "market not open");
+        require(block.timestamp < m.endTime, "market ended");
+        require(msg.value > 0, "zero BNB");
+
+        uint256 bnbAmount = msg.value;
+
+        // Step 1: Mint complete sets (get YES + NO 1:1)
+        m.totalBacking += bnbAmount;
+        m.yesToken.mint(msg.sender, bnbAmount);
+        m.noToken.mint(msg.sender, bnbAmount);
+
+        // Step 2: Swap all YES tokens for NO
+        uint256 yesAmount = bnbAmount;
+        uint256 platformFee = (yesAmount * feeBps) / 10000;
+        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
+        uint256 protocolFee = platformFee - lpFee;
+        uint256 yesAfterFee = yesAmount - platformFee;
+
+        m.platformFees += protocolFee;
+
+        uint256 noOut = _getAmountOut(yesAfterFee, m.yesPool, m.noPool);
+        require(noOut >= minNoOut, "slippage exceeded");
+        require(noOut < m.noPool, "insufficient liquidity");
+
+        // Burn the YES tokens and mint NO
+        m.yesToken.burn(msg.sender, yesAmount);
+        m.yesPool += yesAfterFee + lpFee;
+        m.noPool -= noOut;
+        m.noToken.mint(msg.sender, noOut);
+
+        emit BuyWithBNB(id, msg.sender, false, bnbAmount, noOut);
+        emit Swap(id, msg.sender, true, yesAmount, noOut, platformFee);
+    }
+
+    // ---------------------------------------------------------------
+    // Trading: Token-to-Token Swaps (EXISTING)
     // ---------------------------------------------------------------
     
     function swapYesForNo(uint256 id, uint256 yesIn, uint256 minNoOut) 
@@ -471,7 +559,6 @@ contract PredictionMarketFactory {
         emit MarketClosed(id);
     }
 
-    /// @notice Anyone can propose outcome with a bond
     function proposeOutcome(uint256 id, Outcome outcome) external payable nonReentrant marketExists(id) {
         Market storage m = markets[id];
         require(m.status == MarketStatus.Closed, "not closed");
@@ -487,7 +574,6 @@ contract PredictionMarketFactory {
         emit OutcomeProposed(id, msg.sender, outcome, msg.value);
     }
 
-    /// @notice Anyone can dispute a proposal within challenge period
     function disputeProposal(uint256 id) external payable nonReentrant marketExists(id) {
         Market storage m = markets[id];
         require(m.status == MarketStatus.Proposed, "not proposed");
@@ -502,7 +588,6 @@ contract PredictionMarketFactory {
         emit ProposalDisputed(id, msg.sender, msg.value);
     }
 
-    /// @notice Oracles vote on disputed markets (or after challenge period)
     function oracleVote(uint256 id, Outcome outcome) external marketExists(id) {
         require(isOracle[msg.sender], "not oracle");
         Market storage m = markets[id];
@@ -514,33 +599,27 @@ contract PredictionMarketFactory {
         require(outcome == Outcome.Yes || outcome == Outcome.No || outcome == Outcome.Invalid, "invalid outcome");
         require(oracleVotes[id][msg.sender] == Outcome.Undecided, "already voted");
 
-        // Decrement old vote if exists
         if (oracleVotes[id][msg.sender] != Outcome.Undecided) {
             outcomeVoteCount[id][oracleVotes[id][msg.sender]]--;
         }
 
-        // Record new vote
         oracleVotes[id][msg.sender] = outcome;
         outcomeVoteCount[id][outcome]++;
 
         emit OracleVoted(id, msg.sender, outcome);
 
-        // Check if we have enough votes to resolve
         if (outcomeVoteCount[id][outcome] >= requiredOracleVotes) {
             _finalizeResolution(id, outcome);
         }
     }
 
-    /// @notice Finalize resolution after challenge period (if no dispute)
     function finalizeProposal(uint256 id) external nonReentrant marketExists(id) {
         Market storage m = markets[id];
         require(m.status == MarketStatus.Proposed, "not proposed");
         require(block.timestamp >= m.proposalTime + CHALLENGE_PERIOD, "challenge period active");
 
-        // No dispute, proposal accepted
         _finalizeResolution(id, m.proposedOutcome);
         
-        // Return bond to proposer
         _transferBNB(m.proposer, m.proposalBond);
         m.proposalBond = 0;
     }
@@ -550,15 +629,11 @@ contract PredictionMarketFactory {
         m.outcome = outcome;
         m.status = MarketStatus.Resolved;
 
-        // Handle bonds
         if (m.status == MarketStatus.Disputed) {
-            // Check who was right
             if (outcome == m.proposedOutcome) {
-                // Proposer was right, gets both bonds
                 uint256 totalBonds = m.proposalBond + m.disputeBond;
                 _transferBNB(m.proposer, totalBonds);
             } else {
-                // Disputer was right, gets both bonds
                 uint256 totalBonds = m.proposalBond + m.disputeBond;
                 _transferBNB(m.disputer, totalBonds);
             }
@@ -578,7 +653,6 @@ contract PredictionMarketFactory {
         require(m.status == MarketStatus.Resolved, "not resolved");
 
         if (m.outcome == Outcome.Invalid) {
-            // Invalid market: return proportional backing (1:1 for all tokens)
             uint256 yesBalance = m.yesToken.balanceOf(msg.sender);
             uint256 noBalance = m.noToken.balanceOf(msg.sender);
             
@@ -591,7 +665,6 @@ contract PredictionMarketFactory {
             _transferBNB(msg.sender, payout);
             emit Redeemed(id, msg.sender, payout, payout);
         } else {
-            // Normal resolution: winners get 1 BNB per token
             uint256 winningTokens;
             if (m.outcome == Outcome.Yes) {
                 winningTokens = m.yesToken.balanceOf(msg.sender);
@@ -729,7 +802,6 @@ contract PredictionMarketFactory {
         owner = newOwner;
     }
 
-    // Emergency: Owner can resolve if oracle system fails
     function emergencyResolve(uint256 id, Outcome outcome) external onlyOwner marketExists(id) {
         Market storage m = markets[id];
         require(m.status != MarketStatus.Resolved, "already resolved");
