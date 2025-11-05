@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarket } from "@/hooks/use-predection-market"
-import React from "react";
 
 interface CreateMarketModalProps {
   onClose: () => void
@@ -140,34 +139,211 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   const minDateString = minDate.toISOString().split("T")[0]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-lg sm:rounded-lg bg-card text-card-foreground shadow-lg overflow-auto">
-        <div className="p-4 sm:p-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Create Market</h3>
-            <button onClick={onClose} className="text-muted-foreground">Close</button>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <Card className="w-full max-w-2xl p-6 relative my-8">
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <h2 className="text-2xl font-bold mb-6">Create Prediction Market</h2>
+
+        <div className="space-y-6">
+          {/* Question Section */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Market Question <span className="text-red-500">*</span>
+            </label>
+            <Textarea
+              placeholder="Will Bitcoin reach $100k by end of 2024?"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              className="min-h-[100px]"
+              maxLength={280}
+              disabled={isProcessing}
+            />
+            <div className="text-xs text-muted-foreground mt-1 text-right">
+              {question.length}/280 characters
+            </div>
           </div>
 
-          {/* Form fields */}
-          <form className="mt-4 space-y-4">
-            {/* keep your existing inputs — they will stretch to full width on mobile */}
+          {/* End Date & Time Section */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm mb-1">Question</label>
-              <input className="w-full rounded-md p-2 bg-input text-foreground border border-border" />
+              <label className="text-sm font-medium mb-2 block">
+                End Date <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={minDateString}
+                disabled={isProcessing}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                End Time <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                disabled={isProcessing}
+              />
+            </div>
+          </div>
+
+          {/* Initial Liquidity Section */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Initial Liquidity (BNB)</label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">YES Pool</label>
+                <Input
+                  type="number"
+                  placeholder="0.1"
+                  value={initialYes}
+                  onChange={(e) => setInitialYes(e.target.value)}
+                  step="0.01"
+                  min="0.001"
+                  disabled={isProcessing}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">NO Pool</label>
+                <Input
+                  type="number"
+                  placeholder="0.1"
+                  value={initialNo}
+                  onChange={(e) => setInitialNo(e.target.value)}
+                  step="0.01"
+                  min="0.001"
+                  disabled={isProcessing}
+                />
+              </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input className="flex-1 rounded-md p-2 bg-input text-foreground border border-border" placeholder="Initial YES" />
-              <input className="flex-1 rounded-md p-2 bg-input text-foreground border border-border" placeholder="Initial NO" />
-            </div>
+            {/* Liquidity Preview */}
+            {totalLiquidity > 0 && (
+              <div className="mt-4 p-4 bg-muted rounded-lg space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total Liquidity:</span>
+                  <span className="font-semibold">{totalLiquidity.toFixed(4)} BNB</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Initial YES odds:</span>
+                  <span className="font-semibold text-green-500">{yesPercent.toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Initial NO odds:</span>
+                  <span className="font-semibold text-red-500">{noPercent.toFixed(1)}%</span>
+                </div>
+              </div>
+            )}
+          </div>
 
-            <div className="flex justify-end">
-              <button type="submit" className="bg-black text-white px-4 py-2 rounded-md">Create</button>
+          {/* Info Box */}
+          <div className="p-4 bg-blue-950/20 border border-blue-500 rounded-lg">
+            <h3 className="font-semibold text-blue-400 mb-2">How it works:</h3>
+            <ul className="text-sm text-blue-300 space-y-1 list-disc list-inside">
+              <li>You'll provide initial liquidity to start the market</li>
+              <li>The ratio of YES/NO liquidity sets the initial odds</li>
+              <li>You'll receive LP tokens representing your liquidity share</li>
+              <li>Traders pay fees that go to liquidity providers</li>
+            </ul>
+          </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="p-3 bg-red-950/20 border border-red-500 rounded-lg text-red-400 text-sm">
+              {error}
             </div>
-          </form>
+          )}
+
+          {/* Success Display */}
+          {txHash && (
+            <div className="p-3 bg-green-950/20 border border-green-500 rounded-lg text-green-400 text-sm">
+              ✅ Market created successfully! Redirecting...
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+            <Button 
+              onClick={onClose} 
+              variant="outline" 
+              className="flex-1" 
+              disabled={isProcessing}
+            >
+              Cancel
+            </Button>
+            
+            {!account ? (
+              <Button 
+                onClick={connectWallet} 
+                className="flex-1" 
+                disabled={isConnecting}
+              >
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Connect Wallet
+                  </>
+                )}
+              </Button>
+            ) : !isCorrectNetwork ? (
+              <Button 
+                onClick={switchNetwork} 
+                className="flex-1" 
+                variant="destructive"
+              >
+                Switch to BSC Testnet
+              </Button>
+            ) : !isContractReady ? (
+              <Button 
+                disabled 
+                className="flex-1"
+              >
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Loading Contract...
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleCreate} 
+                className="flex-1" 
+                disabled={isProcessing || isLoading}
+              >
+                {isProcessing || isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Market
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+
+          {/* Wallet Info */}
+          {account && (
+            <div className="text-center text-xs text-muted-foreground">
+              Connected: {account.slice(0, 6)}...{account.slice(-4)}
+            </div>
+          )}
         </div>
-      </div>
+      </Card>
     </div>
-  );
+  )
 }
