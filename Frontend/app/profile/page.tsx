@@ -70,8 +70,8 @@ export default function ProfilePage() {
               <Card key={index} className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <Link href={`/market/${position.market.slug}`}>
-                      <h3 className="text-lg font-semibold hover:text-primary transition-colors">
+                    <Link href={`/market/market-${position.market.id}`}>
+                      <h3 className="text-lg font-semibold hover:text-primary transition-colors cursor-pointer">
                         {position.market.question}
                       </h3>
                     </Link>
@@ -109,7 +109,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="mt-4">
-                  <Link href={`/market/${position.market.slug}`}>
+                  <Link href={`/market/market-${position.market.id}`}>
                     <Button variant="outline" size="sm">View Market</Button>
                   </Link>
                 </div>
