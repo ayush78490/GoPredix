@@ -134,6 +134,22 @@ export function usePredictionMarket() {
     initializeContract()
   }, [provider])
 
+  // Get price for a market
+  const getPrice = useCallback(async (marketId: number) => {
+    if (!contract) throw new Error('Contract not available')
+    
+    try {
+      const [yesPriceRaw, noPriceRaw] = await (contract as any).getPrice(BigInt(marketId))
+      return {
+        yesPrice: Number(yesPriceRaw) / 10000,
+        noPrice: Number(noPriceRaw) / 10000
+      }
+    } catch (error) {
+      console.error('❌ Error fetching price:', error)
+      throw error
+    }
+  }, [contract])
+
   // Market Creation
   const createMarket = useCallback(async (
     params: MarketCreationParams
@@ -369,59 +385,109 @@ export function usePredictionMarket() {
     
     return await tx.wait()
   }, [signer, isCorrectNetwork])
+
+  // Direct trading functions
+  const buyYesWithBNB = useCallback(async (
+    marketId: number,
+    minTokensOut: string,
+    amountIn: string
+  ) => {
+    if (!signer || !isCorrectNetwork) throw new Error('Wallet not connected or wrong network')
+    
+    const contractWithSigner = new ethers.Contract(
+      PREDICTION_MARKET_ADDRESS,
+      PREDICTION_MARKET_ABI,
+      signer
+    )
+    
+    const amountInWei = ethers.parseEther(amountIn)
+    const minOutWei = ethers.parseEther(minTokensOut)
+    
+    const tx = await (contractWithSigner as any).buyYesWithBNB(
+      BigInt(marketId),
+      minOutWei,
+      { value: amountInWei }
+    )
+    
+    return await tx.wait()
+  }, [signer, isCorrectNetwork])
+
+  const buyNoWithBNB = useCallback(async (
+    marketId: number,
+    minTokensOut: string,
+    amountIn: string
+  ) => {
+    if (!signer || !isCorrectNetwork) throw new Error('Wallet not connected or wrong network')
+    
+    const contractWithSigner = new ethers.Contract(
+      PREDICTION_MARKET_ADDRESS,
+      PREDICTION_MARKET_ABI,
+      signer
+    )
+    
+    const amountInWei = ethers.parseEther(amountIn)
+    const minOutWei = ethers.parseEther(minTokensOut)
+    
+    const tx = await (contractWithSigner as any).buyNoWithBNB(
+      BigInt(marketId),
+      minOutWei,
+      { value: amountInWei }
+    )
+    
+    return await tx.wait()
+  }, [signer, isCorrectNetwork])
+
   // Get user's positions across all markets
-const getUserPositions = useCallback(async (userAddress: string) => {
-  if (!contract) throw new Error('Contract not available')
-  
-  try {
-    const nextId = await contract.nextMarketId()
-    const marketCount = Number(nextId)
-    const positions = []
+  const getUserPositions = useCallback(async (userAddress: string) => {
+    if (!contract) throw new Error('Contract not available')
     
-    for (let i = 0; i < marketCount; i++) {
-      try {
-        const market = await getMarket(i)
-        
-        // Get YES and NO token balances for this user
-        const yesTokenContract = new ethers.Contract(
-          market.yesToken,
-          ['function balanceOf(address) view returns (uint256)'],
-          provider || signer
-        )
-        const noTokenContract = new ethers.Contract(
-          market.noToken,
-          ['function balanceOf(address) view returns (uint256)'],
-          provider || signer
-        )
-        
-        const yesBalance = await yesTokenContract.balanceOf(userAddress)
-        const noBalance = await noTokenContract.balanceOf(userAddress)
-        
-        const yesBalanceFormatted = ethers.formatEther(yesBalance)
-        const noBalanceFormatted = ethers.formatEther(noBalance)
-        
-        // Only include markets where user has a position
-        if (parseFloat(yesBalanceFormatted) > 0 || parseFloat(noBalanceFormatted) > 0) {
-          positions.push({
-            market,
-            yesBalance: yesBalanceFormatted,
-            noBalance: noBalanceFormatted,
-            totalInvested: (parseFloat(yesBalanceFormatted) + parseFloat(noBalanceFormatted)).toFixed(4)
-          })
+    try {
+      const nextId = await (contract as any).nextMarketId()
+      const marketCount = Number(nextId)
+      const positions = []
+      
+      for (let i = 0; i < marketCount; i++) {
+        try {
+          const market = await getMarket(i)
+          
+          // Get YES and NO token balances for this user
+          const yesTokenContract = new ethers.Contract(
+            market.yesToken,
+            ['function balanceOf(address) view returns (uint256)'],
+            provider || signer
+          )
+          const noTokenContract = new ethers.Contract(
+            market.noToken,
+            ['function balanceOf(address) view returns (uint256)'],
+            provider || signer
+          )
+          
+          const yesBalance = await yesTokenContract.balanceOf(userAddress)
+          const noBalance = await noTokenContract.balanceOf(userAddress)
+          
+          const yesBalanceFormatted = ethers.formatEther(yesBalance)
+          const noBalanceFormatted = ethers.formatEther(noBalance)
+          
+          // Only include markets where user has a position
+          if (parseFloat(yesBalanceFormatted) > 0 || parseFloat(noBalanceFormatted) > 0) {
+            positions.push({
+              market,
+              yesBalance: yesBalanceFormatted,
+              noBalance: noBalanceFormatted,
+              totalInvested: (parseFloat(yesBalanceFormatted) + parseFloat(noBalanceFormatted)).toFixed(4)
+            })
+          }
+        } catch (err) {
+          console.warn(`Failed to get position for market ${i}:`, err)
         }
-      } catch (err) {
-        console.warn(`Failed to get position for market ${i}:`, err)
       }
+      
+      return positions
+    } catch (error) {
+      console.error('Error fetching user positions:', error)
+      throw error
     }
-    
-    return positions
-  } catch (error) {
-    console.error('Error fetching user positions:', error)
-    throw error
-  }
-}, [contract, getMarket, provider, signer])
-
-
+  }, [contract, getMarket, provider, signer])
 
   return {
     // Core functions
@@ -430,11 +496,14 @@ const getUserPositions = useCallback(async (userAddress: string) => {
     getAllMarkets,
     getAmountOut,
     getUserPositions,
+    getPrice,
     
     // Trading functions
     mintCompleteSets,
     burnCompleteSets,
     swapTokens,
+    buyYesWithBNB,
+    buyNoWithBNB,
     
     // State
     isLoading,
