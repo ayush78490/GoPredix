@@ -4,18 +4,6 @@ import { TrendingUp, Volume2 } from "lucide-react"
 import Link from "next/link"
 import type { MARKETS } from "@/lib/markets"
 
-interface Market {
-  id: string
-  title: string
-  description: string
-  category: string
-  yesOdds: number
-  noOdds: number
-  volume: number
-  resolutionDate: string
-  slug: string
-}
-
 interface MarketCardProps {
   market: (typeof MARKETS)[0]
 }
@@ -31,7 +19,7 @@ export default function MarketCard({ market }: MarketCardProps) {
   const daysLeft = Math.max(0, Math.ceil((resolutionDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
 
   return (
-    <Link href={`/market/${market.slug}`}>
+    <Link href={`/market/${market.slug}`} className="block">
       <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer h-full">
         <div className="p-4">
           {/* Category Badge */}

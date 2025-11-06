@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { X, ArrowRight, Loader2 } from "lucide-react"
+import { useState, useEffect, useMemo } from "react"
+import { X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarket } from "@/hooks/use-predection-market"
-import React from "react"
+import { ethers } from "ethers"
 
 interface TradeModalProps {
   market: any;
@@ -26,15 +26,56 @@ export default function TradeModal({
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
+  const [yesPrice, setYesPrice] = useState<number | null>(null)
+  const [noPrice, setNoPrice] = useState<number | null>(null)
+  const [expectedOut, setExpectedOut] = useState<string | null>(null)
+  const [feeEstimated, setFeeEstimated] = useState<string | null>(null)
+  const [slippage, setSlippage] = useState<number>(2) // percent
 
-  const { account, connectWallet, isConnecting, isCorrectNetwork, switchNetwork, signer } = useWeb3Context()
-  const { contract } = usePredictionMarket() // Instead of getAmountOut, just get contract with ABI/address
+  const { account, connectWallet, isCorrectNetwork, switchNetwork, signer } = useWeb3Context()
+  const { contract, getAmountOut } = usePredictionMarket()
 
   const numAmount = parseFloat(amount) || 0
   const hasAmount = numAmount > 0
   const outcomeLabel = outcome === "YES" ? "YES" : outcome === "NO" ? "NO" : "outcome"
 
+  // Fetch price & estimate when market/outcome/amount changes
+  useEffect(() => {
+    let mounted = true
+    async function update() {
+      if (!contract || !market) return
+      try {
+        // Get on-chain price (scaled to 10000 in contract)
+        const [yPriceRaw, nPriceRaw] = await (contract as any).getPrice(market.id)
+        const y = Number(yPriceRaw) / 10000
+        const n = Number(nPriceRaw) / 10000
+        if (!mounted) return
+        setYesPrice(y)
+        setNoPrice(n)
+
+        // Estimate amountOut using getAmountOut
+        if (hasAmount && outcome) {
+          const yesInFlag = outcome === "YES" ? false : true
+          const result = await getAmountOut(market.id, amount, yesInFlag)
+          if (!mounted) return
+          setExpectedOut(result.amountOut)
+          setFeeEstimated(result.fee)
+        } else {
+          setExpectedOut(null)
+          setFeeEstimated(null)
+        }
+      } catch (err: any) {
+        console.error(err)
+        if (!mounted) return
+        setError(err?.reason || err?.message || "Failed to fetch prices")
+      }
+    }
+    update()
+    return () => { mounted = false }
+  }, [contract, market, amount, outcome, getAmountOut, hasAmount])
+
   const handleTrade = async () => {
+    setError(null)
     if (!account) {
       await connectWallet()
       return
@@ -55,26 +96,30 @@ export default function TradeModal({
       setError("Wallet provider/contract not ready")
       return
     }
+
     setIsProcessing(true)
-    setError(null)
     setTxHash(null)
     try {
-      const { ethers } = await import("ethers")
       const amountInWei = ethers.parseEther(amount)
-      const minTokensOut = 0 // For slippage tolerance, use output from `getAmountOut` if desired
+      // Get estimate from getAmountOut to build minOut with slippage
+      const yesInFlag = outcome === "YES" ? false : true
+      const result = await getAmountOut(market.id, amount, yesInFlag)
+      const minOutBn = ethers.parseEther((parseFloat(result.amountOut) * (1 - slippage / 100)).toString())
 
       let tx
+      const contractWithSigner = contract.connect(signer)
       if (outcome === "YES") {
-        tx = await contract.buyYesWithBNB(market.id, minTokensOut, { value: amountInWei })
+        tx = await (contractWithSigner as any).buyYesWithBNB(market.id, minOutBn, { value: amountInWei })
       } else {
-        tx = await contract.buyNoWithBNB(market.id, minTokensOut, { value: amountInWei })
+        tx = await (contractWithSigner as any).buyNoWithBNB(market.id, minOutBn, { value: amountInWei })
       }
       setTxHash(tx.hash)
       await tx.wait()
       setAmount("")
-      setTimeout(onClose, 2000)
+      onClose()
     } catch (err: any) {
-      setError(err.reason || err.message || "Transaction failed")
+      console.error(err)
+      setError(err?.reason || err?.message || "Transaction failed")
     } finally {
       setIsProcessing(false)
     }
@@ -93,8 +138,8 @@ export default function TradeModal({
             </Button>
           </div>
 
-          {/* Outcome Selection */}
           <div className="space-y-4">
+            {/* Outcome Selection */}
             <div className="flex gap-2">
               <Button 
                 className="flex-1"
@@ -126,6 +171,44 @@ export default function TradeModal({
                 placeholder="0.0"
               />
             </div>
+
+            {/* Price Display & Trade Details */}
+            {yesPrice !== null && noPrice !== null && (
+              <div className="text-sm space-y-1 text-gray-700">
+                <div className="flex gap-3">
+                  <div className="flex-1 p-2 rounded-md bg-green-950/10 text-green-400">
+                    <div className="text-xs">YES</div>
+                    <div className="font-semibold">{(yesPrice * 100).toFixed(2)}%</div>
+                  </div>
+                  <div className="flex-1 p-2 rounded-md bg-red-950/10 text-red-400">
+                    <div className="text-xs">NO</div>
+                    <div className="font-semibold">{(noPrice * 100).toFixed(2)}%</div>
+                  </div>
+                </div>
+
+                {expectedOut && (
+                  <p className="mt-2">Estimated {outcome}: <span className="font-medium">{Number(expectedOut).toFixed(6)}</span></p>
+                )}
+
+                {feeEstimated && (
+                  <p className="text-xs text-muted-foreground">Estimated protocol fee (approx): {Number(feeEstimated).toFixed(6)} BNB</p>
+                )}
+
+                {/* Slippage Tolerance */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs">Slippage tolerance</label>
+                  <Input 
+                    className="w-20" 
+                    type="number" 
+                    min="0" 
+                    max="50" 
+                    step="0.1" 
+                    value={slippage} 
+                    onChange={(e) => setSlippage(Number(e.target.value))} 
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (
