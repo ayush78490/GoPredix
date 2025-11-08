@@ -280,6 +280,37 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "marketId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "totalInvested",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "UserInvestmentUpdated",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "DISPUTE_PERIOD",
     "outputs": [
@@ -472,6 +503,35 @@
         "type": "uint256"
       }
     ],
+    "name": "getBuyNoOutput",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "totalNoOut",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalFee",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bnbAmount",
+        "type": "uint256"
+      }
+    ],
     "name": "getBuyYesMultiplier",
     "outputs": [
       {
@@ -479,6 +539,35 @@
         "name": "multiplier",
         "type": "uint256"
       },
+      {
+        "internalType": "uint256",
+        "name": "totalYesOut",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalFee",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bnbAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "getBuyYesOutput",
+    "outputs": [
       {
         "internalType": "uint256",
         "name": "totalYesOut",
@@ -599,6 +688,49 @@
       {
         "internalType": "uint256",
         "name": "totalLiquidity",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "marketId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "getUserInvestment",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "getUserTotalInvestment",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
         "type": "uint256"
       }
     ],
@@ -839,6 +971,35 @@
     "name": "swapYesForNo",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "userInvestments",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "totalInvested",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lastUpdated",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

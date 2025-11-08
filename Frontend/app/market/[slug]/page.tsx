@@ -485,6 +485,7 @@ export default function MarketPage() {
               </div>
 
               <Button 
+                variant="outline"
                 className="w-full mt-2" 
                 onClick={() => outcome && setShowModal(true)} 
                 disabled={!outcome || !market.isActive}

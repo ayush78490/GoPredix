@@ -10,48 +10,61 @@ import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarket } from "@/hooks/use-predection-market"
 import { useAllMarkets } from "@/hooks/getAllMarkets" // Fixed import path
 
-const CATEGORIES = ["All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy"]
+
+const CATEGORIES = [
+  "All Markets",
+  "Politics",
+  "Finance",
+  "Crypto",
+  "Sports",
+  "Tech",
+  "Economy",
+  "General" // Added General category explicitly
+]
+
 
 // Helper function to extract category from question
 const extractCategory = (question: string): string => {
   const lowerQuestion = question.toLowerCase()
-  
-  if (lowerQuestion.includes('bitcoin') || lowerQuestion.includes('crypto') || lowerQuestion.includes('ethereum')) 
+
+  if (lowerQuestion.includes('bitcoin') || lowerQuestion.includes('crypto') || lowerQuestion.includes('ethereum'))
     return "Crypto"
-  if (lowerQuestion.includes('election') || lowerQuestion.includes('president') || lowerQuestion.includes('politics')) 
+  if (lowerQuestion.includes('election') || lowerQuestion.includes('president') || lowerQuestion.includes('politics'))
     return "Politics"
-  if (lowerQuestion.includes('stock') || lowerQuestion.includes('finance') || lowerQuestion.includes('market')) 
+  if (lowerQuestion.includes('stock') || lowerQuestion.includes('finance') || lowerQuestion.includes('market'))
     return "Finance"
-  if (lowerQuestion.includes('sports') || lowerQuestion.includes('game') || lowerQuestion.includes('team')) 
+  if (lowerQuestion.includes('sports') || lowerQuestion.includes('game') || lowerQuestion.includes('team'))
     return "Sports"
-  if (lowerQuestion.includes('tech') || lowerQuestion.includes('ai') || lowerQuestion.includes('software')) 
+  if (lowerQuestion.includes('tech') || lowerQuestion.includes('ai') || lowerQuestion.includes('software'))
     return "Tech"
-  if (lowerQuestion.includes('economy') || lowerQuestion.includes('gdp') || lowerQuestion.includes('inflation')) 
+  if (lowerQuestion.includes('economy') || lowerQuestion.includes('gdp') || lowerQuestion.includes('inflation'))
     return "Economy"
-  
+
   return "General"
 }
+
 
 // Calculate prices from pool data
 const calculatePrices = (yesPool: string, noPool: string) => {
   const yes = parseFloat(yesPool) || 0
   const no = parseFloat(noPool) || 0
   const total = yes + no
-  
+
   if (total === 0) return { yesPrice: 50, noPrice: 50 }
-  
+
   return {
     yesPrice: (yes / total) * 100,
     noPrice: (no / total) * 100
   }
 }
 
+
 // Convert market data to frontend format
 const convertToFrontendMarket = (market: any) => {
   const category = market.category || extractCategory(market.question)
   const resolutionDate = new Date(market.endTime * 1000)
   const now = new Date()
-  
+
   // Calculate prices from pool data
   const prices = calculatePrices(market.yesPool, market.noPool)
 
@@ -84,25 +97,38 @@ const convertToFrontendMarket = (market: any) => {
   }
 }
 
+
 export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("All Markets")
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
 
+
   const { account, connectWallet, isCorrectNetwork, isConnecting, error: web3Error, isInitialized } = useWeb3Context()
   const { createMarket } = usePredictionMarket()
   const { markets, isLoading, error, refreshMarkets } = useAllMarkets()
 
+
   // Convert markets to frontend format
   const formattedMarkets = markets.map(market => convertToFrontendMarket(market))
 
-  // Filter markets based on category and search
+
+  // Normalize category strings to lowercase for comparison
+  const normalizedSelectedCategory = selectedCategory.toLowerCase()
+
+  // Filter markets based on category and search (case-insensitive)
   const filteredMarkets = formattedMarkets.filter((market) => {
-    const matchesCategory = selectedCategory === "All Markets" || market.category === selectedCategory
-    // Use question for search since we don't have title/description in the converted market
+    const marketCategory = (market.category || "general").toLowerCase()
+
+    const matchesCategory =
+      normalizedSelectedCategory === "all markets" ||
+      marketCategory === normalizedSelectedCategory
+
     const matchesSearch = market.question.toLowerCase().includes(searchQuery.toLowerCase())
+
     return matchesCategory && matchesSearch
   })
+
 
   // Handle market creation success
   const handleMarketCreated = (marketId: number) => {
@@ -110,6 +136,7 @@ export default function Home() {
     // Refresh markets to show the new one
     refreshMarkets()
   }
+
 
   // Debug logging
   useEffect(() => {
@@ -122,9 +149,11 @@ export default function Home() {
     console.log("Error:", error)
   }, [isInitialized, account, isCorrectNetwork, markets.length, isLoading, error])
 
+
   return (
     <main className="min-h-screen bg-background">
       <Header />
+
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Hero Section */}
@@ -135,8 +164,8 @@ export default function Home() {
               Trade your predictions on major events. Buy YES or NO tokens based on your beliefs about the future.
             </p>
           </div>
-          
-          <Button 
+
+          <Button
             onClick={() => setShowCreateModal(true)}
             size="lg"
             className="mt-4 md:mt-0 bg-black text-white hover:bg-black/90"
@@ -147,7 +176,8 @@ export default function Home() {
           </Button>
         </div>
 
-        
+
+
         {/* Network Warning */}
         {account && !isCorrectNetwork && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -158,7 +188,7 @@ export default function Home() {
                   Please switch to the correct network to use this application.
                 </p>
               </div>
-              <Button 
+              <Button
                 onClick={() => window.ethereum?.request({
                   method: 'wallet_switchEthereumChain',
                   params: [{ chainId: '0x61' }], // BSC Testnet
@@ -170,6 +200,7 @@ export default function Home() {
             </div>
           </div>
         )}
+
 
         {/* Search and Filter */}
         {account && isCorrectNetwork && (
@@ -185,9 +216,9 @@ export default function Home() {
                   className="w-full pl-10 pr-4 py-2.5 bg-card border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
-              
-              <Button 
-                onClick={refreshMarkets} 
+
+              <Button
+                onClick={refreshMarkets}
                 disabled={isLoading}
                 variant="outline"
                 className="whitespace-nowrap"
@@ -202,6 +233,7 @@ export default function Home() {
                 )}
               </Button>
             </div>
+
 
             {/* Categories */}
             <div className="flex flex-wrap gap-2">
@@ -220,6 +252,7 @@ export default function Home() {
           </div>
         )}
 
+
         {/* Initializing State */}
         {!isInitialized && (
           <div className="flex justify-center items-center py-12">
@@ -227,6 +260,7 @@ export default function Home() {
             <span className="ml-2 text-muted-foreground">Initializing...</span>
           </div>
         )}
+
 
         {/* Wallet Not Connected State */}
         {!account && isInitialized && !isLoading && (
@@ -239,7 +273,7 @@ export default function Home() {
               <p className="text-muted-foreground mb-6">
                 Connect your wallet to view prediction markets and start trading.
               </p>
-              <Button 
+              <Button
                 onClick={connectWallet}
                 disabled={isConnecting}
                 size="lg"
@@ -261,6 +295,7 @@ export default function Home() {
           </div>
         )}
 
+
         {/* Empty State - No markets created yet */}
         {account && isCorrectNetwork && !isLoading && !error && formattedMarkets.length === 0 && (
           <div className="text-center py-16 border-2 border-dashed border-border rounded-lg">
@@ -272,8 +307,8 @@ export default function Home() {
               <p className="text-muted-foreground mb-6">
                 Be the first to create a prediction market and start trading!
               </p>
-              <Button 
-                onClick={() => setShowCreateModal(true)} 
+              <Button
+                onClick={() => setShowCreateModal(true)}
                 size="lg"
                 className="bg-black text-white hover:bg-black/90"
               >
@@ -284,6 +319,7 @@ export default function Home() {
           </div>
         )}
 
+
         {/* Loading State */}
         {account && isCorrectNetwork && isLoading && (
           <div className="flex justify-center items-center py-12">
@@ -292,16 +328,18 @@ export default function Home() {
           </div>
         )}
 
+
         {/* Error State */}
         {account && isCorrectNetwork && error && !isLoading && (
           <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6">
-            <p className="text-destructive font-medium">❌ Error loading markets</p>
+            <p className="text-destructive font-medium">loading markets</p>
             <p className="text-destructive/80 text-sm mt-1">{error}</p>
             <Button onClick={refreshMarkets} variant="outline" size="sm" className="mt-2">
               Try Again
             </Button>
           </div>
         )}
+
 
         {/* Markets Grid */}
         {account && isCorrectNetwork && !isLoading && !error && formattedMarkets.length > 0 && (
@@ -319,6 +357,7 @@ export default function Home() {
             )}
           </>
         )}
+
 
         {/* Stats */}
         {account && isCorrectNetwork && !isLoading && !error && formattedMarkets.length > 0 && (
@@ -342,9 +381,10 @@ export default function Home() {
         )}
       </div>
 
+
       {/* Create Market Modal */}
       {showCreateModal && (
-        <CreateMarketModal 
+        <CreateMarketModal
           onClose={() => setShowCreateModal(false)}
           onSuccess={handleMarketCreated}
         />
