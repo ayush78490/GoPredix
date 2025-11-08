@@ -74,6 +74,14 @@ export interface SwapMultiplierInfo {
   fee: string
 }
 
+export interface UserPosition {
+  market: Market
+  yesBalance: string
+  noBalance: string
+  totalInvested: string
+  bnbInvested: string // Added BNB investment amount
+}
+
 // AI Validation Helper
 async function validateMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
@@ -290,6 +298,113 @@ export function usePredictionMarket() {
       throw error
     }
   }, [contract])
+
+  // ==================== USER INVESTMENT FUNCTIONS ====================
+
+  const getMarketInvestment = useCallback(async (
+    userAddress: string, 
+    marketId: number
+  ): Promise<string> => {
+    if (!contract) throw new Error('Contract not available')
+    
+    try {
+      console.log(`💰 Getting exact BNB investment for user ${userAddress.slice(0, 6)} in market ${marketId}`)
+      
+      // Use the new contract function for exact investment tracking
+      const investment = await (contract as any).getUserInvestment(BigInt(marketId), userAddress)
+      const investmentBNB = ethers.formatEther(investment)
+      
+      console.log(`✅ Exact BNB investment in market ${marketId}: ${investmentBNB} BNB`)
+      return investmentBNB
+      
+    } catch (error) {
+      console.error(`❌ Error getting market investment:`, error)
+      return "0"
+    }
+  }, [contract])
+
+  const getTotalInvestment = useCallback(async (userAddress: string): Promise<string> => {
+    if (!contract) throw new Error('Contract not available')
+    
+    try {
+      console.log(`💰 Getting total BNB investment for user ${userAddress.slice(0, 6)}`)
+      
+      // Use the new contract function for total across all markets
+      const totalInvestment = await (contract as any).getUserTotalInvestment(userAddress)
+      const totalInvestmentBNB = ethers.formatEther(totalInvestment)
+      
+      console.log(`✅ Total BNB investment across all markets: ${totalInvestmentBNB} BNB`)
+      return totalInvestmentBNB
+      
+    } catch (error) {
+      console.error('❌ Error getting total investment:', error)
+      return "0"
+    }
+  }, [contract])
+
+  // ==================== USER POSITIONS ====================
+
+  const getUserPositions = useCallback(async (userAddress: string): Promise<UserPosition[]> => {
+    if (!contract) throw new Error('Contract not available')
+    
+    try {
+      const nextId = await (contract as any).nextMarketId()
+      const marketCount = Number(nextId)
+      const positions: UserPosition[] = []
+      
+      console.log(`🔍 Scanning ${marketCount} markets for user positions...`)
+      
+      for (let i = 0; i < marketCount; i++) {
+        try {
+          const market = await getMarket(i)
+          
+          const yesTokenContract = new ethers.Contract(
+            market.yesToken,
+            ['function balanceOf(address) view returns (uint256)'],
+            provider
+          )
+          const noTokenContract = new ethers.Contract(
+            market.noToken,
+            ['function balanceOf(address) view returns (uint256)'],
+            provider
+          )
+          
+          const [yesBalance, noBalance] = await Promise.all([
+            yesTokenContract.balanceOf(userAddress),
+            noTokenContract.balanceOf(userAddress)
+          ])
+          
+          const yesBalanceFormatted = ethers.formatEther(yesBalance)
+          const noBalanceFormatted = ethers.formatEther(noBalance)
+          
+          if (parseFloat(yesBalanceFormatted) > 0 || parseFloat(noBalanceFormatted) > 0) {
+            // Get exact BNB investment for this market from contract
+            const bnbInvested = await getMarketInvestment(userAddress, i)
+            
+            const position: UserPosition = {
+              market,
+              yesBalance: yesBalanceFormatted,
+              noBalance: noBalanceFormatted,
+              totalInvested: (parseFloat(yesBalanceFormatted) + parseFloat(noBalanceFormatted)).toFixed(4),
+              bnbInvested
+            }
+            
+            positions.push(position)
+            console.log(`✅ Found position in market ${i}: ${bnbInvested} BNB invested`)
+          }
+        } catch (err) {
+          console.warn(`⚠️ Failed to get position for market ${i}:`, err)
+        }
+      }
+      
+      console.log(`🎯 Found ${positions.length} total positions for user`)
+      return positions
+      
+    } catch (error) {
+      console.error('❌ Error fetching user positions:', error)
+      throw error
+    }
+  }, [contract, getMarket, provider, getMarketInvestment])
 
   // ==================== MULTIPLIER & PRICE CALCULATIONS ====================
 
@@ -574,61 +689,14 @@ export function usePredictionMarket() {
     }
   }, [contract])
 
-  // ==================== USER POSITIONS ====================
-
-  const getUserPositions = useCallback(async (userAddress: string) => {
-    if (!contract) throw new Error('Contract not available')
-    
-    try {
-      const nextId = await (contract as any).nextMarketId()
-      const marketCount = Number(nextId)
-      const positions = []
-      
-      for (let i = 0; i < marketCount; i++) {
-        try {
-          const market = await getMarket(i)
-          
-          const yesTokenContract = new ethers.Contract(
-            market.yesToken,
-            ['function balanceOf(address) view returns (uint256)'],
-            provider
-          )
-          const noTokenContract = new ethers.Contract(
-            market.noToken,
-            ['function balanceOf(address) view returns (uint256)'],
-            provider
-          )
-          
-          const yesBalance = await yesTokenContract.balanceOf(userAddress)
-          const noBalance = await noTokenContract.balanceOf(userAddress)
-          
-          const yesBalanceFormatted = ethers.formatEther(yesBalance)
-          const noBalanceFormatted = ethers.formatEther(noBalance)
-          
-          if (parseFloat(yesBalanceFormatted) > 0 || parseFloat(noBalanceFormatted) > 0) {
-            positions.push({
-              market,
-              yesBalance: yesBalanceFormatted,
-              noBalance: noBalanceFormatted,
-              totalInvested: (parseFloat(yesBalanceFormatted) + parseFloat(noBalanceFormatted)).toFixed(4)
-            })
-          }
-        } catch (err) {
-          console.warn(`Failed to get position for market ${i}:`, err)
-        }
-      }
-      
-      return positions
-    } catch (error) {
-      console.error('Error fetching user positions:', error)
-      throw error
-    }
-  }, [contract, getMarket, provider])
-
   return {
     // Core functions
     createMarket,
     getMarket,
+    
+    // Investment tracking functions
+    getMarketInvestment,
+    getTotalInvestment,
     
     // Multiplier & Price calculations
     getBuyYesMultiplier,

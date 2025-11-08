@@ -16,11 +16,11 @@ interface TradeModalProps {
   onClose: () => void;
 }
 
-export default function TradeModal({ 
-  market, 
-  outcome, 
-  onOutcomeChange, 
-  onClose 
+export default function TradeModal({
+  market,
+  outcome,
+  onOutcomeChange,
+  onClose
 }: TradeModalProps) {
   const [amount, setAmount] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
@@ -31,220 +31,297 @@ export default function TradeModal({
   const [expectedOut, setExpectedOut] = useState<string | null>(null)
   const [feeEstimated, setFeeEstimated] = useState<string | null>(null)
   const [slippage, setSlippage] = useState<number>(5)
+  const [isEstimating, setIsEstimating] = useState(false)
 
   const { account, connectWallet, isCorrectNetwork, switchNetwork, signer } = useWeb3Context()
-  const { 
-    contract, 
-    getCurrentMultipliers,
-    getBuyYesMultiplier,
-    getBuyNoMultiplier
-  } = usePredictionMarket()
+  const { contract, getCurrentMultipliers } = usePredictionMarket()
 
   const numAmount = parseFloat(amount) || 0
-  const hasAmount = numAmount > 0
+  const hasAmount = numAmount >= 0.001
 
-  // Price normalization from percentage (0-100) to decimal (0-1)
+  // Price normalization from basis points (0-10000) to percentage (0-100)
   const normalizedYes = useMemo(() => {
     if (yesPrice === null) return null
-    return yesPrice / 100
+    return yesPrice / 10000
   }, [yesPrice])
 
   const normalizedNo = useMemo(() => {
     if (noPrice === null) return null
-    return noPrice / 100
+    return noPrice / 10000
   }, [noPrice])
 
-  // Implied odds calculation
+  // Implied odds calculation (potential multiplier if you win)
   const yesOdds = useMemo(() => {
     if (!normalizedYes || normalizedYes <= 0) return null
-    return (1 / normalizedYes)
+    return 1 / normalizedYes
   }, [normalizedYes])
 
   const noOdds = useMemo(() => {
     if (!normalizedNo || normalizedNo <= 0) return null
-    return (1 / normalizedNo)
+    return 1 / normalizedNo
   }, [normalizedNo])
 
-  // AMM-based payout multiplier
-  const potentialMultiplier = useMemo(() => {
-    if (!numAmount || !expectedOut) return null
-    const output = parseFloat(expectedOut)
-    return output / numAmount
+  // Expected payout calculation (total return if outcome is correct)
+  const expectedPayout = useMemo(() => {
+    if (!numAmount || !expectedOut || numAmount <= 0) return null
+    return parseFloat(expectedOut)
   }, [numAmount, expectedOut])
 
-  // Fetch prices and estimate output
+  // Payout multiplier (how much you get back for your investment)
+  const payoutMultiplier = useMemo(() => {
+    if (!numAmount || !expectedPayout || numAmount <= 0) return null
+    return expectedPayout / numAmount
+  }, [numAmount, expectedPayout])
+
+  // Fetch prices and estimate output with debouncing
   useEffect(() => {
     let mounted = true
+    let timeoutId: NodeJS.Timeout
+
     async function update() {
       if (!contract || !market) return
+
       try {
-        // Get current market prices
+        // Always fetch current market prices
         const multipliers = await getCurrentMultipliers(market.id)
-        
+
         if (!mounted) return
         setYesPrice(multipliers.yesPrice)
         setNoPrice(multipliers.noPrice)
 
         // Estimate trade output if amount and outcome are selected
-        if (hasAmount && outcome) {
+        if (hasAmount && outcome && numAmount >= 0.001) {
+          setIsEstimating(true)
           try {
+            const amountInWei = ethers.parseEther(amount)
             let result
+
             if (outcome === "YES") {
-              result = await getBuyYesMultiplier(market.id, amount)
+              result = await (contract as any).getBuyYesOutput(BigInt(market.id), amountInWei)
             } else {
-              result = await getBuyNoMultiplier(market.id, amount)
+              result = await (contract as any).getBuyNoOutput(BigInt(market.id), amountInWei)
             }
-            
+
             if (!mounted) return
-            setExpectedOut(result.totalOut)
-            setFeeEstimated(result.totalFee)
-          } catch (error) {
+
+            // result is a tuple: [totalOut, totalFee]
+            const totalOut = ethers.formatEther(result[0])
+            const totalFee = ethers.formatEther(result[1])
+
+            setExpectedOut(totalOut)
+            setFeeEstimated(totalFee)
+          } catch (error: any) {
             console.error("Error estimating trade:", error)
-            // Fallback: use simple probability-based estimation
-            const currentPrice = outcome === "YES" ? yesPrice : noPrice
-            if (currentPrice && currentPrice > 0) {
-              const probability = currentPrice / 100
-              const estimatedOut = numAmount / probability
-              if (!mounted) return
-              setExpectedOut(estimatedOut.toFixed(6))
-              setFeeEstimated("0")
+            if (!mounted) return
+
+            // Only clear estimates, don't show error to user during estimation
+            setExpectedOut(null)
+            setFeeEstimated(null)
+          } finally {
+            if (mounted) {
+              setIsEstimating(false)
             }
           }
         } else {
           if (!mounted) return
           setExpectedOut(null)
           setFeeEstimated(null)
+          setIsEstimating(false)
         }
       } catch (err: any) {
         console.error("Price fetch error:", err)
-        if (!mounted) return
-        setError(err?.reason || err?.message || "Failed to fetch market data")
+        if (mounted) {
+          setIsEstimating(false)
+        }
       }
     }
-    update()
-    return () => { mounted = false }
-  }, [
-    contract, 
-    market, 
-    amount, 
-    outcome, 
-    getCurrentMultipliers,
-    getBuyYesMultiplier,
-    getBuyNoMultiplier,
-    hasAmount,
-    yesPrice,
-    noPrice,
-    numAmount
-  ])
+
+    // Debounce the update to avoid too many calls
+    timeoutId = setTimeout(update, 400)
+
+    return () => {
+      mounted = false
+      clearTimeout(timeoutId)
+    }
+  }, [contract, market, amount, outcome, hasAmount, numAmount, getCurrentMultipliers])
 
   // Execute trade
   const handleTrade = async () => {
     setError(null)
 
     // Validation checks
-    if (!account) return connectWallet()
-    if (!isCorrectNetwork) return switchNetwork()
-    if (!amount || numAmount <= 0) return setError("Please enter a valid BNB amount")
-    if (!outcome) return setError("Please select YES or NO")
-    if (!signer || !contract) return setError("Wallet provider/contract not ready")
+    if (!account) {
+      connectWallet()
+      return
+    }
+
+    if (!isCorrectNetwork) {
+      switchNetwork()
+      return
+    }
+
+    if (!amount || numAmount <= 0) {
+      setError("Please enter a valid BNB amount")
+      return
+    }
+
+    if (numAmount < 0.001) {
+      setError("Minimum trade amount is 0.001 BNB")
+      return
+    }
+
+    if (!outcome) {
+      setError("Please select YES or NO")
+      return
+    }
+
+    if (!signer || !contract) {
+      setError("Wallet provider/contract not ready")
+      return
+    }
 
     setIsProcessing(true)
     setTxHash(null)
 
     try {
       const amountInWei = ethers.parseEther(amount)
-      
-      // Calculate minimum output with user's slippage tolerance
-      let minOutWei
-      
-      if (expectedOut) {
-        // Use the fetched expected output
-        const minOut = parseFloat(expectedOut) * (1 - slippage / 100)
-        
-        if (minOut < 1e-18) {
-          throw new Error("Minimum output amount is too small. Try a larger trade amount.")
+
+      // Get fresh output estimate right before trading
+      let freshEstimate
+      try {
+        if (outcome === "YES") {
+          freshEstimate = await (contract as any).getBuyYesOutput(BigInt(market.id), amountInWei)
+        } else {
+          freshEstimate = await (contract as any).getBuyNoOutput(BigInt(market.id), amountInWei)
         }
-        
-        minOutWei = ethers.parseEther(minOut.toFixed(18))
-      } else {
-        // Fallback: use probability-based estimation
-        const currentPrice = outcome === "YES" ? yesPrice : noPrice
-        if (!currentPrice || currentPrice <= 0) {
-          throw new Error("Invalid market price")
+      } catch (estimateError: any) {
+        console.error("Failed to get fresh estimate:", estimateError)
+
+        // Provide specific error messages
+        if (estimateError?.message?.includes("market not open")) {
+          throw new Error("Market is not open for trading")
+        } else if (estimateError?.message?.includes("market ended")) {
+          throw new Error("Market has ended")
+        } else {
+          throw new Error("Unable to estimate trade output. Market may have insufficient liquidity.")
         }
-        
-        const probability = currentPrice / 100
-        const estimatedOut = numAmount / probability
-        const minOut = estimatedOut * (1 - slippage / 100)
-        
-        if (minOut < 1e-18) {
-          throw new Error("Minimum output amount is too small. Try a larger trade amount.")
-        }
-        
-        minOutWei = ethers.parseEther(minOut.toFixed(18))
+      }
+
+      const estimatedOutWei = freshEstimate[0]
+
+      // Validate estimate
+      if (estimatedOutWei <= BigInt(0)) {
+        throw new Error("Trade output is zero. Market may have insufficient liquidity.")
+      }
+
+      // Apply slippage tolerance
+      // minOut = estimatedOut * (1 - slippage%)
+      const slippageBps = BigInt(Math.floor(slippage * 100))
+      const minOutWei = (estimatedOutWei * (BigInt(10000) - slippageBps)) / BigInt(10000)
+
+      // Final validation
+      if (minOutWei <= BigInt(0)) {
+        throw new Error("Trade amount too small after slippage. Please increase the trade size.")
       }
 
       console.log("Trade details:", {
         marketId: market.id,
         outcome,
-        amount: `${numAmount} BNB`,
-        expectedOut: expectedOut ? `${parseFloat(expectedOut).toFixed(6)} tokens` : 'estimated',
-        minOut: `${ethers.formatEther(minOutWei)} tokens`,
+        amountBNB: amount,
+        estimatedOut: ethers.formatEther(estimatedOutWei),
+        minOut: ethers.formatEther(minOutWei),
         slippage: `${slippage}%`,
         amountWei: amountInWei.toString(),
         minOutWei: minOutWei.toString()
       })
 
-      const contractWithSigner = contract.connect(signer)
-      
+      const contractWithSigner = contract.connect(signer) as any
+
       // Execute trade transaction
       let tx
       if (outcome === "YES") {
-        tx = await (contractWithSigner as any).buyYesWithBNB(
-          BigInt(market.id), 
-          minOutWei, 
+        tx = await contractWithSigner.buyYesWithBNB(
+          BigInt(market.id),
+          minOutWei,
           { value: amountInWei }
         )
       } else {
-        tx = await (contractWithSigner as any).buyNoWithBNB(
-          BigInt(market.id), 
-          minOutWei, 
+        tx = await contractWithSigner.buyNoWithBNB(
+          BigInt(market.id),
+          minOutWei,
           { value: amountInWei }
         )
       }
 
       setTxHash(tx.hash)
       console.log("Transaction submitted:", tx.hash)
-      
+
+      // Wait for confirmation
       const receipt = await tx.wait()
       console.log("Transaction confirmed:", receipt)
-      
+
       if (receipt.status === 1) {
+        // Success - clear form and close after delay
         setAmount("")
-        setTimeout(() => onClose(), 1500) // Give user time to see success message
+        setExpectedOut(null)
+        setFeeEstimated(null)
+        setTimeout(() => onClose(), 2500)
       } else {
         setError("Transaction failed")
       }
     } catch (err: any) {
       console.error("Trade error:", err)
-      
-      // Enhanced error handling
+
+      // Enhanced error handling with specific messages
       if (err?.message?.includes("slippage exceeded") || err?.reason?.includes("slippage exceeded")) {
-        const suggestedSlippage = Math.min(slippage + 3, 15)
-        setError(`Slippage exceeded! The market price moved unfavorably. Try:
-        • Increasing slippage to ${suggestedSlippage}% or higher
-        • Reducing your trade size
-        • Waiting a moment and trying again`)
+        const suggestedSlippage = Math.min(slippage + 5, 20)
+        setError(`Price moved unfavorably!
+
+
+The market price changed between when you submitted and when the transaction was processed.
+
+
+Solutions:
+• Increase slippage to ${suggestedSlippage}%
+• Use a smaller trade amount
+• Wait and try again`)
       } else if (err?.code === "INSUFFICIENT_FUNDS" || err?.message?.includes("insufficient funds")) {
-        setError("Insufficient BNB balance to complete this trade")
-      } else if (err?.message?.includes("insufficient liquidity")) {
-        setError("Insufficient liquidity in the market. Try a smaller trade amount.")
+        setError("Insufficient BNB balance (including gas fees)")
+      } else if (
+        err?.message?.includes("insufficient liquidity") ||
+        err?.message?.includes("insufficient YES liquidity") ||
+        err?.message?.includes("insufficient NO liquidity")
+      ) {
+        setError(`Insufficient liquidity in the market.
+
+
+The pool doesn't have enough tokens to complete your trade.
+
+
+Try:
+• Reducing your trade size
+• Trading in smaller increments`)
       } else if (err?.code === "ACTION_REJECTED" || err?.message?.includes("user rejected")) {
-        setError("Transaction was rejected")
+        setError("Transaction was cancelled")
       } else if (err?.code === "UNPREDICTABLE_GAS_LIMIT") {
-        setError("Unable to estimate gas. Try increasing slippage or reducing amount.")
+        setError(`Unable to estimate gas fees.
+
+
+This usually means the transaction would fail.
+
+
+Try:
+• Increasing slippage tolerance
+• Reducing trade amount
+• Refreshing and trying again`)
+      } else if (err?.message?.includes("market not open")) {
+        setError("Market is not open for trading")
+      } else if (err?.message?.includes("market ended")) {
+        setError("Market has ended and is no longer accepting trades")
+      } else if (err?.message?.includes("zero BNB")) {
+        setError("Trade amount must be greater than 0")
       } else if (err?.reason) {
-        setError(err.reason)
+        setError(`Transaction failed: ${err.reason}`)
       } else if (err?.message) {
         setError(err.message)
       } else {
@@ -257,24 +334,32 @@ export default function TradeModal({
 
   const formatMultiplier = (multiplier: number | null) => {
     if (!multiplier) return "-"
-    if (multiplier >= 10) return multiplier.toFixed(0) + "x"
-    if (multiplier >= 2) return multiplier.toFixed(1) + "x"
     return multiplier.toFixed(2) + "x"
   }
 
   const formatPercentage = (value: number | null) => {
-    if (!value) return "-"
-    return value.toFixed(1) + "%"
+    if (value === null || value === undefined) return "-"
+    const percentValue = value * 100
+    return percentValue.toFixed(1) + "%"
+  }
+
+  const formatBNB = (value: number | null) => {
+    if (value === null || value === undefined) return "-"
+    if (value >= 1000) return value.toFixed(0)
+    if (value >= 100) return value.toFixed(1)
+    if (value >= 10) return value.toFixed(2)
+    if (value >= 1) return value.toFixed(3)
+    return value.toFixed(4)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <Card className="relative w-full max-w-md sm:max-w-lg rounded-lg shadow-lg overflow-auto max-h-[90vh]">
+      <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={onClose} />
+      <Card className="relative w-full max-w-md sm:max-w-lg rounded-lg shadow-xl overflow-auto max-h-[90vh]">
         <div className="p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">{market?.question || "Trade"}</h3>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+            <h3 className="text-lg font-semibold line-clamp-2">{market?.question || "Trade"}</h3>
+            <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 ml-2">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -284,11 +369,12 @@ export default function TradeModal({
             <div className="flex gap-2">
               <Button 
                 className="flex-1"
-                variant={outcome === "YES" ? "default" : "outline"}
+                variant={outcome === "YES" ? "outline" : "outline"}
                 onClick={() => onOutcomeChange("YES")}
+                disabled={isProcessing}
               >
                 <div className="flex flex-col items-center">
-                  <span>YES</span>
+                  <span className="font-semibold">YES</span>
                   {yesOdds && (
                     <span className="text-xs opacity-80 mt-1">
                       {formatMultiplier(yesOdds)}
@@ -299,11 +385,12 @@ export default function TradeModal({
 
               <Button
                 className="flex-1"
-                variant={outcome === "NO" ? "default" : "outline"}
+                variant={outcome === "NO" ? "outline" : "outline"}
                 onClick={() => onOutcomeChange("NO")}
+                disabled={isProcessing}
               >
                 <div className="flex flex-col items-center">
-                  <span>NO</span>
+                  <span className="font-semibold">NO</span>
                   {noOdds && (
                     <span className="text-xs opacity-80 mt-1">
                       {formatMultiplier(noOdds)}
@@ -320,13 +407,17 @@ export default function TradeModal({
               </label>
               <Input
                 type="number"
-                min="0"
+                min="0.001"
                 step="0.001"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.0"
+                placeholder="0.001"
                 className="text-lg"
+                disabled={isProcessing}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Minimum: 0.001 BNB
+              </p>
             </div>
 
             {/* Market Data & Trade Preview */}
@@ -334,107 +425,128 @@ export default function TradeModal({
               <div className="space-y-3">
                 {/* Market Probabilities */}
                 <div className="flex gap-3">
-                  <div className="flex-1 p-3 rounded-lg bg-green-50 border border-green-200">
-                    <div className="text-xs text-green-600 font-medium">YES</div>
-                    <div className="text-lg font-bold text-green-700">
-                      {formatPercentage(yesPrice)}
+                  <div className="flex-1 p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                    <div className="text-xs text-green-600 dark:text-green-400 font-medium">YES</div>
+                    <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                      {formatPercentage(normalizedYes)}
                     </div>
-                    <div className="text-xs text-green-600 mt-1">
+                    <div className="text-xs text-green-600 dark:text-green-400 mt-1">
                       Odds: {formatMultiplier(yesOdds)}
                     </div>
                   </div>
-                  
-                  <div className="flex-1 p-3 rounded-lg bg-red-50 border border-red-200">
-                    <div className="text-xs text-red-600 font-medium">NO</div>
-                    <div className="text-lg font-bold text-red-700">
-                      {formatPercentage(noPrice)}
+
+                  <div className="flex-1 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800">
+                    <div className="text-xs text-red-600 dark:text-red-400 font-medium">NO</div>
+                    <div className="text-lg font-bold text-red-700 dark:text-red-300">
+                      {formatPercentage(normalizedNo)}
                     </div>
-                    <div className="text-xs text-red-600 mt-1">
+                    <div className="text-xs text-red-600 dark:text-red-400 mt-1">
                       Odds: {formatMultiplier(noOdds)}
                     </div>
                   </div>
                 </div>
 
                 {/* Trade Details */}
-                {expectedOut && potentialMultiplier && (
-                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm">You pay:</span>
-                        <span className="font-medium">{numAmount.toFixed(4)} BNB</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm">You receive:</span>
-                        <span className="font-medium">
-                          ~{parseFloat(expectedOut).toFixed(4)} {outcome} tokens
+                {isEstimating && hasAmount && outcome ? (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center justify-center py-2">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      <span className="text-sm text-blue-600 dark:text-blue-400">Calculating payout...</span>
+                    </div>
+                  </div>
+                ) : expectedPayout && payoutMultiplier && hasAmount && outcome ? (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-blue-700 dark:text-blue-300 font-medium">Investment:</span>
+                        <span className="font-bold text-blue-900 dark:text-blue-100">
+                          {formatBNB(numAmount)} BNB
                         </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm">Potential multiplier:</span>
-                        <span className="font-bold text-blue-700">
-                          {formatMultiplier(potentialMultiplier)}
+                      <div className="flex justify-between items-center">
+                        <span className="text-blue-700 dark:text-blue-300 font-medium">Expected Payout:</span>
+                        <span className="font-bold text-blue-900 dark:text-blue-100">
+                          ~{formatBNB(expectedPayout)} BNB
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-blue-200 dark:border-blue-800">
+                        <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">Payout Multiplier:</span>
+                        <span className="font-bold text-lg text-blue-700 dark:text-blue-300">
+                          {formatMultiplier(payoutMultiplier)}
                         </span>
                       </div>
                       {feeEstimated && parseFloat(feeEstimated) > 0 && (
-                        <div className="flex justify-between text-xs text-gray-600">
-                          <span>Protocol fee:</span>
-                          <span>~{Number(feeEstimated).toFixed(6)} BNB</span>
+                        <div className="flex justify-between text-xs text-muted-foreground pt-1">
+                          <span>Trading fee:</span>
+                          <span>{parseFloat(feeEstimated).toFixed(6)} BNB</span>
                         </div>
                       )}
                     </div>
                   </div>
-                )}
+                ) : null}
 
-                {/* Slippage Settings with Presets */}
+                {/* Slippage Settings */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Slippage tolerance</label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {[1, 2, 5, 10].map((preset) => (
+                  <div className="flex flex-wrap gap-2">
+                    {[1, 2, 5, 10, 15].map((preset) => (
                       <Button
                         key={preset}
                         type="button"
-                        variant={slippage === preset ? "default" : "outline"}
+                        variant={slippage === preset ? "outline" : "outline"}
                         size="sm"
                         onClick={() => setSlippage(preset)}
                         className="text-xs h-8"
+                        disabled={isProcessing}
                       >
                         {preset}%
                       </Button>
                     ))}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Input 
-                      className="w-20 text-right" 
-                      type="number" 
-                      min="0.1" 
-                      max="50" 
+                    <Input
+                      className="w-24 text-right"
+                      type="number"
+                      min="0.1"
+                      max="50"
                       step="0.5"
                       value={slippage}
-                      onChange={(e) => setSlippage(Math.max(0.1, Math.min(50, Number(e.target.value))))}
+                      onChange={(e) => {
+                        const val = Number(e.target.value)
+                        setSlippage(Math.max(0.1, Math.min(50, val)))
+                      }}
+                      disabled={isProcessing}
                     />
                     <span className="text-sm">%</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {slippage < 1 ? "⚠️ Very low slippage may cause failed trades" :
-                     slippage > 10 ? "⚠️ High slippage - trade with caution" :
-                     slippage > 5 ? "Higher slippage for volatile markets" :
-                     "Recommended: 2-5% for typical markets"}
+                    {slippage < 1
+                      ? "⚠️ Very low - trades may fail"
+                      : slippage > 15
+                        ? "⚠️ High - you may get less than expected"
+                        : slippage > 10
+                          ? "Higher tolerance for volatile markets"
+                          : "Recommended for most trades"}
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Error & Status Messages */}
+            {/* Error Messages */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-600 whitespace-pre-line">{error}</p>
+              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-sm text-red-600 dark:text-red-400 whitespace-pre-line">{error}</p>
               </div>
             )}
 
+            {/* Success Message */}
             {txHash && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-600">
-                  ✓ Transaction submitted: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+              <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                  ✓ Transaction successful!
+                </p>
+                <p className="text-xs text-green-600 dark:text-green-400 mt-1 break-all font-mono">
+                  {txHash.slice(0, 10)}...{txHash.slice(-8)}
                 </p>
               </div>
             )}
@@ -442,8 +554,9 @@ export default function TradeModal({
             {/* Action Button */}
             <Button
               className="w-full h-12 text-lg font-semibold"
+              variant="outline"
               onClick={handleTrade}
-              disabled={isProcessing || !hasAmount || !outcome}
+              disabled={isProcessing || !hasAmount || !outcome || isEstimating}
               size="lg"
             >
               {isProcessing ? (
@@ -455,17 +568,24 @@ export default function TradeModal({
                 "Connect Wallet"
               ) : !isCorrectNetwork ? (
                 "Switch Network"
+              ) : isEstimating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Calculating...
+                </>
               ) : (
-                `Buy ${outcome || ''} Tokens`
+                `Buy ${outcome}`
               )}
             </Button>
 
             {/* Help Text */}
-            <p className="text-xs text-gray-500 text-center">
-              {hasAmount && outcome && expectedOut ? (
-                `Trading ${numAmount} BNB for ~${parseFloat(expectedOut).toFixed(2)} ${outcome} tokens`
+            <p className="text-xs text-center text-muted-foreground">
+              {hasAmount && outcome && expectedPayout && !isEstimating ? (
+                `Expected payout: ${formatBNB(expectedPayout)} BNB (${formatMultiplier(payoutMultiplier)})`
+              ) : hasAmount && outcome && isEstimating ? (
+                "Calculating expected payout..."
               ) : (
-                "Enter amount and select outcome to see trade details"
+                "Enter amount and select outcome to see expected payout"
               )}
             </p>
           </div>

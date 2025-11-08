@@ -79,7 +79,7 @@ contract OutcomeToken {
 }
 
 // ====================================================================
-// PREDICTION MARKET WITH MULTIPLIER CALCULATIONS
+// PREDICTION MARKET WITH MULTIPLIER CALCULATIONS - FIXED VERSION
 // ====================================================================
 
 contract PredictionMarketWithMultipliers {
@@ -128,6 +128,19 @@ contract PredictionMarketWithMultipliers {
     uint256 public constant DISPUTE_PERIOD = 7 days;
     uint256 private _lock = 1;
 
+    // ============ NEW: Investment Tracking ============
+    struct UserInvestment {
+        uint256 totalInvested;
+        uint256 lastUpdated;
+    }
+    
+    // Track user investments per market: marketId => userAddress => investment data
+    mapping(uint256 => mapping(address => UserInvestment)) public userInvestments;
+    
+    // Events for investment tracking
+    event UserInvestmentUpdated(uint256 indexed marketId, address indexed user, uint256 totalInvested, uint256 timestamp);
+    // ============ END NEW ============
+
     // Events
     event MarketCreated(uint256 indexed id, string question, string category, address yesToken, address noToken, uint256 endTime);
     event LiquidityAdded(uint256 indexed id, address indexed provider, uint256 yesAmount, uint256 noAmount, uint256 lpTokens);
@@ -167,6 +180,32 @@ contract PredictionMarketWithMultipliers {
         lpFeeBps = _lpFeeBps;
         resolutionServer = _resolutionServer;
     }
+
+    // ============ NEW: Investment Tracking Functions ============
+    
+    /// @notice Get user's total BNB investment in a specific market
+    function getUserInvestment(uint256 marketId, address user) external view returns (uint256) {
+        return userInvestments[marketId][user].totalInvested;
+    }
+    
+    /// @notice Get user's total BNB investment across all markets
+    function getUserTotalInvestment(address user) external view returns (uint256) {
+        uint256 total = 0;
+        for (uint256 i = 0; i < nextMarketId; i++) {
+            total += userInvestments[i][user].totalInvested;
+        }
+        return total;
+    }
+    
+    /// @notice Internal function to update user investment tracking
+    function _updateUserInvestment(uint256 marketId, address user, uint256 additionalInvestment) internal {
+        UserInvestment storage investment = userInvestments[marketId][user];
+        investment.totalInvested += additionalInvestment;
+        investment.lastUpdated = block.timestamp;
+        
+        emit UserInvestmentUpdated(marketId, user, investment.totalInvested, block.timestamp);
+    }
+    // ============ END NEW ============
 
     // ---------------------------------------------------------------
     // Market Creation
@@ -263,6 +302,10 @@ contract PredictionMarketWithMultipliers {
 
         uint256 bnbAmount = msg.value;
 
+        // ============ NEW: Track user investment ============
+        _updateUserInvestment(id, msg.sender, bnbAmount);
+        // ============ END NEW ============
+
         // Calculate how many NO tokens we need to swap to get additional YES
         uint256 noAmount = bnbAmount;
         uint256 platformFee = (noAmount * feeBps) / 10000;
@@ -274,16 +317,16 @@ contract PredictionMarketWithMultipliers {
 
         // Calculate YES tokens from swapping NO tokens
         uint256 yesOutFromSwap = _getAmountOut(noAfterFee, m.noPool, m.yesPool);
-        require(yesOutFromSwap >= minYesOut, "slippage exceeded");
         require(yesOutFromSwap <= m.yesPool, "insufficient YES liquidity");
+
+        // Total YES tokens user receives = BNB amount (1:1 initial) + swapped amount
+        uint256 totalYesOut = bnbAmount + yesOutFromSwap;
+        require(totalYesOut >= minYesOut, "slippage exceeded");
 
         // Update pools
         m.noPool += noAfterFee + lpFee; // Add NO tokens to pool
         m.yesPool -= yesOutFromSwap;    // Remove YES tokens from pool
 
-        // Total YES tokens user receives = BNB amount (1:1 initial) + swapped amount
-        uint256 totalYesOut = bnbAmount + yesOutFromSwap;
-        
         // Mint YES tokens to user
         m.yesToken.mint(msg.sender, totalYesOut);
         // Update total backing
@@ -305,6 +348,10 @@ contract PredictionMarketWithMultipliers {
 
         uint256 bnbAmount = msg.value;
 
+        // ============ NEW: Track user investment ============
+        _updateUserInvestment(id, msg.sender, bnbAmount);
+        // ============ END NEW ============
+
         // Calculate how many YES tokens we need to swap to get additional NO
         uint256 yesAmount = bnbAmount;
         uint256 platformFee = (yesAmount * feeBps) / 10000;
@@ -316,22 +363,74 @@ contract PredictionMarketWithMultipliers {
 
         // Calculate NO tokens from swapping YES tokens
         uint256 noOutFromSwap = _getAmountOut(yesAfterFee, m.yesPool, m.noPool);
-        require(noOutFromSwap >= minNoOut, "slippage exceeded");
         require(noOutFromSwap <= m.noPool, "insufficient NO liquidity");
+
+        // Total NO tokens user receives = BNB amount (1:1 initial) + swapped amount
+        uint256 totalNoOut = bnbAmount + noOutFromSwap;
+        require(totalNoOut >= minNoOut, "slippage exceeded");
 
         // Update pools
         m.yesPool += yesAfterFee + lpFee; // Add YES tokens to pool
         m.noPool -= noOutFromSwap;        // Remove NO tokens from pool
 
-        // Total NO tokens user receives = BNB amount (1:1 initial) + swapped amount
-        uint256 totalNoOut = bnbAmount + noOutFromSwap;
-        
         // Mint NO tokens to user
         m.noToken.mint(msg.sender, totalNoOut);
         // Update total backing
         m.totalBacking += bnbAmount;
 
         emit BuyWithBNB(id, msg.sender, false, bnbAmount, totalNoOut);
+    }
+
+    // ---------------------------------------------------------------
+    // FIXED: Exact Output Calculation Functions
+    // ---------------------------------------------------------------
+
+    /// @notice Calculate expected output for buying YES with BNB (EXACT calculation)
+    /// @dev This MUST match the exact logic in buyYesWithBNB
+    function getBuyYesOutput(uint256 id, uint256 bnbAmount) 
+        external 
+        view 
+        marketExists(id)
+        returns (uint256 totalYesOut, uint256 totalFee) 
+    {
+        Market storage m = markets[id];
+        require(m.status == MarketStatus.Open, "market not open");
+        require(bnbAmount > 0, "zero amount");
+        
+        // Match exact logic from buyYesWithBNB
+        uint256 platformFee = (bnbAmount * feeBps) / 10000;
+        uint256 noAfterFee = bnbAmount - platformFee;
+        
+        // Calculate YES from swapping NO tokens
+        uint256 yesOutFromSwap = _getAmountOut(noAfterFee, m.noPool, m.yesPool);
+        
+        // Total YES = BNB amount (1:1) + swapped amount
+        totalYesOut = bnbAmount + yesOutFromSwap;
+        totalFee = platformFee;
+    }
+
+    /// @notice Calculate expected output for buying NO with BNB (EXACT calculation)
+    /// @dev This MUST match the exact logic in buyNoWithBNB
+    function getBuyNoOutput(uint256 id, uint256 bnbAmount) 
+        external 
+        view 
+        marketExists(id)
+        returns (uint256 totalNoOut, uint256 totalFee) 
+    {
+        Market storage m = markets[id];
+        require(m.status == MarketStatus.Open, "market not open");
+        require(bnbAmount > 0, "zero amount");
+        
+        // Match exact logic from buyNoWithBNB
+        uint256 platformFee = (bnbAmount * feeBps) / 10000;
+        uint256 yesAfterFee = bnbAmount - platformFee;
+        
+        // Calculate NO from swapping YES tokens
+        uint256 noOutFromSwap = _getAmountOut(yesAfterFee, m.yesPool, m.noPool);
+        
+        // Total NO = BNB amount (1:1) + swapped amount
+        totalNoOut = bnbAmount + noOutFromSwap;
+        totalFee = platformFee;
     }
 
     // ---------------------------------------------------------------
@@ -350,10 +449,10 @@ contract PredictionMarketWithMultipliers {
     {
         Market storage m = markets[id];
         require(m.status == MarketStatus.Open, "market not open");
+        require(bnbAmount > 0, "zero amount");
         
-        uint256 noAmount = bnbAmount;
-        uint256 platformFee = (noAmount * feeBps) / 10000;
-        uint256 noAfterFee = noAmount - platformFee;
+        uint256 platformFee = (bnbAmount * feeBps) / 10000;
+        uint256 noAfterFee = bnbAmount - platformFee;
         
         uint256 yesOutFromSwap = _getAmountOut(noAfterFee, m.noPool, m.yesPool);
         
@@ -377,10 +476,10 @@ contract PredictionMarketWithMultipliers {
     {
         Market storage m = markets[id];
         require(m.status == MarketStatus.Open, "market not open");
+        require(bnbAmount > 0, "zero amount");
         
-        uint256 yesAmount = bnbAmount;
-        uint256 platformFee = (yesAmount * feeBps) / 10000;
-        uint256 yesAfterFee = yesAmount - platformFee;
+        uint256 platformFee = (bnbAmount * feeBps) / 10000;
+        uint256 yesAfterFee = bnbAmount - platformFee;
         
         uint256 noOutFromSwap = _getAmountOut(yesAfterFee, m.yesPool, m.noPool);
         
@@ -423,13 +522,13 @@ contract PredictionMarketWithMultipliers {
         // If YES probability is 60%, multiplier = 1 / 0.6 = 1.666x
         // Scaled by 10000 for precision
         if (yesPrice > 0) {
-            yesMultiplier = (10000 * 10000) / yesPrice; // 10000 / (yesPrice / 10000)
+            yesMultiplier = (10000 * 10000) / yesPrice;
         } else {
             yesMultiplier = type(uint256).max;
         }
         
         if (noPrice > 0) {
-            noMultiplier = (10000 * 10000) / noPrice; // 10000 / (noPrice / 10000)
+            noMultiplier = (10000 * 10000) / noPrice;
         } else {
             noMultiplier = type(uint256).max;
         }
@@ -446,6 +545,8 @@ contract PredictionMarketWithMultipliers {
         returns (uint256 multiplier, uint256 amountOut, uint256 fee) 
     {
         Market storage m = markets[id];
+        require(amountIn > 0, "zero input");
+        
         fee = (amountIn * feeBps) / 10000;
         uint256 amountInAfterFee = amountIn - fee;
         
@@ -456,7 +557,9 @@ contract PredictionMarketWithMultipliers {
         }
         
         // Multiplier = output tokens per input token
-        multiplier = (amountOut * 10000) / amountIn;
+        if (amountIn > 0) {
+            multiplier = (amountOut * 10000) / amountIn;
+        }
     }
 
     /// @notice Get detailed trading information including multipliers
@@ -524,11 +627,11 @@ contract PredictionMarketWithMultipliers {
 
         // Calculate fee and amount after fee
         uint256 platformFee = (amountIn * feeBps) / 10000;
-        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
-        uint256 protocolFee = platformFee - lpFee;
         uint256 amountInAfterFee = amountIn - platformFee;
-
-        m.platformFees += protocolFee;
+        
+        // Split platform fee between protocol and LPs
+        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
+        m.platformFees += platformFee - lpFee;
 
         uint256 amountOut;
         if (yesIn) {
@@ -543,7 +646,7 @@ contract PredictionMarketWithMultipliers {
             // Burn user's input tokens
             m.yesToken.burn(msg.sender, amountIn);
             
-            // Update pools
+            // Update pools (LP fee goes back to liquidity providers via the pool)
             m.yesPool += amountInAfterFee + lpFee;
             m.noPool -= amountOut;
             
@@ -561,7 +664,7 @@ contract PredictionMarketWithMultipliers {
             // Burn user's input tokens
             m.noToken.burn(msg.sender, amountIn);
             
-            // Update pools
+            // Update pools (LP fee goes back to liquidity providers via the pool)
             m.noPool += amountInAfterFee + lpFee;
             m.yesPool -= amountOut;
             
@@ -572,7 +675,12 @@ contract PredictionMarketWithMultipliers {
         emit Swap(id, msg.sender, yesIn, amountIn, amountOut, platformFee);
     }
 
-    // Constant product formula for swap calculation
+    // ---------------------------------------------------------------
+    // FIXED: Constant Product Formula (NO DOUBLE FEE)
+    // ---------------------------------------------------------------
+    
+    /// @notice Calculate output amount using constant product formula
+    /// @dev Fees are already applied BEFORE calling this function
     function _getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) 
         internal 
         pure 
@@ -581,9 +689,10 @@ contract PredictionMarketWithMultipliers {
         require(amountIn > 0, "invalid amountIn");
         require(reserveIn > 0 && reserveOut > 0, "insufficient liquidity");
         
-        uint256 amountInWithFee = amountIn * 9970; // 0.3% effective fee
-        uint256 numerator = amountInWithFee * reserveOut;
-        uint256 denominator = (reserveIn * 10000) + amountInWithFee;
+        // Simple constant product: x * y = k
+        // amountOut = (amountIn * reserveOut) / (reserveIn + amountIn)
+        uint256 numerator = amountIn * reserveOut;
+        uint256 denominator = reserveIn + amountIn;
         
         return numerator / denominator;
     }
@@ -608,7 +717,9 @@ contract PredictionMarketWithMultipliers {
         }
     }
 
-    // ... (rest of the contract functions remain the same - liquidity, resolution, etc.)
+    // ---------------------------------------------------------------
+    // Utility Functions
+    // ---------------------------------------------------------------
 
     function _transferBNB(address to, uint256 amount) internal {
         (bool success, ) = to.call{value: amount}("");
