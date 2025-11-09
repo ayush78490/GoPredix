@@ -29,16 +29,20 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
       | "DISPUTE_PERIOD"
       | "MINIMUM_LIQUIDITY"
       | "MIN_INITIAL_LIQUIDITY"
+      | "addLiquidity"
       | "buyNoWithBNB"
       | "buyYesWithBNB"
+      | "claimRedemption"
       | "createMarket"
       | "feeBps"
       | "formatMultiplier"
+      | "getAllMarkets"
       | "getBuyNoMultiplier"
       | "getBuyNoOutput"
       | "getBuyYesMultiplier"
       | "getBuyYesOutput"
       | "getCurrentMultipliers"
+      | "getMarket"
       | "getSwapMultiplier"
       | "getTradingInfo"
       | "getUserInvestment"
@@ -48,10 +52,14 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
       | "markets"
       | "nextMarketId"
       | "owner"
+      | "removeLiquidity"
+      | "requestResolution"
       | "resolutionServer"
+      | "resolveMarket"
       | "swapNoForYes"
       | "swapYesForNo"
       | "userInvestments"
+      | "withdrawPlatformFees"
   ): FunctionFragment;
 
   getEvent(
@@ -61,6 +69,7 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
       | "LiquidityRemoved"
       | "MarketCreated"
       | "MarketResolved"
+      | "RedemptionClaimed"
       | "ResolutionRequested"
       | "Swap"
       | "UserInvestmentUpdated"
@@ -79,12 +88,20 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "addLiquidity",
+    values: [BigNumberish, BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "buyNoWithBNB",
     values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "buyYesWithBNB",
     values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "claimRedemption",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "createMarket",
@@ -94,6 +111,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   encodeFunctionData(
     functionFragment: "formatMultiplier",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getAllMarkets",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getBuyNoMultiplier",
@@ -113,6 +134,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "getCurrentMultipliers",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getMarket",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
@@ -146,8 +171,20 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
+    functionFragment: "removeLiquidity",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "requestResolution",
+    values: [BigNumberish, string]
+  ): string;
+  encodeFunctionData(
     functionFragment: "resolutionServer",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "resolveMarket",
+    values: [BigNumberish, BigNumberish, string, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "swapNoForYes",
@@ -160,6 +197,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   encodeFunctionData(
     functionFragment: "userInvestments",
     values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "withdrawPlatformFees",
+    values: [BigNumberish]
   ): string;
 
   decodeFunctionResult(
@@ -175,11 +216,19 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "addLiquidity",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "buyNoWithBNB",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "buyYesWithBNB",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "claimRedemption",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -189,6 +238,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   decodeFunctionResult(functionFragment: "feeBps", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "formatMultiplier",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getAllMarkets",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -211,6 +264,7 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     functionFragment: "getCurrentMultipliers",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "getMarket", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getSwapMultiplier",
     data: BytesLike
@@ -236,7 +290,19 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "removeLiquidity",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "requestResolution",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "resolutionServer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "resolveMarket",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -249,6 +315,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "userInvestments",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "withdrawPlatformFees",
     data: BytesLike
   ): Result;
 }
@@ -396,6 +466,24 @@ export namespace MarketResolvedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace RedemptionClaimedEvent {
+  export type InputTuple = [
+    id: BigNumberish,
+    user: AddressLike,
+    amountClaimed: BigNumberish
+  ];
+  export type OutputTuple = [id: bigint, user: string, amountClaimed: bigint];
+  export interface OutputObject {
+    id: bigint;
+    user: string;
+    amountClaimed: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace ResolutionRequestedEvent {
   export type InputTuple = [
     id: BigNumberish,
@@ -523,6 +611,12 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
 
   MIN_INITIAL_LIQUIDITY: TypedContractMethod<[], [bigint], "view">;
 
+  addLiquidity: TypedContractMethod<
+    [id: BigNumberish, yesAmount: BigNumberish, noAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   buyNoWithBNB: TypedContractMethod<
     [id: BigNumberish, minNoOut: BigNumberish],
     [void],
@@ -533,6 +627,12 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     [id: BigNumberish, minYesOut: BigNumberish],
     [void],
     "payable"
+  >;
+
+  claimRedemption: TypedContractMethod<
+    [id: BigNumberish],
+    [void],
+    "nonpayable"
   >;
 
   createMarket: TypedContractMethod<
@@ -554,6 +654,8 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     [string],
     "view"
   >;
+
+  getAllMarkets: TypedContractMethod<[], [bigint], "view">;
 
   getBuyNoMultiplier: TypedContractMethod<
     [id: BigNumberish, bnbAmount: BigNumberish],
@@ -599,6 +701,34 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
         noMultiplier: bigint;
         yesPrice: bigint;
         noPrice: bigint;
+      }
+    ],
+    "view"
+  >;
+
+  getMarket: TypedContractMethod<
+    [id: BigNumberish],
+    [
+      [
+        string,
+        string,
+        string,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint
+      ] & {
+        creator: string;
+        question: string;
+        category: string;
+        endTime: bigint;
+        status: bigint;
+        outcome: bigint;
+        yesPool: bigint;
+        noPool: bigint;
+        totalBacking: bigint;
       }
     ],
     "view"
@@ -704,7 +834,30 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
 
   owner: TypedContractMethod<[], [string], "view">;
 
+  removeLiquidity: TypedContractMethod<
+    [id: BigNumberish, lpAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  requestResolution: TypedContractMethod<
+    [id: BigNumberish, reason: string],
+    [void],
+    "nonpayable"
+  >;
+
   resolutionServer: TypedContractMethod<[], [string], "view">;
+
+  resolveMarket: TypedContractMethod<
+    [
+      id: BigNumberish,
+      outcomeIndex: BigNumberish,
+      reason: string,
+      confidence: BigNumberish
+    ],
+    [void],
+    "nonpayable"
+  >;
 
   swapNoForYes: TypedContractMethod<
     [id: BigNumberish, noIn: BigNumberish, minYesOut: BigNumberish],
@@ -724,6 +877,12 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "view"
   >;
 
+  withdrawPlatformFees: TypedContractMethod<
+    [id: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
@@ -738,6 +897,13 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     nameOrSignature: "MIN_INITIAL_LIQUIDITY"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "addLiquidity"
+  ): TypedContractMethod<
+    [id: BigNumberish, yesAmount: BigNumberish, noAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "buyNoWithBNB"
   ): TypedContractMethod<
     [id: BigNumberish, minNoOut: BigNumberish],
@@ -751,6 +917,9 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     [void],
     "payable"
   >;
+  getFunction(
+    nameOrSignature: "claimRedemption"
+  ): TypedContractMethod<[id: BigNumberish], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "createMarket"
   ): TypedContractMethod<
@@ -770,6 +939,9 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
   getFunction(
     nameOrSignature: "formatMultiplier"
   ): TypedContractMethod<[multiplier: BigNumberish], [string], "view">;
+  getFunction(
+    nameOrSignature: "getAllMarkets"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "getBuyNoMultiplier"
   ): TypedContractMethod<
@@ -820,6 +992,35 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
         noMultiplier: bigint;
         yesPrice: bigint;
         noPrice: bigint;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getMarket"
+  ): TypedContractMethod<
+    [id: BigNumberish],
+    [
+      [
+        string,
+        string,
+        string,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint
+      ] & {
+        creator: string;
+        question: string;
+        category: string;
+        endTime: bigint;
+        status: bigint;
+        outcome: bigint;
+        yesPool: bigint;
+        noPool: bigint;
+        totalBacking: bigint;
       }
     ],
     "view"
@@ -930,8 +1131,34 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "removeLiquidity"
+  ): TypedContractMethod<
+    [id: BigNumberish, lpAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "requestResolution"
+  ): TypedContractMethod<
+    [id: BigNumberish, reason: string],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "resolutionServer"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "resolveMarket"
+  ): TypedContractMethod<
+    [
+      id: BigNumberish,
+      outcomeIndex: BigNumberish,
+      reason: string,
+      confidence: BigNumberish
+    ],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "swapNoForYes"
   ): TypedContractMethod<
@@ -953,6 +1180,9 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     [[bigint, bigint] & { totalInvested: bigint; lastUpdated: bigint }],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "withdrawPlatformFees"
+  ): TypedContractMethod<[id: BigNumberish], [void], "nonpayable">;
 
   getEvent(
     key: "BuyWithBNB"
@@ -988,6 +1218,13 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     MarketResolvedEvent.InputTuple,
     MarketResolvedEvent.OutputTuple,
     MarketResolvedEvent.OutputObject
+  >;
+  getEvent(
+    key: "RedemptionClaimed"
+  ): TypedContractEvent<
+    RedemptionClaimedEvent.InputTuple,
+    RedemptionClaimedEvent.OutputTuple,
+    RedemptionClaimedEvent.OutputObject
   >;
   getEvent(
     key: "ResolutionRequested"
@@ -1065,6 +1302,17 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
       MarketResolvedEvent.InputTuple,
       MarketResolvedEvent.OutputTuple,
       MarketResolvedEvent.OutputObject
+    >;
+
+    "RedemptionClaimed(uint256,address,uint256)": TypedContractEvent<
+      RedemptionClaimedEvent.InputTuple,
+      RedemptionClaimedEvent.OutputTuple,
+      RedemptionClaimedEvent.OutputObject
+    >;
+    RedemptionClaimed: TypedContractEvent<
+      RedemptionClaimedEvent.InputTuple,
+      RedemptionClaimedEvent.OutputTuple,
+      RedemptionClaimedEvent.OutputObject
     >;
 
     "ResolutionRequested(uint256,address,uint256)": TypedContractEvent<

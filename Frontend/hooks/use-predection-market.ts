@@ -4,8 +4,7 @@ import { useWeb3Context } from '@/lib/wallet-context'
 import PREDICTION_MARKET_ABI from '../contracts/abi.json'
 
 // Contract address
-const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x52Ca4B7673646B8b922ea00ccef6DD0375B14619'
-
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x9d8462A5A9CA9d4398069C67FEb378806fD10fAA'
 // Updated Types to match new contract
 export enum MarketStatus {
   Open = 0,
@@ -85,7 +84,7 @@ export interface UserPosition {
 // AI Validation Helper
 async function validateMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
-    const res = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
+    const res = await fetch('http://localhost:3001/api/validate-market', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)

@@ -42,12 +42,12 @@ export default function TradeModal({
   // Price normalization from basis points (0-10000) to percentage (0-100)
   const normalizedYes = useMemo(() => {
     if (yesPrice === null) return null
-    return yesPrice / 10000
+    return yesPrice / 100
   }, [yesPrice])
 
   const normalizedNo = useMemo(() => {
     if (noPrice === null) return null
-    return noPrice / 10000
+    return noPrice / 100
   }, [noPrice])
 
   // Implied odds calculation (potential multiplier if you win)
