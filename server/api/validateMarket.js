@@ -20,7 +20,7 @@ const corsOptions = {
   origin: [
     'https://sigma-predection.vercel.app',
     'https://gopredix.vercel.app/',
-    'https://sigma-prediction.vercel.app', // alternative spelling
+    'https://sigma-prediction.vercel.app',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://127.0.0.1:3000',
@@ -61,9 +61,84 @@ const CATEGORIES = {
   OTHER: "Other"
 };
 
-// ==================== MARKET VALIDATION ====================
+// API Health state tracking
+let apiHealth = {
+  lastChecked: null,
+  isHealthy: true,
+  lastError: null
+};
+
+// ==================== API HEALTH CHECK ====================
+
+async function checkAPIHealth() {
+  try {
+    console.log('🏥 Checking Perplexity API health...');
+    
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PPLX_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'llama-3-sonar-large-32k-online',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are a health check responder. Respond with: {"status": "ok"}' 
+          },
+          { 
+            role: 'user', 
+            content: 'Health check' 
+          }
+        ],
+        max_tokens: 10,
+        temperature: 0.1
+      }),
+      timeout: 15000
+    });
+
+    const isHealthy = response.ok;
+    
+    apiHealth = {
+      lastChecked: new Date().toISOString(),
+      isHealthy: isHealthy,
+      lastError: isHealthy ? null : `API returned ${response.status}`
+    };
+
+    console.log(`✅ Perplexity API health: ${isHealthy ? 'HEALTHY' : 'UNHEALTHY'}`);
+    return isHealthy;
+
+  } catch (error) {
+    console.error('❌ Perplexity API health check failed:', error.message);
+    
+    apiHealth = {
+      lastChecked: new Date().toISOString(),
+      isHealthy: false,
+      lastError: error.message
+    };
+
+    return false;
+  }
+}
+
+// ==================== ENHANCED MARKET VALIDATION ====================
 
 async function validateWithPerplexity({ question, endTime, initialYes, initialNo }) {
+  // Check API health first
+  const isAPIHealthy = await checkAPIHealth();
+  
+  if (!isAPIHealthy) {
+    console.log('🚫 API is unhealthy - rejecting market validation');
+    return {
+      valid: false,
+      reason: 'AI validation service is currently unavailable. Please try again later.',
+      category: 'OTHER',
+      apiError: true,
+      apiHealth: apiHealth
+    };
+  }
+
   try {
     console.log('🤖 Starting AI validation for question:', question);
     
@@ -133,6 +208,14 @@ Is this a valid prediction market question? Which category does it belong to?`;
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ Perplexity API error:', response.status, errorText);
+      
+      // Update API health status
+      apiHealth = {
+        lastChecked: new Date().toISOString(),
+        isHealthy: false,
+        lastError: `API returned ${response.status}: ${errorText}`
+      };
+      
       throw new Error(`Perplexity API returned ${response.status}: ${errorText}`);
     }
 
@@ -144,6 +227,13 @@ Is this a valid prediction market question? Which category does it belong to?`;
 
     const aiText = data.choices[0].message.content;
     console.log('🤖 AI analysis text:', aiText);
+
+    // Update API health status to healthy
+    apiHealth = {
+      lastChecked: new Date().toISOString(),
+      isHealthy: true,
+      lastError: null
+    };
 
     // Try to extract JSON from the response
     try {
@@ -167,7 +257,8 @@ Is this a valid prediction market question? Which category does it belong to?`;
         return {
           valid: Boolean(result.valid),
           reason: result.reason || 'No reason provided by AI',
-          category: category
+          category: category,
+          apiError: false
         };
       } else {
         console.log('⚠️ No JSON found in response, analyzing text...');
@@ -180,7 +271,15 @@ Is this a valid prediction market question? Which category does it belong to?`;
 
   } catch (error) {
     console.error('❌ Error in validateWithPerplexity:', error);
-    return basicValidation(question, endTime, initialYes, initialNo);
+    
+    // Return API error response instead of falling back to basic validation
+    return {
+      valid: false,
+      reason: 'AI validation service is temporarily unavailable. Please try again in a few moments.',
+      category: 'OTHER',
+      apiError: true,
+      apiHealth: apiHealth
+    };
   }
 }
 
@@ -212,19 +311,22 @@ function analyzeTextResponse(aiText, question) {
     return {
       valid: true,
       reason: 'AI analysis indicates this is a valid question',
-      category: category
+      category: category,
+      apiError: false
     };
   } else if (negativeCount > positiveCount) {
     return {
       valid: false,
       reason: 'AI analysis indicates issues with this question',
-      category: category
+      category: category,
+      apiError: false
     };
   } else {
     return {
       valid: false,
       reason: 'Unable to determine validity from AI analysis',
-      category: category
+      category: category,
+      apiError: false
     };
   }
 }
@@ -252,63 +354,25 @@ function determineCategory(question) {
   return 'OTHER';
 }
 
-function basicValidation(question, endTime, initialYes, initialNo) {
-  console.log('🔄 Using basic validation fallback');
-  
-  const lowerQuestion = question.toLowerCase();
-  const category = determineCategory(question);
-  
-  if (!question.includes('?')) {
-    return {
-      valid: false,
-      reason: 'Question must end with a question mark',
-      category: category
-    };
-  }
-  
-  if (question.length < 10) {
-    return {
-      valid: false,
-      reason: 'Question must be at least 10 characters long',
-      category: category
-    };
-  }
-  
-  if (question.length > 280) {
-    return {
-      valid: false,
-      reason: 'Question must be less than 280 characters',
-      category: category
-    };
-  }
-  
-  const invalidPatterns = [
-    /\b(opinion|think|believe|feel|probably|maybe)\b/i,
-    /\b(subjective|arbitrary|pointless)\b/i,
-    /\?.*\?/,
-    /\b(and|or)\b.*\?/
-  ];
-  
-  for (const pattern of invalidPatterns) {
-    if (pattern.test(question)) {
-      return {
-        valid: false,
-        reason: 'Question contains ambiguous or subjective language',
-        category: category
-      };
-    }
-  }
-  
-  return {
-    valid: true,
-    reason: 'Passes basic validation checks',
-    category: category
-  };
-}
-
 // ==================== MARKET RESOLUTION ====================
 
 async function resolveWithPerplexity({ question, endTime, marketId }) {
+  // Check API health first
+  const isAPIHealthy = await checkAPIHealth();
+  
+  if (!isAPIHealthy) {
+    console.log('🚫 API is unhealthy - cannot resolve market');
+    return {
+      success: false,
+      outcome: null,
+      reason: 'AI resolution service is currently unavailable. Please try again later.',
+      confidence: 0,
+      sources: ['Service unavailable'],
+      resolvedAt: new Date().toISOString(),
+      apiError: true
+    };
+  }
+
   try {
     console.log('🤖 Starting AI resolution for question:', question);
     
@@ -366,6 +430,14 @@ What is the verifiable outcome? Answer YES (true), NO (false), or NULL if outcom
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ Perplexity API error:', response.status, errorText);
+      
+      // Update API health status
+      apiHealth = {
+        lastChecked: new Date().toISOString(),
+        isHealthy: false,
+        lastError: `API returned ${response.status}: ${errorText}`
+      };
+      
       throw new Error(`Perplexity API returned ${response.status}: ${errorText}`);
     }
 
@@ -377,6 +449,13 @@ What is the verifiable outcome? Answer YES (true), NO (false), or NULL if outcom
 
     const aiText = data.choices[0].message.content;
     console.log('🤖 AI resolution text:', aiText);
+
+    // Update API health status to healthy
+    apiHealth = {
+      lastChecked: new Date().toISOString(),
+      isHealthy: true,
+      lastError: null
+    };
 
     try {
       const jsonMatch = aiText.match(/\{[\s\S]*\}/);
@@ -390,7 +469,8 @@ What is the verifiable outcome? Answer YES (true), NO (false), or NULL if outcom
           reason: result.reason || 'No reason provided by AI',
           confidence: result.confidence || 0,
           sources: result.sources || ['AI analysis'],
-          resolvedAt: result.resolvedAt || new Date().toISOString()
+          resolvedAt: result.resolvedAt || new Date().toISOString(),
+          apiError: false
         };
       } else {
         console.log('⚠️ No JSON found in resolution response, analyzing text...');
@@ -403,7 +483,16 @@ What is the verifiable outcome? Answer YES (true), NO (false), or NULL if outcom
 
   } catch (error) {
     console.error('❌ Error in resolveWithPerplexity:', error);
-    return basicResolution(question, endTime);
+    
+    return {
+      success: false,
+      outcome: null,
+      reason: 'AI resolution service is temporarily unavailable. Please try again later.',
+      confidence: 0,
+      sources: ['Service unavailable'],
+      resolvedAt: new Date().toISOString(),
+      apiError: true
+    };
   }
 }
 
@@ -449,34 +538,8 @@ function analyzeResolutionText(aiText, question) {
     reason: 'AI analysis based on text response',
     confidence: confidence,
     sources: ['Text analysis fallback'],
-    resolvedAt: new Date().toISOString()
-  };
-}
-
-function basicResolution(question, endTime) {
-  console.log('🔄 Using basic resolution fallback');
-  
-  const now = Math.floor(Date.now() / 1000);
-  const timeSinceEnd = now - endTime;
-  
-  if (timeSinceEnd < 3600) {
-    return {
-      success: true,
-      outcome: null,
-      reason: 'Too early to determine outcome - market recently ended',
-      confidence: 10,
-      sources: ['Time-based analysis'],
-      resolvedAt: new Date().toISOString()
-    };
-  }
-  
-  return {
-    success: true,
-    outcome: null,
-    reason: 'Unable to automatically determine outcome',
-    confidence: 0,
-    sources: ['Basic fallback'],
-    resolvedAt: new Date().toISOString()
+    resolvedAt: new Date().toISOString(),
+    apiError: false
   };
 }
 
@@ -554,6 +617,16 @@ class MarketResolutionService {
 
       console.log(`🤖 AI Resolution for market ${marketId}:`, resolution);
 
+      // Check if resolution failed due to API error
+      if (resolution.apiError) {
+        console.log(`🚫 Cannot resolve market ${marketId} due to API unavailability`);
+        return { 
+          success: false, 
+          reason: 'AI resolution service unavailable',
+          apiError: true
+        };
+      }
+
       // Only resolve if AI has high confidence
       if (resolution.outcome !== null && resolution.confidence >= 70) {
         // Call the contract to record the resolution
@@ -608,7 +681,15 @@ class MarketResolutionService {
       return await response.json();
     } catch (error) {
       console.error('Error calling AI resolution server:', error);
-      return basicResolution(marketData.question, marketData.endTime);
+      return {
+        success: false,
+        outcome: null,
+        reason: 'AI resolution service unavailable',
+        confidence: 0,
+        sources: ['Service unavailable'],
+        resolvedAt: new Date().toISOString(),
+        apiError: true
+      };
     }
   }
 
@@ -664,7 +745,8 @@ app.post('/api/validate-market', async (req, res) => {
       return res.status(400).json({ 
         valid: false, 
         reason: 'Valid question string is required',
-        category: 'OTHER'
+        category: 'OTHER',
+        apiError: false
       });
     }
     
@@ -672,7 +754,8 @@ app.post('/api/validate-market', async (req, res) => {
       return res.status(400).json({
         valid: false,
         reason: 'Valid endTime timestamp is required',
-        category: 'OTHER'
+        category: 'OTHER',
+        apiError: false
       });
     }
     
@@ -680,7 +763,8 @@ app.post('/api/validate-market', async (req, res) => {
       return res.status(400).json({
         valid: false,
         reason: 'Both initialYes and initialNo amounts are required',
-        category: 'OTHER'
+        category: 'OTHER',
+        apiError: false
       });
     }
     
@@ -695,7 +779,8 @@ app.post('/api/validate-market', async (req, res) => {
       return res.status(400).json({
         valid: false,
         reason: 'End time must be at least 1 hour from now',
-        category: 'OTHER'
+        category: 'OTHER',
+        apiError: false
       });
     }
     
@@ -703,7 +788,8 @@ app.post('/api/validate-market', async (req, res) => {
       return res.status(400).json({
         valid: false,
         reason: 'Both YES and NO liquidity must be greater than 0',
-        category: 'OTHER'
+        category: 'OTHER',
+        apiError: false
       });
     }
     
@@ -712,7 +798,8 @@ app.post('/api/validate-market', async (req, res) => {
       return res.status(400).json({
         valid: false,
         reason: 'Total liquidity must be at least 0.01 BNB',
-        category: 'OTHER'
+        category: 'OTHER',
+        apiError: false
       });
     }
     
@@ -735,6 +822,7 @@ app.post('/api/validate-market', async (req, res) => {
       valid: false, 
       reason: 'Internal server error during validation',
       category: 'OTHER',
+      apiError: true,
       error: error.message 
     });
   }
@@ -752,7 +840,8 @@ app.post('/api/resolve-market', async (req, res) => {
         success: false,
         outcome: null,
         reason: 'Valid question string is required',
-        confidence: 0
+        confidence: 0,
+        apiError: false
       });
     }
     
@@ -761,7 +850,8 @@ app.post('/api/resolve-market', async (req, res) => {
         success: false,
         outcome: null,
         reason: 'Valid endTime timestamp is required',
-        confidence: 0
+        confidence: 0,
+        apiError: false
       });
     }
     
@@ -784,9 +874,32 @@ app.post('/api/resolve-market', async (req, res) => {
       outcome: null,
       reason: 'Internal server error during resolution',
       confidence: 0,
+      apiError: true,
       error: error.message 
     });
   }
+});
+
+// API health status endpoint
+app.get('/api/health-status', (req, res) => {
+  res.json({
+    api: 'Perplexity AI',
+    status: apiHealth.isHealthy ? 'HEALTHY' : 'UNHEALTHY',
+    lastChecked: apiHealth.lastChecked,
+    lastError: apiHealth.lastError,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Manual API health check endpoint
+app.post('/api/health-check', async (req, res) => {
+  const isHealthy = await checkAPIHealth();
+  res.json({
+    healthy: isHealthy,
+    status: isHealthy ? 'HEALTHY' : 'UNHEALTHY',
+    lastChecked: apiHealth.lastChecked,
+    lastError: apiHealth.lastError
+  });
 });
 
 // Manual resolution endpoint
@@ -825,8 +938,10 @@ app.get('/health', (req, res) => {
     services: {
       validation: 'active',
       resolution: 'active',
-      blockchain: resolutionService ? 'connected' : 'disconnected'
-    }
+      blockchain: resolutionService ? 'connected' : 'disconnected',
+      perplexityAPI: apiHealth.isHealthy ? 'healthy' : 'unhealthy'
+    },
+    apiHealth: apiHealth
   });
 });
 
@@ -837,6 +952,10 @@ let resolutionService;
 
 const initializeServer = async () => {
   try {
+    // Perform initial API health check
+    console.log('🔍 Performing initial API health check...');
+    await checkAPIHealth();
+
     // Initialize blockchain resolution service if credentials are provided
     if (process.env.BLOCKCHAIN_RPC_URL && process.env.CONTRACT_ADDRESS && process.env.RESOLVER_PRIVATE_KEY) {
       console.log('🔗 Initializing blockchain connection...');
@@ -866,12 +985,19 @@ const initializeServer = async () => {
       console.log('⚠️ Blockchain credentials not provided - running in validation-only mode');
     }
 
+    // Start periodic API health checks
+    cron.schedule('*/5 * * * *', async () => {
+      console.log('🩺 Running scheduled API health check...');
+      await checkAPIHealth();
+    });
+
     // Start the server
     app.listen(PORT, () => {
       console.log(`🚀 Enhanced Prediction Market AI Server running on port ${PORT}`);
       console.log(`📋 Health check: http://localhost:${PORT}/health`);
-      console.log(`🔍 Node.js version: ${process.version}`);
+      console.log(`🔍 API Status: http://localhost:${PORT}/api/health-status`);
       console.log(`🤖 Services: Validation ✅ | Resolution ✅ | Categories ✅`);
+      console.log(`🔧 API Health: ${apiHealth.isHealthy ? 'HEALTHY ✅' : 'UNHEALTHY ❌'}`);
       if (resolutionService) {
         console.log(`🔗 Blockchain: Monitoring ✅ | Auto-resolution ✅`);
       }
