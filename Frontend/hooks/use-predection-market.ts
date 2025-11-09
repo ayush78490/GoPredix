@@ -84,7 +84,7 @@ export interface UserPosition {
 // AI Validation Helper
 async function validateMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
-    const res = await fetch('http://localhost:3001/api/validate-market', {
+    const res = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)

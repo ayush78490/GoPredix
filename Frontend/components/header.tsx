@@ -20,7 +20,7 @@ export default function Header() {
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <div className="w-8 h-8 rounded-lg  flex items-center justify-center">
-               <img src="/project-logo.jpg" alt="Project Logo" />
+               <img src="/logo.png" alt="Project Logo" />
 
             </div>
             <span className="text-3xl font-bold">PrediX</span>
