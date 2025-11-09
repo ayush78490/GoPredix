@@ -9,6 +9,7 @@ import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarket } from "@/hooks/use-predection-market"
 import { ethers } from "ethers"
 
+
 interface TradeModalProps {
   market: any;
   outcome: "YES" | "NO" | null;

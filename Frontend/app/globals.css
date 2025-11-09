@@ -48,13 +48,93 @@
     --input: 0 0% 26.9%;
     --ring: 0 0% 43.9%;
   }
-}
 
-@layer base {
+  /* Responsive base styles */
   * {
     @apply border-border;
+    box-sizing: border-box;
   }
+
+  *::before,
+  *::after {
+    box-sizing: inherit;
+  }
+
+  html {
+    height: 100%;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
   body {
     @apply bg-background text-foreground;
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
+    width: 100%;
+    overflow-x: hidden;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Ensure responsive media */
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Prevent horizontal overflow */
+  .container {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Improve text readability on small screens */
+  @media (max-width: 640px) {
+    html {
+      font-size: 14px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    html {
+      font-size: 13px;
+    }
+  }
+
+  /* Safe area insets for modern mobile devices */
+  @supports(padding: max(0px)) {
+    body {
+      padding-left: min(0px, env(safe-area-inset-left));
+      padding-right: min(0px, env(safe-area-inset-right));
+      padding-top: min(0px, env(safe-area-inset-top));
+      padding-bottom: min(0px, env(safe-area-inset-bottom));
+    }
+  }
+}
+
+@layer utilities {
+  /* Responsive text scaling */
+  .text-responsive {
+    font-size: clamp(1rem, 2.5vw, 1.5rem);
+  }
+
+  /* Prevent layout shift */
+  .min-h-screen-safe {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* Responsive spacing */
+  .responsive-padding {
+    @apply px-4 sm:px-6 lg:px-8;
+  }
+
+  .responsive-container {
+    @apply w-full max-w-7xl mx-auto responsive-padding;
   }
 }

@@ -5,7 +5,6 @@ import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { Providers } from "@/components/providers"
-import { useEffect, useState } from "react"
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -17,19 +16,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // Prevent flash of unstyled content
-  if (!mounted) {
-    return null
-  }
-
   return (
     <html lang="en" className="dark">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body className={`${inter.className} font-sans antialiased`}>
         <Providers>
           {children}

@@ -18,6 +18,7 @@ interface ValidationResult {
   valid: boolean;
   reason?: string;
   category?: string;
+  error?: string;
 }
 
 export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketModalProps) {
@@ -61,26 +62,157 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     const endDateTime = new Date(`${endDate}T${endTime}`)
     const endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
 
+    // Validate end time is at least 1 hour from now
+    const now = new Date()
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
+    if (endDateTime <= oneHourFromNow) {
+      setError("End time must be at least 1 hour from now")
+      return false
+    }
+
+    // Validate liquidity amounts
+    const yesAmount = parseFloat(initialYes)
+    const noAmount = parseFloat(initialNo)
+    if (yesAmount <= 0 || noAmount <= 0) {
+      setError("Both YES and NO liquidity must be greater than 0")
+      return false
+    }
+    if (totalLiquidity < 0.01) {
+      setError("Total liquidity must be at least 0.01 BNB")
+      return false
+    }
+
     setIsValidating(true)
     setError(null)
     setValidationResult(null)
 
     try {
-      // This will be handled by the createMarket function now
-      // We'll just do basic validation here
-      setValidationResult({
-        valid: true,
-        reason: "Question format looks good. Full AI validation will happen during creation.",
-        category: "GENERAL"
+      console.log("🤖 Calling AI validation API...")
+      
+      const response = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: question.trim(),
+          endTime: endTimeUnix,
+          initialYes,
+          initialNo
+        })
       })
-      return true
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Validation API error: ${response.status} - ${errorText}`)
+      }
+
+      const validation = await response.json()
+      console.log("✅ AI validation result:", validation)
+      
+      setValidationResult(validation)
+      return validation.valid
+
     } catch (err: any) {
-      console.error('Validation error:', err)
-      setError('Failed to validate question. Please try again.')
-      return false
+      console.error('❌ AI validation error:', err)
+      
+      // Fallback to basic validation when AI service is unavailable
+      const basicValidation = performBasicValidation(question, endTimeUnix, initialYes, initialNo)
+      setValidationResult(basicValidation)
+      
+      if (!basicValidation.valid) {
+        setError(`AI validation unavailable. Basic validation: ${basicValidation.reason}`)
+      } else {
+        setError("AI validation service is temporarily unavailable. Using basic validation.")
+      }
+      
+      return basicValidation.valid
     } finally {
       setIsValidating(false)
     }
+  }
+
+  // Basic validation fallback
+  const performBasicValidation = (question: string, endTime: number, initialYes: string, initialNo: string): ValidationResult => {
+    console.log("🔄 Using basic validation fallback")
+    
+    const lowerQuestion = question.toLowerCase()
+    
+    // Basic question validation
+    if (!question.includes('?')) {
+      return {
+        valid: false,
+        reason: 'Question must end with a question mark',
+        category: 'OTHER'
+      }
+    }
+    
+    if (question.length < 10) {
+      return {
+        valid: false,
+        reason: 'Question must be at least 10 characters long',
+        category: 'OTHER'
+      }
+    }
+    
+    if (question.length > 280) {
+      return {
+        valid: false,
+        reason: 'Question must be less than 280 characters',
+        category: 'OTHER'
+      }
+    }
+    
+    // Check for ambiguous language
+    const invalidPatterns = [
+      /\b(opinion|think|believe|feel|probably|maybe)\b/i,
+      /\b(subjective|arbitrary|pointless)\b/i,
+      /\?.*\?/,
+      /\b(and|or)\b.*\?/
+    ]
+    
+    for (const pattern of invalidPatterns) {
+      if (pattern.test(question)) {
+        return {
+          valid: false,
+          reason: 'Question contains ambiguous or subjective language',
+          category: 'OTHER'
+        }
+      }
+    }
+    
+    // Determine category based on keywords
+    const category = determineCategory(question)
+    
+    return {
+      valid: true,
+      reason: 'Passes basic validation checks (AI service unavailable)',
+      category: category
+    }
+  }
+
+  // Determine category based on question content
+  const determineCategory = (question: string): string => {
+    const lowerQuestion = question.toLowerCase()
+    
+    const categoryKeywords = {
+      CRYPTO: ['bitcoin', 'ethereum', 'crypto', 'blockchain', 'btc', 'eth', 'defi', 'nft', 'token'],
+      POLITICS: ['election', 'president', 'government', 'policy', 'senate', 'congress', 'vote'],
+      SPORTS: ['game', 'match', 'tournament', 'championship', 'olympics', 'team', 'player'],
+      TECHNOLOGY: ['launch', 'release', 'update', 'software', 'hardware', 'ai', 'artificial intelligence'],
+      FINANCE: ['stock', 'market', 'earnings', 'economic', 'gdp', 'inflation', 'interest rate'],
+      ENTERTAINMENT: ['movie', 'film', 'oscar', 'award', 'celebrity', 'music', 'album'],
+      SCIENCE: ['discovery', 'research', 'study', 'medical', 'health', 'space', 'nasa'],
+      WORLD: ['earthquake', 'hurricane', 'summit', 'conference', 'international', 'global']
+    }
+    
+    for (const [category, keywords] of Object.entries(categoryKeywords)) {
+      if (keywords.some(keyword => lowerQuestion.includes(keyword))) {
+        return category
+      }
+    }
+    
+    return 'OTHER'
   }
 
   const handleCreate = async () => {
@@ -102,18 +234,22 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       return
     }
 
-    // Step 4: Validate question
-    if (!question || question.length < 10) {
-      setError("Question must be at least 10 characters")
+    // Step 4: Validate question with AI if not already done
+    if (!validationResult) {
+      const isValid = await validateQuestion()
+      if (!isValid) {
+        setError("Please validate your question first")
+        return
+      }
+    }
+
+    // Step 5: Check if validation passed
+    if (validationResult && !validationResult.valid) {
+      setError(`Question validation failed: ${validationResult.reason}`)
       return
     }
 
-    if (question.length > 280) {
-      setError("Question must be less than 280 characters")
-      return
-    }
-
-    // Step 5: Validate end date/time
+    // Step 6: Validate end date/time
     if (!endDate || !endTime) {
       setError("Please set an end date and time")
       return
@@ -128,7 +264,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       return
     }
 
-    // Step 6: Validate liquidity amounts
+    // Step 7: Validate liquidity amounts
     const yesAmount = parseFloat(initialYes)
     const noAmount = parseFloat(initialNo)
 
@@ -142,7 +278,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       return
     }
 
-    // Step 7: Proceed with market creation
+    // Step 8: Proceed with market creation
     setIsProcessing(true)
     setError(null)
     setTxHash(null)
@@ -152,7 +288,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       
       console.log("📝 Creating market with params:", {
         question,
-        category: "GENERAL", // Will be determined by AI validation
+        category: validationResult?.category || "GENERAL", // Use AI-determined category
         endTime: endTimeUnix,
         initialYes,
         initialNo
@@ -160,7 +296,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
       const marketId = await createMarket({
         question,
-        category: "GENERAL", // Temporary category, will be overridden by AI
+        category: validationResult?.category || "GENERAL", // Use validated category
         endTime: endTimeUnix,
         initialYes,
         initialNo
@@ -190,12 +326,20 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   minDate.setDate(minDate.getDate() + 1)
   const minDateString = minDate.toISOString().split("T")[0]
 
+  // Clear validation when question changes
+  const handleQuestionChange = (value: string) => {
+    setQuestion(value)
+    setValidationResult(null)
+    setError(null)
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
       <Card className="w-full max-w-2xl p-6 relative my-8">
         <button 
           onClick={onClose} 
           className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+          disabled={isProcessing}
         >
           <X className="w-5 h-5" />
         </button>
@@ -214,23 +358,20 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 variant="outline"
                 size="sm"
                 onClick={validateQuestion}
-                disabled={isValidating || !question || question.length < 10}
+                disabled={isValidating || !question || question.length < 10 || !endDate || !endTime}
               >
                 {isValidating ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <Shield className="w-4 h-4 mr-2" />
                 )}
-                Validate
+                {isValidating ? "Validating..." : "Validate with AI"}
               </Button>
             </div>
             <Textarea
               placeholder="Will Bitcoin reach $100k by end of 2024?"
               value={question}
-              onChange={(e) => {
-                setQuestion(e.target.value)
-                setValidationResult(null) // Clear validation when question changes
-              }}
+              onChange={(e) => handleQuestionChange(e.target.value)}
               className="min-h-[100px]"
               maxLength={280}
               disabled={isProcessing}
@@ -255,7 +396,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 )}
                 <div>
                   <div className="font-medium">
-                    {validationResult.valid ? '✓ Basic Validation Passed' : '✗ Validation Failed'}
+                    {validationResult.valid ? '✓ Validation Passed' : '✗ Validation Failed'}
+                    {validationResult.reason?.includes('basic validation') && ' (Basic)'}
                   </div>
                   <div className="text-sm mt-1">{validationResult.reason}</div>
                   {validationResult.valid && validationResult.category && (
@@ -277,7 +419,10 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <Input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  setEndDate(e.target.value)
+                  setValidationResult(null) // Clear validation when date changes
+                }}
                 min={minDateString}
                 disabled={isProcessing}
               />
@@ -289,7 +434,10 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <Input
                 type="time"
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={(e) => {
+                  setEndTime(e.target.value)
+                  setValidationResult(null) // Clear validation when time changes
+                }}
                 disabled={isProcessing}
               />
             </div>
@@ -305,7 +453,10 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                   type="number"
                   placeholder="0.1"
                   value={initialYes}
-                  onChange={(e) => setInitialYes(e.target.value)}
+                  onChange={(e) => {
+                    setInitialYes(e.target.value)
+                    setValidationResult(null) // Clear validation when liquidity changes
+                  }}
                   step="0.01"
                   min="0.001"
                   disabled={isProcessing}
@@ -317,7 +468,10 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                   type="number"
                   placeholder="0.1"
                   value={initialNo}
-                  onChange={(e) => setInitialNo(e.target.value)}
+                  onChange={(e) => {
+                    setInitialNo(e.target.value)
+                    setValidationResult(null) // Clear validation when liquidity changes
+                  }}
                   step="0.01"
                   min="0.001"
                   disabled={isProcessing}
@@ -370,7 +524,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           </div>
 
           {/* Error Display */}
-          {error && !validationResult && (
+          {error && (
             <div className="p-3 bg-red-950/20 border border-red-500 rounded-lg text-red-400 text-sm">
               {error}
             </div>
@@ -432,7 +586,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <Button 
                 onClick={handleCreate} 
                 className="flex-1" 
-                disabled={isProcessing || isLoading}
+                disabled={Boolean(isProcessing || isLoading || (validationResult && !validationResult.valid))}
               >
                 {isProcessing || isLoading ? (
                   <>
