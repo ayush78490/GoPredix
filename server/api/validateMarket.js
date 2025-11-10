@@ -21,6 +21,7 @@ const corsOptions = {
     'https://sigma-predection.vercel.app',
     'https://gopredix.vercel.app/',
     'https://sigma-prediction.vercel.app',
+    'https://www.gopredix.xyz/',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://127.0.0.1:3000',
