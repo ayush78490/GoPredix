@@ -13,6 +13,7 @@ import Footer from "@/components/footer"
 import { useRouter } from "next/navigation"
 import LightRays from "@/components/LightRays"
 
+
 const CATEGORIES = [
   "All Markets",
   "Politics",
