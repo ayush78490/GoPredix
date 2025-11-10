@@ -38,9 +38,11 @@ interface MarketPosition {
   currentValue: number
   investedAmount: number
   potentialPnl: number
-  status: string
+  status: "Active" | "Resolved" | "Cancelled"
   yesPrice: number
   noPrice: number
+  marketStatus: number // Raw status from contract
+  endTime: number // Add endTime for active status calculation
 }
 
 export default function Leaderboard() {
@@ -61,12 +63,52 @@ export default function Leaderboard() {
   const [timeframe, setTimeframe] = useState<"all" | "weekly" | "monthly">("all")
   const [uniqueTraders, setUniqueTraders] = useState<string[]>([])
 
+  // Helper function to get market status text - matching your home page logic
+  const getMarketStatusText = (status: number, endTime: number): "Active" | "Resolved" | "Cancelled" => {
+    const resolutionDate = new Date(endTime * 1000)
+    const now = new Date()
+    
+    // Use the same logic as your home page: status === 0 AND resolutionDate > now
+    if (status === 0 && resolutionDate > now) {
+      return "Active"
+    } else if (status === 1) {
+      return "Resolved"
+    } else if (status === 2) {
+      return "Cancelled"
+    } else {
+      // If status is 0 but resolution date has passed, consider it Resolved
+      return "Resolved"
+    }
+  }
+
+  // Helper function to check if market is active - matching your home page logic
+  const isMarketActive = (status: number, endTime: number): boolean => {
+    const resolutionDate = new Date(endTime * 1000)
+    const now = new Date()
+    
+    // Same logic as your home page: status === 0 AND resolutionDate > now
+    return status === 0 && resolutionDate > now
+  }
+
+  // Calculate prices from pool data - same as your home page
+  const calculatePrices = (yesPool: string, noPool: string) => {
+    const yes = parseFloat(yesPool) || 0
+    const no = parseFloat(noPool) || 0
+    const total = yes + no
+
+    if (total === 0) return { yesPrice: 50, noPrice: 50 }
+
+    return {
+      yesPrice: (yes / total) * 100,
+      noPrice: (no / total) * 100
+    }
+  }
+
     // Fetch traders from available events (BuyWithBNB and Swap)
     const fetchTradersFromEvents = async (): Promise<string[]> => {
     if (!contract) return []
 
     try {
-        console.log("🔍 Fetching traders from contract events...")
         const traders = new Set<string>()
 
         // Get market creators
@@ -94,7 +136,7 @@ export default function Leaderboard() {
             }
             }
         })
-        console.log(`✅ Found ${buyEvents.length} BuyWithBNB events`)
+
         } catch (error) {
         console.warn("⚠️ Could not fetch BuyWithBNB events:", error)
         }
@@ -113,7 +155,7 @@ export default function Leaderboard() {
             }
             }
         })
-        console.log(`✅ Found ${swapEvents.length} Swap events`)
+
         } catch (error) {
         console.warn("⚠️ Could not fetch Swap events:", error)
         }
@@ -124,7 +166,7 @@ export default function Leaderboard() {
         }
 
         const traderArray = Array.from(traders)
-        console.log(`✅ Total unique traders found: ${traderArray.length}`)
+
         return traderArray
 
     } catch (error) {
@@ -138,7 +180,6 @@ export default function Leaderboard() {
     if (!contract) return []
 
     try {
-      console.log("💰 Scanning for traders with investments...")
       const traders = new Set<string>()
       const marketCount = markets.length
 
@@ -171,7 +212,7 @@ export default function Leaderboard() {
       simulatedTraders.forEach(trader => traders.add(trader.toLowerCase()))
       
       const traderArray = Array.from(traders)
-      console.log(`✅ Found ${traderArray.length} potential traders`)
+      
       return traderArray
 
     } catch (error) {
@@ -183,7 +224,7 @@ export default function Leaderboard() {
   // Calculate user statistics from real contract data
   const calculateUserStats = async (address: string): Promise<UserStats> => {
     try {
-      console.log(`📊 Calculating stats for user ${address.slice(0, 6)}...`)
+      
       
       // Get user positions from contract
       const positions = await getUserPositions(address)
@@ -215,8 +256,8 @@ export default function Leaderboard() {
           unrealizedPnl += positionPnl
         }
 
-        // Count active positions
-        if (position.market.status === 0) { // MarketStatus.Open
+        // Count active positions using the same logic as home page
+        if (isMarketActive(position.market.status, position.market.endTime)) {
           activePositions++
         }
 
@@ -245,7 +286,7 @@ export default function Leaderboard() {
         totalInvestment: totalInvestmentBNB
       }
 
-      console.log(`✅ Stats for ${address.slice(0, 6)}:`, stats)
+      
       return stats
 
     } catch (error) {
@@ -272,22 +313,29 @@ export default function Leaderboard() {
     try {
       const positions = await getUserPositions(address)
       
-      return positions.map(position => ({
-        marketId: position.market.id,
-        question: position.market.question,
-        category: position.market.category || "General",
-        yesTokens: parseFloat(position.yesBalance),
-        noTokens: parseFloat(position.noBalance),
-        currentValue: parseFloat(position.yesBalance) * (position.market.yesPrice || 50) / 100 + 
-                     parseFloat(position.noBalance) * (position.market.noPrice || 50) / 100,
-        investedAmount: parseFloat(position.bnbInvested),
-        potentialPnl: (parseFloat(position.yesBalance) * (position.market.yesPrice || 50) / 100 + 
-                      parseFloat(position.noBalance) * (position.market.noPrice || 50) / 100) - 
-                     parseFloat(position.bnbInvested),
-        status: position.market.status === 0 ? "Active" : "Resolved",
-        yesPrice: position.market.yesPrice || 50,
-        noPrice: position.market.noPrice || 50
-      }))
+      return positions.map(position => {
+        // Calculate prices using the same logic as home page
+        const prices = calculatePrices(position.market.yesPool, position.market.noPool)
+        
+        return {
+          marketId: position.market.id,
+          question: position.market.question,
+          category: position.market.category || "General",
+          yesTokens: parseFloat(position.yesBalance),
+          noTokens: parseFloat(position.noBalance),
+          currentValue: parseFloat(position.yesBalance) * prices.yesPrice / 100 + 
+                       parseFloat(position.noBalance) * prices.noPrice / 100,
+          investedAmount: parseFloat(position.bnbInvested),
+          potentialPnl: (parseFloat(position.yesBalance) * prices.yesPrice / 100 + 
+                        parseFloat(position.noBalance) * prices.noPrice / 100) - 
+                       parseFloat(position.bnbInvested),
+          status: getMarketStatusText(position.market.status, position.market.endTime),
+          marketStatus: position.market.status,
+          endTime: position.market.endTime, // Store endTime for reference
+          yesPrice: prices.yesPrice,
+          noPrice: prices.noPrice
+        }
+      })
 
     } catch (error) {
       console.error(`❌ Error fetching positions for ${address}:`, error)
@@ -298,13 +346,13 @@ export default function Leaderboard() {
   // Main data fetching function
   const fetchLeaderboardData = async () => {
     if (!contract || !markets.length) {
-      console.log("⏳ Waiting for contract and markets...")
+      
       return
     }
 
     setIsLoading(true)
     try {
-      console.log("🚀 Starting leaderboard data fetch...")
+      
       
       // 1. Get all unique traders using multiple methods
       const tradersFromEvents = await fetchTradersFromEvents()
@@ -347,7 +395,6 @@ export default function Leaderboard() {
 
       setUserPositions(positionsData)
       
-      console.log(`✅ Leaderboard data loaded: ${activeTraders.length} active traders out of ${allTraders.length} total`)
 
     } catch (error) {
       console.error("❌ Error fetching leaderboard data:", error)
@@ -388,6 +435,11 @@ export default function Leaderboard() {
     refreshMarkets()
     fetchLeaderboardData()
   }
+
+  // Count active markets using the same logic as home page
+  const activeMarketsCount = markets.filter(market => 
+    isMarketActive(market.status, market.endTime)
+  ).length
 
   if (!isInitialized) {
     return (
@@ -518,7 +570,7 @@ export default function Leaderboard() {
                 <div className="flex items-center">
                   <BarChart3 className="w-8 h-8 text-primary mr-2" />
                   <div className="text-2xl font-bold">
-                    {markets.filter(m => m.status === 0).length}
+                    {activeMarketsCount}
                   </div>
                 </div>
               </CardContent>
@@ -658,8 +710,14 @@ export default function Leaderboard() {
                                 <div className="flex-1">
                                   <div className="font-medium truncate">{position.question}</div>
                                   <div className="text-xs text-muted-foreground">
-                                    {position.category} • {position.status} • 
-                                    YES: {position.yesPrice.toFixed(1)}% • NO: {position.noPrice.toFixed(1)}%
+                                    {position.category} • 
+                                    <Badge 
+                                      variant={position.status === "Active" ? "default" : "secondary"} 
+                                      className="ml-1 mr-1 backdrop-blur-sm"
+                                    >
+                                      {position.status}
+                                    </Badge>
+                                    • YES: {position.yesPrice.toFixed(1)}% • NO: {position.noPrice.toFixed(1)}%
                                   </div>
                                 </div>
                                 <div className="text-right">

@@ -139,13 +139,6 @@ export default function Home() {
 
   // Debug logging
   useEffect(() => {
-    console.log("=== Home Page State ===")
-    console.log("Initialized:", isInitialized)
-    console.log("Account:", account)
-    console.log("Correct Network:", isCorrectNetwork)
-    console.log("Markets:", markets.length)
-    console.log("Loading:", isLoading)
-    console.log("Error:", error)
   }, [isInitialized, account, isCorrectNetwork, markets.length, isLoading, error])
 
   return (
