@@ -47,27 +47,77 @@ app.options('*', cors(corsOptions));
 
 app.use(bodyParser.json());
 
-const PPLX_API_KEY = process.env.PERPLEXITY_API_KEY;
+// Use both API keys
+const PPLX_API_KEYS = [
+  process.env.PERPLEXITY_API_KEY1,
+  process.env.PERPLEXITY_API_KEY
+].filter(key => key && key.trim() !== ''); // Remove empty or undefined keys
 
-// Define categories for prediction markets
-const CATEGORIES = {
-  CRYPTO: "Cryptocurrency & Blockchain",
-  POLITICS: "Politics & Governance", 
-  SPORTS: "Sports & Competitions",
-  TECHNOLOGY: "Technology & AI",
-  FINANCE: "Finance & Economics",
-  ENTERTAINMENT: "Entertainment & Media",
-  SCIENCE: "Science & Health",
-  WORLD: "World Events",
-  OTHER: "Other"
-};
+if (PPLX_API_KEYS.length === 0) {
+  console.error('❌ No Perplexity API keys found in environment variables');
+  process.exit(1);
+}
+
+console.log(`🔑 Loaded ${PPLX_API_KEYS.length} API keys`);
 
 // API Health state tracking
 let apiHealth = {
   lastChecked: null,
   isHealthy: true,
-  lastError: null
+  lastError: null,
+  currentKeyIndex: 0,
+  keyStatus: PPLX_API_KEYS.map((_, index) => ({ index, healthy: true, lastUsed: null, errors: 0 }))
 };
+
+// ==================== API KEY MANAGEMENT ====================
+
+function getCurrentAPIKey() {
+  return PPLX_API_KEYS[apiHealth.currentKeyIndex];
+}
+
+function rotateAPIKey() {
+  const oldIndex = apiHealth.currentKeyIndex;
+  apiHealth.currentKeyIndex = (apiHealth.currentKeyIndex + 1) % PPLX_API_KEYS.length;
+  console.log(`🔄 Rotated API key from index ${oldIndex} to ${apiHealth.currentKeyIndex}`);
+  
+  // Mark the old key as potentially unhealthy
+  if (PPLX_API_KEYS.length > 1) {
+    apiHealth.keyStatus[oldIndex].healthy = false;
+    apiHealth.keyStatus[oldIndex].errors++;
+  }
+  
+  return getCurrentAPIKey();
+}
+
+function markCurrentKeyHealthy() {
+  apiHealth.keyStatus[apiHealth.currentKeyIndex].healthy = true;
+  apiHealth.keyStatus[apiHealth.currentKeyIndex].lastUsed = new Date().toISOString();
+  apiHealth.keyStatus[apiHealth.currentKeyIndex].errors = 0;
+}
+
+function markCurrentKeyUnhealthy(error) {
+  apiHealth.keyStatus[apiHealth.currentKeyIndex].healthy = false;
+  apiHealth.keyStatus[apiHealth.currentKeyIndex].lastUsed = new Date().toISOString();
+  apiHealth.keyStatus[apiHealth.currentKeyIndex].errors++;
+  apiHealth.lastError = error;
+}
+
+function getHealthyAPIKey() {
+  // If current key is healthy, use it
+  if (apiHealth.keyStatus[apiHealth.currentKeyIndex].healthy) {
+    return getCurrentAPIKey();
+  }
+  
+  // Otherwise, find a healthy key
+  const healthyKey = apiHealth.keyStatus.find(status => status.healthy);
+  if (healthyKey) {
+    apiHealth.currentKeyIndex = healthyKey.index;
+    return getCurrentAPIKey();
+  }
+  
+  // If no healthy keys, rotate to next one
+  return rotateAPIKey();
+}
 
 // ==================== API HEALTH CHECK ====================
 
@@ -75,36 +125,27 @@ async function checkAPIHealth() {
   try {
     console.log('🏥 Checking API health with model verification...');
 
-    // Complete list of known possible models to try
+    // FIXED: Use current valid Perplexity API models (2025)
     const possibleModels = [
-      'pplx-7b-online',
-      'pplx-70b-online',
-      'sonar-large-online',
-      'llama-3-sonar-large-32k-chat', // unofficial but included for testing
-      'llama-3-70b-instruct',
-      'gpt-5',
-      'gemini-2.5-pro',
-      'claude-4.5-sonnet',
-      'claude-4.5-sonnet-thinking',
-      'grok-4',
-      'o3-pro',
-      'claude-4.1-opus-thinking',
-      'llama2-70b-chat',
-      'gpt-3.5-turbo-1106',
-      'sonar-medium-online'
+      'sonar',              // Lightweight, fast search model
+      'sonar-pro',          // Advanced search with more citations
+      'sonar-reasoning',    // Reasoning with search capabilities
+      'sonar-reasoning-pro' // Advanced reasoning (DeepSeek R1 based)
     ];
 
+    const currentKey = getHealthyAPIKey();
+    
     for (const model of possibleModels) {
-      console.log(`🔍 Trying model: ${model}`);
+      console.log(`🔍 Trying model: ${model} with key index: ${apiHealth.currentKeyIndex}`);
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
         const response = await fetch('https://api.perplexity.ai/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${PPLX_API_KEY}`,
+            'Authorization': `Bearer ${currentKey}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -124,44 +165,153 @@ async function checkAPIHealth() {
         clearTimeout(timeoutId);
 
         if (response.ok) {
-          console.log(`✅ SUCCESS with model: ${model}`);
           const data = await response.json();
-          console.log('Response:', data.choices[0]?.message?.content);
-
+          console.log(`✅ SUCCESS with model: ${model} and key index: ${apiHealth.currentKeyIndex}`);
+          
+          markCurrentKeyHealthy();
+          apiHealth.isHealthy = true;
+          apiHealth.lastChecked = new Date().toISOString();
+          
           return {
             healthy: true,
             workingModel: model,
+            keyIndex: apiHealth.currentKeyIndex,
             response: data
           };
         } else {
-          console.log(`❌ Model ${model} failed: ${response.status}`);
           const errorText = await response.text();
-          console.log('Error details:', errorText);
+          console.log(`❌ Model ${model} failed with key ${apiHealth.currentKeyIndex}: ${response.status} - ${errorText}`);
+          
+          if (response.status === 401 || response.status === 429) {
+            markCurrentKeyUnhealthy(`API key error: ${response.status}`);
+            // Try with next key
+            if (PPLX_API_KEYS.length > 1) {
+              const nextKey = rotateAPIKey();
+              console.log(`🔄 Retrying with next API key: index ${apiHealth.currentKeyIndex}`);
+              continue; // Continue with next model but with new key
+            }
+          }
         }
       } catch (error) {
-        console.log(`❌ Model ${model} error:`, error.message);
+        console.log(`❌ Model ${model} error with key ${apiHealth.currentKeyIndex}:`, error.message);
       }
     }
 
-    throw new Error('All model attempts failed');
+    // If all models failed, mark current key as unhealthy and try next one
+    markCurrentKeyUnhealthy('All model attempts failed');
+    if (PPLX_API_KEYS.length > 1) {
+      console.log('🔄 All models failed with current key, rotating to next key...');
+      rotateAPIKey();
+    }
+    
+    throw new Error('All model attempts failed with all keys');
     
   } catch (error) {
     console.error('💥 All health checks failed:', error.message);
+    apiHealth.isHealthy = false;
+    apiHealth.lastChecked = new Date().toISOString();
+    
     return {
       healthy: false,
       workingModel: null,
+      keyIndex: apiHealth.currentKeyIndex,
       error: error.message
     };
   }
+}
+
+// ==================== ENHANCED API CALL FUNCTION ====================
+
+async function makePerplexityAPICall(messages, model = 'sonar-pro', maxTokens = 500, temperature = 0.1) {
+  // FIXED: Changed default model to 'sonar-pro' (was 'llama-3-sonar-large-32k-online')
+  const maxRetries = PPLX_API_KEYS.length * 2; // Allow retries with different keys
+  let lastError;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const currentKey = getHealthyAPIKey();
+    console.log(`📤 API Call Attempt ${attempt + 1} with key index: ${apiHealth.currentKeyIndex}`);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${currentKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: messages,
+          max_tokens: maxTokens,
+          temperature: temperature
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ API call successful with key index: ${apiHealth.currentKeyIndex}`);
+        
+        markCurrentKeyHealthy();
+        apiHealth.isHealthy = true;
+        apiHealth.lastChecked = new Date().toISOString();
+        
+        return data;
+      } else {
+        const errorText = await response.text();
+        console.error(`❌ API call failed with key ${apiHealth.currentKeyIndex}: ${response.status}`, errorText);
+        
+        lastError = new Error(`Perplexity API returned ${response.status}: ${errorText}`);
+        
+        if (response.status === 401 || response.status === 429) {
+          markCurrentKeyUnhealthy(`API key error: ${response.status}`);
+          if (PPLX_API_KEYS.length > 1) {
+            console.log(`🔄 Rotating API key due to error ${response.status}`);
+            rotateAPIKey();
+            continue; // Retry with next key
+          }
+        }
+        
+        // Update API health status
+        apiHealth.isHealthy = false;
+        apiHealth.lastChecked = new Date().toISOString();
+        apiHealth.lastError = lastError.message;
+        
+        throw lastError;
+      }
+    } catch (error) {
+      console.error(`❌ API call error with key ${apiHealth.currentKeyIndex}:`, error.message);
+      lastError = error;
+      
+      markCurrentKeyUnhealthy(error.message);
+      
+      if (PPLX_API_KEYS.length > 1 && attempt < maxRetries - 1) {
+        console.log('🔄 Rotating API key and retrying...');
+        rotateAPIKey();
+        continue;
+      }
+    }
+  }
+
+  // If we get here, all retries failed
+  apiHealth.isHealthy = false;
+  apiHealth.lastChecked = new Date().toISOString();
+  apiHealth.lastError = lastError?.message || 'All API calls failed';
+  
+  throw lastError || new Error('All API call attempts failed');
 }
 
 // ==================== ENHANCED MARKET VALIDATION ====================
 
 async function validateWithPerplexity({ question, endTime, initialYes, initialNo }) {
   // Check API health first
-  const isAPIHealthy = await checkAPIHealth();
+  const healthCheck = await checkAPIHealth();
   
-  if (!isAPIHealthy) {
+  if (!healthCheck.healthy) {
     console.log('🚫 API is unhealthy - rejecting market validation');
     return {
       valid: false,
@@ -214,45 +364,17 @@ Is this a valid prediction market question? Which category does it belong to?`;
 
     console.log('📤 Calling Perplexity API...');
     
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PPLX_API_KEY}`,
-        'Content-Type': 'application/json'
+    // FIXED: Changed model to 'sonar-pro'
+    const data = await makePerplexityAPICall([
+      { 
+        role: 'system', 
+        content: systemPrompt 
       },
-      body: JSON.stringify({
-        model: 'llama-3-sonar-large-32k-online',
-        messages: [
-          { 
-            role: 'system', 
-            content: systemPrompt 
-          },
-          { 
-            role: 'user', 
-            content: userPrompt 
-          }
-        ],
-        max_tokens: 500,
-        temperature: 0.1
-      }),
-      timeout: 30000
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Perplexity API error:', response.status, errorText);
-      
-      // Update API health status
-      apiHealth = {
-        lastChecked: new Date().toISOString(),
-        isHealthy: false,
-        lastError: `API returned ${response.status}: ${errorText}`
-      };
-      
-      throw new Error(`Perplexity API returned ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
+      { 
+        role: 'user', 
+        content: userPrompt 
+      }
+    ], 'sonar-pro', 500, 0.1);
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       throw new Error('Invalid response format from Perplexity API');
@@ -260,13 +382,6 @@ Is this a valid prediction market question? Which category does it belong to?`;
 
     const aiText = data.choices[0].message.content;
     console.log('🤖 AI analysis text:', aiText);
-
-    // Update API health status to healthy
-    apiHealth = {
-      lastChecked: new Date().toISOString(),
-      isHealthy: true,
-      lastError: null
-    };
 
     // Try to extract JSON from the response
     try {
@@ -391,9 +506,9 @@ function determineCategory(question) {
 
 async function resolveWithPerplexity({ question, endTime, marketId }) {
   // Check API health first
-  const isAPIHealthy = await checkAPIHealth();
+  const healthCheck = await checkAPIHealth();
   
-  if (!isAPIHealthy) {
+  if (!healthCheck.healthy) {
     console.log('🚫 API is unhealthy - cannot resolve market');
     return {
       success: false,
@@ -436,45 +551,17 @@ What is the verifiable outcome? Answer YES (true), NO (false), or NULL if outcom
 
     console.log('📤 Calling Perplexity API for resolution...');
     
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PPLX_API_KEY}`,
-        'Content-Type': 'application/json'
+    // FIXED: Changed model to 'sonar-pro'
+    const data = await makePerplexityAPICall([
+      { 
+        role: 'system', 
+        content: systemPrompt 
       },
-      body: JSON.stringify({
-        model: 'llama-3-sonar-large-32k-online',
-        messages: [
-          { 
-            role: 'system', 
-            content: systemPrompt 
-          },
-          { 
-            role: 'user', 
-            content: userPrompt 
-          }
-        ],
-        max_tokens: 1000,
-        temperature: 0.1
-      }),
-      timeout: 45000
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Perplexity API error:', response.status, errorText);
-      
-      // Update API health status
-      apiHealth = {
-        lastChecked: new Date().toISOString(),
-        isHealthy: false,
-        lastError: `API returned ${response.status}: ${errorText}`
-      };
-      
-      throw new Error(`Perplexity API returned ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
+      { 
+        role: 'user', 
+        content: userPrompt 
+      }
+    ], 'sonar-pro', 1000, 0.1);
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       throw new Error('Invalid response format from Perplexity API');
@@ -482,13 +569,6 @@ What is the verifiable outcome? Answer YES (true), NO (false), or NULL if outcom
 
     const aiText = data.choices[0].message.content;
     console.log('🤖 AI resolution text:', aiText);
-
-    // Update API health status to healthy
-    apiHealth = {
-      lastChecked: new Date().toISOString(),
-      isHealthy: true,
-      lastError: null
-    };
 
     try {
       const jsonMatch = aiText.match(/\{[\s\S]*\}/);
@@ -920,18 +1000,24 @@ app.get('/api/health-status', (req, res) => {
     status: apiHealth.isHealthy ? 'HEALTHY' : 'UNHEALTHY',
     lastChecked: apiHealth.lastChecked,
     lastError: apiHealth.lastError,
+    currentKeyIndex: apiHealth.currentKeyIndex,
+    totalKeys: PPLX_API_KEYS.length,
+    keyStatus: apiHealth.keyStatus,
     timestamp: new Date().toISOString()
   });
 });
 
 // Manual API health check endpoint
 app.post('/api/health-check', async (req, res) => {
-  const isHealthy = await checkAPIHealth();
+  const healthResult = await checkAPIHealth();
   res.json({
-    healthy: isHealthy,
-    status: isHealthy ? 'HEALTHY' : 'UNHEALTHY',
+    healthy: healthResult.healthy,
+    status: healthResult.healthy ? 'HEALTHY' : 'UNHEALTHY',
+    workingModel: healthResult.workingModel,
+    keyIndex: healthResult.keyIndex,
     lastChecked: apiHealth.lastChecked,
-    lastError: apiHealth.lastError
+    lastError: apiHealth.lastError,
+    keyStatus: apiHealth.keyStatus
   });
 });
 
@@ -974,7 +1060,12 @@ app.get('/health', (req, res) => {
       blockchain: resolutionService ? 'connected' : 'disconnected',
       perplexityAPI: apiHealth.isHealthy ? 'healthy' : 'unhealthy'
     },
-    apiHealth: apiHealth
+    apiHealth: {
+      status: apiHealth.isHealthy ? 'HEALTHY' : 'UNHEALTHY',
+      currentKeyIndex: apiHealth.currentKeyIndex,
+      totalKeys: PPLX_API_KEYS.length,
+      lastChecked: apiHealth.lastChecked
+    }
   });
 });
 
@@ -1030,7 +1121,9 @@ const initializeServer = async () => {
       console.log(`📋 Health check: http://localhost:${PORT}/health`);
       console.log(`🔍 API Status: http://localhost:${PORT}/api/health-status`);
       console.log(`🤖 Services: Validation ✅ | Resolution ✅ | Categories ✅`);
+      console.log(`🔑 Available API Keys: ${PPLX_API_KEYS.length}`);
       console.log(`🔧 API Health: ${apiHealth.isHealthy ? 'HEALTHY ✅' : 'UNHEALTHY ❌'}`);
+      console.log(`🔑 Current Key Index: ${apiHealth.currentKeyIndex}`);
       if (resolutionService) {
         console.log(`🔗 Blockchain: Monitoring ✅ | Auto-resolution ✅`);
       }
@@ -1041,6 +1134,19 @@ const initializeServer = async () => {
     console.error('💥 Failed to initialize server:', error);
     process.exit(1);
   }
+};
+
+// Define categories for prediction markets
+const CATEGORIES = {
+  CRYPTO: "Cryptocurrency & Blockchain",
+  POLITICS: "Politics & Governance", 
+  SPORTS: "Sports & Competitions",
+  TECHNOLOGY: "Technology & AI",
+  FINANCE: "Finance & Economics",
+  ENTERTAINMENT: "Entertainment & Media",
+  SCIENCE: "Science & Health",
+  WORLD: "World Events",
+  OTHER: "Other"
 };
 
 initializeServer();
