@@ -72,53 +72,85 @@ let apiHealth = {
 
 async function checkAPIHealth() {
   try {
-    console.log('🏥 Checking Perplexity API health...');
-    
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PPLX_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'llama-3-sonar-large-32k-online',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are a health check responder. Respond with: {"status": "ok"}' 
+    console.log('🏥 Checking API health with model verification...');
+
+    // Complete list of known possible models to try
+    const possibleModels = [
+      'pplx-7b-online',
+      'pplx-70b-online',
+      'sonar-large-online',
+      'llama-3-sonar-large-32k-chat', // unofficial but included for testing
+      'llama-3-70b-instruct',
+      'gpt-5',
+      'gemini-2.5-pro',
+      'claude-4.5-sonnet',
+      'claude-4.5-sonnet-thinking',
+      'grok-4',
+      'o3-pro',
+      'claude-4.1-opus-thinking',
+      'llama2-70b-chat',
+      'gpt-3.5-turbo-1106',
+      'sonar-medium-online'
+    ];
+
+    for (const model of possibleModels) {
+      console.log(`🔍 Trying model: ${model}`);
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const response = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${PPLX_API_KEY}`,
+            'Content-Type': 'application/json'
           },
-          { 
-            role: 'user', 
-            content: 'Health check' 
-          }
-        ],
-        max_tokens: 10,
-        temperature: 0.1
-      }),
-      timeout: 15000
-    });
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { 
+                role: 'user', 
+                content: 'Respond with only: OK' 
+              }
+            ],
+            max_tokens: 5,
+            temperature: 0
+          }),
+          signal: controller.signal
+        });
 
-    const isHealthy = response.ok;
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          console.log(`✅ SUCCESS with model: ${model}`);
+          const data = await response.json();
+          console.log('Response:', data.choices[0]?.message?.content);
+
+          return {
+            healthy: true,
+            workingModel: model,
+            response: data
+          };
+        } else {
+          console.log(`❌ Model ${model} failed: ${response.status}`);
+          const errorText = await response.text();
+          console.log('Error details:', errorText);
+        }
+      } catch (error) {
+        console.log(`❌ Model ${model} error:`, error.message);
+      }
+    }
+
+    throw new Error('All model attempts failed');
     
-    apiHealth = {
-      lastChecked: new Date().toISOString(),
-      isHealthy: isHealthy,
-      lastError: isHealthy ? null : `API returned ${response.status}`
-    };
-
-    console.log(`✅ Perplexity API health: ${isHealthy ? 'HEALTHY' : 'UNHEALTHY'}`);
-    return isHealthy;
-
   } catch (error) {
-    console.error('❌ Perplexity API health check failed:', error.message);
-    
-    apiHealth = {
-      lastChecked: new Date().toISOString(),
-      isHealthy: false,
-      lastError: error.message
+    console.error('💥 All health checks failed:', error.message);
+    return {
+      healthy: false,
+      workingModel: null,
+      error: error.message
     };
-
-    return false;
   }
 }
 
