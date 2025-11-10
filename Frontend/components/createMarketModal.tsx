@@ -87,7 +87,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     setValidationResult(null)
 
     try {
-      console.log("🤖 Calling AI validation API...")
       
       const response = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
         method: 'POST',
@@ -108,7 +107,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       }
 
       const validation = await response.json()
-      console.log("✅ AI validation result:", validation)
       
       setValidationResult(validation)
       return validation.valid
@@ -134,7 +132,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
   // Basic validation fallback
   const performBasicValidation = (question: string, endTime: number, initialYes: string, initialNo: string): ValidationResult => {
-    console.log("🔄 Using basic validation fallback")
     
     const lowerQuestion = question.toLowerCase()
     
@@ -285,14 +282,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
     try {
       const endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
-      
-      console.log("📝 Creating market with params:", {
-        question,
-        category: validationResult?.category || "GENERAL", // Use AI-determined category
-        endTime: endTimeUnix,
-        initialYes,
-        initialNo
-      })
+    
 
       const marketId = await createMarket({
         question,
@@ -302,8 +292,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         initialNo
       })
 
-      console.log("✅ Market created successfully:", marketId)
-      setTxHash("success")
       
       if (onSuccess) {
         onSuccess(marketId)

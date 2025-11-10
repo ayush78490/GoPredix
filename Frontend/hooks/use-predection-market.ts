@@ -118,17 +118,17 @@ export function usePredictionMarket() {
   useEffect(() => {
     const initializeContract = async () => {
       if (!provider) {
-        console.log("❌ No provider available yet")
+        
         setContract(null)
         setIsContractReady(false)
         return
       }
 
       try {
-        console.log("🔍 Initializing contract with address:", PREDICTION_MARKET_ADDRESS)
+        
         
         const network = await provider.getNetwork()
-        console.log("🌐 Current network chain ID:", network.chainId)
+        
         
         // BSC Testnet chain ID is 97
         if (network.chainId !== BigInt(97)) {
@@ -146,17 +146,17 @@ export function usePredictionMarket() {
         
         try {
           const nextId = await (predictionMarketContract as any).nextMarketId()
-          console.log("✅ Contract connection successful. Next market ID:", Number(nextId))
+          
           setContract(predictionMarketContract)
           setIsContractReady(true)
         } catch (testError) {
-          console.error("❌ Contract verification failed:", testError)
+          
           setContract(null)
           setIsContractReady(false)
         }
         
       } catch (error) {
-        console.error("❌ Error initializing contract:", error)
+      
         setContract(null)
         setIsContractReady(false)
       }
@@ -179,13 +179,13 @@ export function usePredictionMarket() {
 
     setIsLoading(true)
     try {
-      console.log('🤖 Validating market question with AI...')
+      
       const validation = await validateMarketWithPerplexity(params)
       if (!validation.valid) {
-        console.error('❌ AI validation failed:', validation.reason)
+        
         throw new Error(validation.reason || 'Market question did not pass AI validation')
       }
-      console.log('✅ AI validation passed. Category:', validation.category)
+      
 
       const contractWithSigner = new ethers.Contract(
         PREDICTION_MARKET_ADDRESS,
@@ -198,7 +198,7 @@ export function usePredictionMarket() {
       const initialNoWei = ethers.parseEther(params.initialNo)
       const totalValue = initialYesWei + initialNoWei
 
-      console.log('📝 Creating market onchain...')
+      
       const tx = await (contractWithSigner as any).createMarket(
         params.question,
         validation.category || 'OTHER', // Use AI-determined category
@@ -208,7 +208,7 @@ export function usePredictionMarket() {
         { value: totalValue }
       )
 
-      console.log('⏳ Waiting for transaction confirmation...')
+      
       const receipt = await tx.wait()
 
       let marketId: number
@@ -224,7 +224,7 @@ export function usePredictionMarket() {
         marketId = Number(nextId) - 1
       }
 
-      console.log('✅ Market created successfully with ID:', marketId)
+      
       return marketId
 
     } catch (error: any) {
@@ -241,10 +241,9 @@ export function usePredictionMarket() {
     if (!contract) throw new Error('Contract not available')
 
     try {
-      console.log(`📊 Fetching market ${marketId}...`)
+      
       const marketData = await (contract as any).markets(BigInt(marketId))
       
-      console.log(`Raw market data for ${marketId}:`, marketData)
 
       // FIX: Remove quotes from the question
       let question = marketData[1] || `Market ${marketId}`
@@ -289,7 +288,7 @@ export function usePredictionMarket() {
         noMultiplier
       }
 
-      console.log(`Processed market ${marketId}:`, market)
+    
       return market
 
     } catch (error) {
@@ -307,17 +306,17 @@ export function usePredictionMarket() {
     if (!contract) throw new Error('Contract not available')
     
     try {
-      console.log(`💰 Getting exact BNB investment for user ${userAddress.slice(0, 6)} in market ${marketId}`)
+      
       
       // Use the new contract function for exact investment tracking
       const investment = await (contract as any).getUserInvestment(BigInt(marketId), userAddress)
       const investmentBNB = ethers.formatEther(investment)
       
-      console.log(`✅ Exact BNB investment in market ${marketId}: ${investmentBNB} BNB`)
+    
       return investmentBNB
       
     } catch (error) {
-      console.error(`❌ Error getting market investment:`, error)
+      
       return "0"
     }
   }, [contract])
@@ -326,17 +325,14 @@ export function usePredictionMarket() {
     if (!contract) throw new Error('Contract not available')
     
     try {
-      console.log(`💰 Getting total BNB investment for user ${userAddress.slice(0, 6)}`)
       
       // Use the new contract function for total across all markets
       const totalInvestment = await (contract as any).getUserTotalInvestment(userAddress)
       const totalInvestmentBNB = ethers.formatEther(totalInvestment)
       
-      console.log(`✅ Total BNB investment across all markets: ${totalInvestmentBNB} BNB`)
       return totalInvestmentBNB
       
     } catch (error) {
-      console.error('❌ Error getting total investment:', error)
       return "0"
     }
   }, [contract])
@@ -351,7 +347,6 @@ export function usePredictionMarket() {
       const marketCount = Number(nextId)
       const positions: UserPosition[] = []
       
-      console.log(`🔍 Scanning ${marketCount} markets for user positions...`)
       
       for (let i = 0; i < marketCount; i++) {
         try {
@@ -389,14 +384,13 @@ export function usePredictionMarket() {
             }
             
             positions.push(position)
-            console.log(`✅ Found position in market ${i}: ${bnbInvested} BNB invested`)
+          
           }
         } catch (err) {
           console.warn(`⚠️ Failed to get position for market ${i}:`, err)
         }
       }
       
-      console.log(`🎯 Found ${positions.length} total positions for user`)
       return positions
       
     } catch (error) {

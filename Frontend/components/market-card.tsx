@@ -5,7 +5,6 @@ import { TrendingUp, Volume2, Clock, User, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { MarketStatus, Outcome } from "@/hooks/use-predection-market"
 
-
 // Define the frontend market interface that matches what homepage provides
 interface FrontendMarket {
   id: string
@@ -40,11 +39,9 @@ interface FrontendMarket {
   liquidity?: number
 }
 
-
 interface MarketCardProps {
   market: FrontendMarket
 }
-
 
 export default function MarketCard({ market }: MarketCardProps) {
   // Safe data extraction with fallbacks - use question if title doesn't exist
@@ -54,11 +51,14 @@ export default function MarketCard({ market }: MarketCardProps) {
   const marketCreator = market.creator || "0x0000000000000000000000000000000000000000"
   const marketEndTime = market.endTime || Math.floor(Date.now() / 1000) + 86400
 
-
   // Use provided odds or calculate from prices
   const yesOdds = market.yesOdds !== undefined ? market.yesOdds : market.yesPrice || 50
   const noOdds = market.noOdds !== undefined ? market.noOdds : market.noPrice || 50
 
+  // Properly check isActive status
+  const isMarketActive = market.isActive !== undefined 
+    ? market.isActive 
+    : market.status === MarketStatus.Open
 
   const formatVolume = (vol: number) => {
     if (vol >= 1000000) return `$${(vol / 1000000).toFixed(1)}m`
@@ -66,11 +66,9 @@ export default function MarketCard({ market }: MarketCardProps) {
     return `$${vol.toFixed(2)}`
   }
 
-
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleDateString()
   }
-
 
   const getDaysLeft = (endTime: number) => {
     const now = Math.floor(Date.now() / 1000)
@@ -80,14 +78,21 @@ export default function MarketCard({ market }: MarketCardProps) {
     return `${days}d left`
   }
 
-
   const formatAddress = (address: string) => {
     if (!address || address.length < 10) return "Unknown"
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
+  const getStatusBadge = (status: MarketStatus, isActive: boolean) => {
+    // If market is explicitly inactive, show inactive status
+    if (!isActive) {
+      return (
+        <span className="inline-block px-2 py-1 rounded-full text-white text-xs font-semibold bg-gray-500">
+          Inactive
+        </span>
+      )
+    }
 
-  const getStatusBadge = (status: MarketStatus) => {
     const statusConfig: Record<MarketStatus, { label: string; color: string }> = {
       [MarketStatus.Open]: { label: "Open", color: "bg-green-500" },
       [MarketStatus.Closed]: { label: "Closed", color: "bg-yellow-500" },
@@ -104,7 +109,6 @@ export default function MarketCard({ market }: MarketCardProps) {
     )
   }
 
-
   const getOutcomeText = (outcome: Outcome) => {
     switch (outcome) {
       case Outcome.Yes: return "YES Won"
@@ -112,7 +116,6 @@ export default function MarketCard({ market }: MarketCardProps) {
       default: return "Pending"
     }
   }
-
 
   const getOutcomeColor = (outcome: Outcome) => {
     switch (outcome) {
@@ -122,11 +125,9 @@ export default function MarketCard({ market }: MarketCardProps) {
     }
   }
 
-
   // Calculate multipliers from odds
   const yesMultiplier = yesOdds > 0 ? (100 / yesOdds).toFixed(2) : "0.00"
   const noMultiplier = noOdds > 0 ? (100 / noOdds).toFixed(2) : "0.00"
-
 
   // Safe parsing for pool values
   const yesPool = parseFloat(market.yesPool || "0")
@@ -134,24 +135,32 @@ export default function MarketCard({ market }: MarketCardProps) {
   const totalBacking = parseFloat(market.totalBacking || "0")
   const volume = market.volume || 0
 
-
   // Check if market data is valid
   const isDataValid = Boolean(market.question || market.title)
 
-    console.log("The market slug is ",market.slug)
+  console.log("The market slug is ", market.slug)
 
   return (
     <Link href={`/market/${market.slug || market.id}`} className="block">
-      <Card className="overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
+      <Card className={`overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50 ${
+        !isMarketActive ? 'opacity-60 grayscale' : ''
+      }`}>
         <div className="p-4">
           {/* Header - Category and Status */}
           <div className="flex items-center justify-between mb-3">
             <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
               {marketCategory}
             </div>
-            {getStatusBadge(market.status)}
+            {getStatusBadge(market.status, isMarketActive)}
           </div>
 
+          {/* Inactive Market Warning */}
+          {!isMarketActive && (
+            <div className="mb-2 p-2 bg-gray-100 border border-gray-300 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-gray-600" />
+              <span className="text-xs text-gray-700">Market is inactive</span>
+            </div>
+          )}
 
           {/* Data Validation Warning */}
           {!isDataValid && (
@@ -161,12 +170,13 @@ export default function MarketCard({ market }: MarketCardProps) {
             </div>
           )}
 
-
           {/* Question/Title */}
           <h3 className="font-bold text-base mb-2 line-clamp-2 text-card-foreground leading-tight">
             {marketTitle}
+            {!isMarketActive && (
+              <span className="ml-2 text-xs text-gray-500">(Inactive)</span>
+            )}
           </h3>
-
 
           {/* Description */}
           {marketDescription && marketDescription !== marketTitle && (
@@ -174,7 +184,6 @@ export default function MarketCard({ market }: MarketCardProps) {
               {marketDescription}
             </p>
           )}
-
 
           {/* Resolution Info for resolved markets */}
           {market.status === MarketStatus.Resolved && (
@@ -195,31 +204,48 @@ export default function MarketCard({ market }: MarketCardProps) {
             </div>
           )}
 
-
           {/* Odds Section */}
           <div className="grid grid-cols-2 gap-3 mb-4">
             {/* YES */}
-            <div className="bg-green-950/20 rounded-lg p-3 border border-green-800/30">
+            <div className={`rounded-lg p-3 border ${
+              isMarketActive ? 'bg-green-950/20 border-green-800/30' : 'bg-gray-100 border-gray-300'
+            }`}>
               <div className="text-xs text-muted-foreground mb-1">YES</div>
-              <div className="text-xl font-bold text-green-500">{yesOdds.toFixed(1)}%</div>
-              <div className="text-xs text-green-400 mt-1">{yesMultiplier}x return</div>
+              <div className={`text-xl font-bold ${
+                isMarketActive ? 'text-green-500' : 'text-gray-500'
+              }`}>
+                {yesOdds.toFixed(1)}%
+              </div>
+              <div className={`text-xs mt-1 ${
+                isMarketActive ? 'text-green-400' : 'text-gray-500'
+              }`}>
+                {yesMultiplier}x return
+              </div>
               <div className="text-xs text-muted-foreground mt-1">
                 Pool: {yesPool.toFixed(2)} BNB
               </div>
             </div>
 
-
             {/* NO */}
-            <div className="bg-red-950/20 rounded-lg p-3 border border-red-800/30">
+            <div className={`rounded-lg p-3 border ${
+              isMarketActive ? 'bg-red-950/20 border-red-800/30' : 'bg-gray-100 border-gray-300'
+            }`}>
               <div className="text-xs text-muted-foreground mb-1">NO</div>
-              <div className="text-xl font-bold text-red-500">{noOdds.toFixed(1)}%</div>
-              <div className="text-xs text-red-400 mt-1">{noMultiplier}x return</div>
+              <div className={`text-xl font-bold ${
+                isMarketActive ? 'text-red-500' : 'text-gray-500'
+              }`}>
+                {noOdds.toFixed(1)}%
+              </div>
+              <div className={`text-xs mt-1 ${
+                isMarketActive ? 'text-red-400' : 'text-gray-500'
+              }`}>
+                {noMultiplier}x return
+              </div>
               <div className="text-xs text-muted-foreground mt-1">
                 Pool: {noPool.toFixed(2)} BNB
               </div>
             </div>
           </div>
-
 
           {/* Market Info */}
           <div className="space-y-2 text-xs text-muted-foreground pb-3 border-b border-border">
@@ -248,7 +274,6 @@ export default function MarketCard({ market }: MarketCardProps) {
             </div>
           </div>
 
-
           {/* Liquidity Info */}
           <div className="mt-2 text-xs text-muted-foreground">
             <div className="flex items-center justify-between">
@@ -257,9 +282,8 @@ export default function MarketCard({ market }: MarketCardProps) {
             </div>
           </div>
 
-
           {/* Resolution Info */}
-          {market.status === MarketStatus.ResolutionRequested && (
+          {market.status === MarketStatus.ResolutionRequested && isMarketActive && (
             <div className="mt-3 p-2 bg-blue-950/20 rounded-lg border border-blue-800/30">
               <div className="text-xs text-blue-400 font-semibold">
                 ⏳ AI Resolution Pending
@@ -270,8 +294,7 @@ export default function MarketCard({ market }: MarketCardProps) {
             </div>
           )}
 
-
-          {market.status === MarketStatus.Disputed && (
+          {market.status === MarketStatus.Disputed && isMarketActive && (
             <div className="mt-3 p-2 bg-red-950/20 rounded-lg border border-red-800/30">
               <div className="text-xs text-red-400 font-semibold">
                 ⚠️ Under Dispute
@@ -282,11 +305,11 @@ export default function MarketCard({ market }: MarketCardProps) {
             </div>
           )}
 
-
           {/* Action Text */}
           <div className="mt-3 text-center">
             <p className="text-xs text-muted-foreground">
-              {market.status === MarketStatus.Open ? "Click to trade" : 
+              {!isMarketActive ? "Market inactive" :
+               market.status === MarketStatus.Open ? "Click to trade" : 
                market.status === MarketStatus.Resolved ? "Click to view results" :
                "Click to view details"}
             </p>

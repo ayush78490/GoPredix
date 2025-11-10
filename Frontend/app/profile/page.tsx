@@ -6,18 +6,19 @@ import { usePredictionMarket, MarketStatus, Outcome } from "@/hooks/use-predecti
 import Header from "@/components/header"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, Coins, Copy, ExternalLink, Wallet, BarChart3 } from "lucide-react"
+import { Loader2, Coins, Copy, ExternalLink, Wallet, BarChart3, CheckCircle, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import LightRays from "@/components/LightRays"
 
 export default function ProfilePage() {
   const { account, connectWallet } = useWeb3Context()
-  const { getUserPositions, contractAddress, getMarketInvestment, getCurrentMultipliers } = usePredictionMarket()
+  const { getUserPositions, contractAddress, getMarketInvestment, getCurrentMultipliers, redeem } = usePredictionMarket()
 
   const [positions, setPositions] = useState<any[]>([])
   const [marketInvestments, setMarketInvestments] = useState<{ [key: string]: string }>({})
   const [marketOdds, setMarketOdds] = useState<{ [key: string]: { yesMultiplier: number, noMultiplier: number, yesPrice: number, noPrice: number } }>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [redeemingMarketId, setRedeemingMarketId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -74,10 +75,101 @@ export default function ProfilePage() {
     loadData()
   }, [account, getUserPositions, getMarketInvestment, getCurrentMultipliers])
 
+  // Improved market activity check
+  const isMarketActive = (market: any): boolean => {
+    // First check explicit isActive flag if it exists
+    if (market.isActive !== undefined) {
+      return market.isActive
+    }
+    
+    // Fallback logic based on status and timing
+    const now = Math.floor(Date.now() / 1000)
+    const isOpenStatus = market.status === MarketStatus.Open
+    const hasNotEnded = market.endTime > now
+    
+    // Market is active if it's open and hasn't ended, OR if it's resolved but still within redemption period
+    return isOpenStatus && hasNotEnded
+  }
+
+  // Enhanced status checking with activity
+  const getMarketStatusInfo = (market: any) => {
+    const active = isMarketActive(market)
+    const status = market.status as MarketStatus
+    const now = Math.floor(Date.now() / 1000)
+    
+    // If market is explicitly inactive
+    if (!active) {
+      return {
+        label: "Inactive",
+        color: "bg-gray-500 text-white",
+        description: "Market is not active for trading"
+      }
+    }
+
+    const statusConfig: Record<MarketStatus, { label: string; color: string; description: string }> = {
+      [MarketStatus.Open]: { 
+        label: "Active", 
+        color: "bg-green-500 text-white",
+        description: market.endTime > now ? "Open for trading" : "Trading ended, awaiting resolution"
+      },
+      [MarketStatus.Closed]: { 
+        label: "Closed", 
+        color: "bg-yellow-500 text-white",
+        description: "Trading closed, pending resolution"
+      },
+      [MarketStatus.ResolutionRequested]: { 
+        label: "Resolving", 
+        color: "bg-blue-500 text-white",
+        description: "AI resolution in progress"
+      },
+      [MarketStatus.Resolved]: { 
+        label: "Resolved", 
+        color: "bg-purple-500 text-white",
+        description: "Market has been resolved"
+      },
+      [MarketStatus.Disputed]: { 
+        label: "Disputed", 
+        color: "bg-red-500 text-white",
+        description: "Resolution under dispute"
+      },
+    }
+    
+    return statusConfig[status] || { 
+      label: "Unknown", 
+      color: "bg-gray-500 text-white",
+      description: "Status unknown"
+    }
+  }
+
+  const handleRedeem = async (marketId: string) => {
+    if (!account) return
+    
+    setRedeemingMarketId(marketId)
+    try {
+      await redeem(Number(marketId))
+      // Refresh positions after successful redemption
+      const userPositions = await getUserPositions(account)
+      setPositions(userPositions)
+      
+      // Refresh market investments
+      const updatedInvestment = await getMarketInvestment(account, Number(marketId))
+      setMarketInvestments(prev => ({
+        ...prev,
+        [marketId]: updatedInvestment
+      }))
+    } catch (error) {
+      console.error("Failed to redeem winnings:", error)
+    } finally {
+      setRedeemingMarketId(null)
+    }
+  }
+
+  // Enhanced statistics calculation
   const totalInvestment = Object.values(marketInvestments).reduce((acc, val) => acc + parseFloat(val || "0"), 0)
   const totalMarkets = positions.length
-  const activeMarkets = positions.filter(pos => pos.market.status === MarketStatus.Open).length
+  const activeMarkets = positions.filter(pos => isMarketActive(pos.market)).length
   const resolvedMarkets = positions.filter(pos => pos.market.status === MarketStatus.Resolved).length
+  const inactiveMarkets = positions.filter(pos => !isMarketActive(pos.market)).length
 
   const copyToClipboard = (text: string) => { navigator.clipboard.writeText(text) }
   const getBlockExplorerUrl = (address: string) => `https://testnet.bscscan.com/address/${address}`
@@ -90,6 +182,74 @@ export default function ProfilePage() {
     }
     return { outcomeText: "Even odds", confidence: 50 }
   }
+
+  // Improved hasWinningTokens function with better type checking and debugging
+  const hasWinningTokens = (position: any): boolean => {
+    const market = position.market
+    
+    // Only check resolved markets
+    if (market.status !== MarketStatus.Resolved) {
+      return false
+    }
+    
+    // Safely parse balances
+    const yesBalance = parseFloat(position.yesBalance || "0")
+    const noBalance = parseFloat(position.noBalance || "0")
+    
+    // Debug logging
+    // console.log('Checking winning tokens for market:', {
+    //   marketId: market.id,
+    //   status: market.status,
+    //   outcome: market.outcome,
+    //   yesBalance: yesBalance,
+    //   noBalance: noBalance,
+    //   hasYesTokens: yesBalance > 0,
+    //   hasNoTokens: noBalance > 0
+    // })
+    
+    // Check if user has tokens for the winning outcome
+    if (market.outcome === Outcome.Yes && yesBalance > 0.0001) {
+      
+      return true
+    }
+    
+    if (market.outcome === Outcome.No && noBalance > 0.0001) {
+      
+      return true
+    }
+    
+    return false
+  }
+
+  // Improved calculatePotentialWinnings function
+  const calculatePotentialWinnings = (position: any): string => {
+    const market = position.market
+    
+    if (market.status !== MarketStatus.Resolved) {
+      return "0"
+    }
+    
+    // Safely parse balances
+    const yesBalance = parseFloat(position.yesBalance || "0")
+    const noBalance = parseFloat(position.noBalance || "0")
+    
+    if (market.outcome === Outcome.Yes && yesBalance > 0) {
+      return yesBalance.toFixed(4)
+    } else if (market.outcome === Outcome.No && noBalance > 0) {
+      return noBalance.toFixed(4)
+    }
+    
+    return "0"
+  }
+
+  // Calculate total winnings across all positions
+  const totalWinnings = positions.reduce((total, position) => {
+    if (hasWinningTokens(position)) {
+      const winnings = parseFloat(calculatePotentialWinnings(position) || "0")
+      return total + winnings
+    }
+    return total
+  }, 0)
 
   if (!account) {
     return (
@@ -194,7 +354,7 @@ export default function ProfilePage() {
           </div>
 
           {positions.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
               <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <Coins className="w-5 h-5 text-green-500" />
@@ -207,14 +367,36 @@ export default function ProfilePage() {
                 <p className="text-sm text-muted-foreground">Markets Traded</p>
               </Card>
               <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="text-2xl font-bold mb-2">{positions.filter(pos => pos.market.status === MarketStatus.Open).length}</div>
+                <div className="text-2xl font-bold mb-2">{activeMarkets}</div>
                 <p className="text-sm text-muted-foreground">Active Positions</p>
               </Card>
               <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="text-2xl font-bold mb-2">{positions.filter(pos => pos.market.status === MarketStatus.Resolved).length}</div>
+                <div className="text-2xl font-bold mb-2">{resolvedMarkets}</div>
                 <p className="text-sm text-muted-foreground">Resolved</p>
               </Card>
+              <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
+                <div className="text-2xl font-bold mb-2">{inactiveMarkets}</div>
+                <p className="text-sm text-muted-foreground">Inactive</p>
+              </Card>
             </div>
+          )}
+
+          {/* Total Winnings Banner */}
+          {totalWinnings > 0 && (
+            <Card className="mb-6 p-4 bg-gradient-to-r from-green-500 to-emerald-600 border-green-400 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-6 h-6 text-white" />
+                  <div>
+                    <p className="text-white font-semibold">Total Winnings Available</p>
+                    <p className="text-white text-lg font-bold">{totalWinnings.toFixed(4)} BNB</p>
+                  </div>
+                </div>
+                <div className="text-white text-sm">
+                  Ready to claim from {positions.filter(pos => hasWinningTokens(pos)).length} market(s)
+                </div>
+              </div>
+            </Card>
           )}
 
           {!isLoading && positions.length === 0 && (
@@ -258,47 +440,48 @@ export default function ProfilePage() {
                 const investment = parseFloat(investmentStr)
                 const odds = marketOdds[position.market.id] || { yesPrice: 5000, noPrice: 5000 }
                 const predicted = getPredictedOutcome(odds.yesPrice, odds.noPrice)
-
-                // Assert the status key type for safe indexing
-                const statusColors: Record<MarketStatus, string> = {
-                  [MarketStatus.Open]: "bg-green-100 text-green-800",
-                  [MarketStatus.Closed]: "bg-yellow-100 text-yellow-800",
-                  [MarketStatus.ResolutionRequested]: "bg-blue-100 text-blue-800",
-                  [MarketStatus.Resolved]: "bg-purple-100 text-purple-800",
-                  [MarketStatus.Disputed]: "bg-red-100 text-red-800",
-                }
-                const statusLabels: Record<MarketStatus, string> = {
-                  [MarketStatus.Open]: "Active",
-                  [MarketStatus.Closed]: "Closed",
-                  [MarketStatus.ResolutionRequested]: "Resolving",
-                  [MarketStatus.Resolved]: "Resolved",
-                  [MarketStatus.Disputed]: "Disputed",
-                }
-                const status = position.market.status as MarketStatus
-                const statusColor = statusColors[status] ?? "bg-gray-100 text-gray-800"
-                const statusLabel = statusLabels[status] ?? "Unknown"
+                const market = position.market
+                const hasWinnings = hasWinningTokens(position)
+                const potentialWinnings = calculatePotentialWinnings(position)
+                const marketActive = isMarketActive(market)
+                const statusInfo = getMarketStatusInfo(market)
 
                 return (
-                  <Card key={index} className="p-6 hover:shadow-lg transition-shadow backdrop-blur-sm bg-card/80">
+                  <Card key={index} className={`p-6 hover:shadow-lg transition-shadow backdrop-blur-sm bg-card/80 ${
+                    !marketActive ? 'opacity-70 border-gray-400' : 'border-2'
+                  }`}>
+                    {/* Inactive Market Warning */}
+                    {!marketActive && (
+                      <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-700">This market is no longer active for trading</span>
+                      </div>
+                    )}
+
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <Link href={`/market/${position.market.id}`}>
-                            <h3 className="text-lg font-semibold hover:text-primary transition-colors cursor-pointer line-clamp-2">
-                              {position.market.question}
+                          <Link href={`/market/${market.id}`}>
+                            <h3 className={`text-lg font-semibold hover:text-primary transition-colors cursor-pointer line-clamp-2 ${
+                              !marketActive ? 'text-gray-600' : ''
+                            }`}>
+                              {market.question}
+                              {!marketActive && (
+                                <span className="ml-2 text-xs text-gray-500">(Inactive)</span>
+                              )}
                             </h3>
                           </Link>
-                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusColor} backdrop-blur-sm`}>
-                            {statusLabel}
+                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color} backdrop-blur-sm`}>
+                            {statusInfo.label}
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                          <span>Market ID: {position.market.id}</span>
-                          <span>Category: {position.market.category || "General"}</span>
-                          {status === MarketStatus.Resolved && (
+                          <span>Market ID: {market.id}</span>
+                          <span>Category: {market.category || "General"}</span>
+                          {market.status === MarketStatus.Resolved && (
                             <span className="font-medium">
                               Outcome: {(() => {
-                                switch (position.market.outcome as Outcome) {
+                                switch (market.outcome as Outcome) {
                                   case Outcome.Yes: return "YES Won"
                                   case Outcome.No: return "NO Won"
                                   default: return "Pending"
@@ -306,49 +489,136 @@ export default function ProfilePage() {
                               })()}
                             </span>
                           )}
+                          {!marketActive && (
+                            <span className="text-gray-500">• Inactive</span>
+                          )}
                         </div>
+                        <p className="text-xs text-muted-foreground mt-1">{statusInfo.description}</p>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-                      <div className="bg-primary/10 rounded-lg p-3 border border-primary/20 backdrop-blur-sm">
+                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
+                        marketActive ? 'bg-primary/10 border-primary/20' : 'bg-gray-100 border-gray-300'
+                      }`}>
                         <p className="text-xs text-muted-foreground mb-1">BNB Invested</p>
-                        <p className="text-lg font-bold text-primary flex items-center gap-1"><Coins className="w-4 h-4" />{investment.toFixed(4)}</p>
+                        <p className={`text-lg font-bold flex items-center gap-1 ${
+                          marketActive ? 'text-primary' : 'text-gray-600'
+                        }`}>
+                          <Coins className="w-4 h-4" />{investment.toFixed(4)}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1">Total in this market</p>
                       </div>
-                      <div className="bg-primary/10 rounded-lg p-3 border border-primary/20 backdrop-blur-sm">
+                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
+                        marketActive ? 'bg-green-50 border-green-200' : 'bg-gray-100 border-gray-300'
+                      }`}>
                         <p className="text-xs text-muted-foreground mb-1">YES Tokens</p>
-                        <p className="text-lg font-bold text-green-600 flex items-center gap-1">{parseFloat(position.yesBalance).toFixed(4)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">≈ {(parseFloat(position.yesBalance) * (position.market.yesPrice || 50) / 100).toFixed(4)} BNB</p>
+                        <p className={`text-lg font-bold flex items-center gap-1 ${
+                          marketActive ? 'text-green-600' : 'text-gray-600'
+                        }`}>
+                          {parseFloat(position.yesBalance || "0").toFixed(4)}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ≈ {(parseFloat(position.yesBalance || "0") * (odds.yesPrice || 50) / 100).toFixed(4)} BNB
+                        </p>
                       </div>
-                      <div className="bg-primary/10 rounded-lg p-3 border border-primary/20 backdrop-blur-sm">
+                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
+                        marketActive ? 'bg-red-50 border-red-200' : 'bg-gray-100 border-gray-300'
+                      }`}>
                         <p className="text-xs text-muted-foreground mb-1">NO Tokens</p>
-                        <p className="text-lg font-bold text-red-600 flex items-center gap-1">{parseFloat(position.noBalance).toFixed(4)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">≈ {(parseFloat(position.noBalance) * (position.market.noPrice || 50) / 100).toFixed(4)} BNB</p>
+                        <p className={`text-lg font-bold flex items-center gap-1 ${
+                          marketActive ? 'text-red-600' : 'text-gray-600'
+                        }`}>
+                          {parseFloat(position.noBalance || "0").toFixed(4)}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ≈ {(parseFloat(position.noBalance || "0") * (odds.noPrice || 50) / 100).toFixed(4)} BNB
+                        </p>
                       </div>
-                      <div className="bg-primary/10 rounded-lg p-3 border border-primary/20 backdrop-blur-sm">
+                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
+                        marketActive ? 'bg-blue-50 border-blue-200' : 'bg-gray-100 border-gray-300'
+                      }`}>
                         <p className="text-xs text-muted-foreground mb-1">Predicted Outcome</p>
-                        <p className="text-lg font-bold text-blue-600">{predicted.outcomeText}</p>
+                        <p className={`text-lg font-bold ${
+                          marketActive ? 'text-blue-600' : 'text-gray-600'
+                        }`}>
+                          {predicted.outcomeText}
+                        </p>
                         <p className="text-xs text-muted-foreground">{predicted.confidence.toFixed(2)}% confidence</p>
                       </div>
-                      <div className="bg-primary/10 rounded-lg p-3 border border-primary/20 backdrop-blur-sm">
+                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
+                        marketActive ? 'bg-primary/10 border-primary/20' : 'bg-gray-100 border-gray-300'
+                      }`}>
                         <p className="text-xs text-muted-foreground mb-1">Current Odds</p>
                         <div className="space-y-1">
-                          <div className="flex justify-between text-sm"><span className="text-green-600">YES:</span><span className="font-medium">{(odds.yesPrice / 100).toFixed(1)}%</span></div>
-                          <div className="flex justify-between text-sm"><span className="text-red-600">NO:</span><span className="font-medium">{(odds.noPrice / 100).toFixed(1)}%</span></div>
+                          <div className="flex justify-between text-sm">
+                            <span className={marketActive ? "text-green-600" : "text-gray-600"}>YES:</span>
+                            <span className="font-medium">{(odds.yesPrice / 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className={marketActive ? "text-red-600" : "text-gray-600"}>NO:</span>
+                            <span className="font-medium">{(odds.noPrice / 100).toFixed(1)}%</span>
+                          </div>
                         </div>
                       </div>
                     </div>
 
+                    {/* Winnings Display for Resolved Markets */}
+                    {market.status === MarketStatus.Resolved && hasWinnings && (
+                      <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                            <div>
+                              <p className="text-sm font-medium text-green-800">Winnings Available</p>
+                              <p className="text-lg font-bold text-green-600">
+                                {potentialWinnings} BNB
+                              </p>
+                              <p className="text-xs text-green-600">
+                                {market.outcome === Outcome.Yes ? 'YES' : 'NO'} tokens can be redeemed for BNB
+                              </p>
+                            </div>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            className="bg-green-600 hover:bg-green-700 backdrop-blur-sm flex items-center gap-2"
+                            onClick={() => handleRedeem(market.id.toString())}
+                            disabled={redeemingMarketId === market.id.toString()}
+                          >
+                            {redeemingMarketId === market.id.toString() ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                            Claim {potentialWinnings} BNB
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No Winnings Message for Resolved Markets */}
+                    {market.status === MarketStatus.Resolved && !hasWinnings && (
+                      <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                          <p className="text-sm text-gray-600">
+                            Market resolved - {market.outcome === Outcome.Yes ? 'YES' : 'NO'} won. 
+                            {parseFloat(position.yesBalance || "0") > 0 || parseFloat(position.noBalance || "0") > 0 
+                              ? " You don't have winning tokens for this outcome." 
+                              : " You didn't participate in this market."}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex gap-3">
-                      <Link href={`/market/${position.market.id}`}>
+                      <Link href={`/market/${market.id}`}>
                         <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">View Market</Button>
                       </Link>
-                      {status === MarketStatus.Resolved && (
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700 backdrop-blur-sm">Redeem Winnings</Button>
-                      )}
-                      {status === MarketStatus.Open && (
-                        <Link href={`/market/${position.market.id}?tab=trade`}>
+                      
+                      {/* Trade More Button for Active Markets */}
+                      {marketActive && market.status === MarketStatus.Open && (
+                        <Link href={`/market/${market.id}?tab=trade`}>
                           <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">Trade More</Button>
                         </Link>
                       )}
