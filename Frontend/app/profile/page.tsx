@@ -364,7 +364,7 @@ export default function ProfilePage() {
           />
         </div>
 
-        <div className="relative z-10">
+        <div className="relative z-10 bg-black/80 min-h-screen">
           <Header />
           <div className="max-w-4xl mx-auto px-4 py-12 text-center">
             <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-muted flex items-center justify-center backdrop-blur-sm bg-card/80">

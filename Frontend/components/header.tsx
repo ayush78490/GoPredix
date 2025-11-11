@@ -2,87 +2,76 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Bell } from "lucide-react"
 import Link from "next/link"
 import { useWeb3Context } from "@/lib/wallet-context"
-import MyImage from '@/public/project-logo.jpg';
+import MyImage from '@/public/logo.png' // or your actual logo import
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false)
   const { account, connectWallet, disconnectWallet } = useWeb3Context()
 
-  const categories = ["All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy"]
+  // const categories = ["All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy"]
   const displayAddress = account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"
 
   return (
-    <header className="border-b border-border bg-card">
-      <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-8 h-8 rounded-lg  flex items-center justify-center">
-               <img src="/logo.png" alt="Project Logo" />
+    <header className="w-full py-5">
+      <div className="max-w-7xl mx-auto px-2">
+        <div className="flex items-center justify-between bg-[#16131e]/10 rounded-full px-6 py-4 shadow-sm border border-[#23222f]">
+          {/* Left: Logo and nav */}
+          <div className="flex items-center gap-8">
+            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition">
+              <div className="w-8 h-8 rounded-xl overflow-hidden flex items-center justify-center">
+                <img
+                  src={MyImage.src || "/logo.png"}
+                  alt="Project Logo"
+                  className="w-6 h-6 object-contain scale-[1.5]"
+                />
 
-            </div>
-            <span className="text-3xl font-bold">PrediX</span>
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-1">
-            {/* {categories.slice(0, 4).map((cat) => (
-              <Button key={cat} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                {cat}
-              </Button>
-            ))} */}
-            <div className="relative">
-              {/* <Button
+              </div>
+            </Link>
+            <Link href="/">
+            <nav className="hidden md:flex items-center gap-2">
+              <Button
                 variant="ghost"
                 size="sm"
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1"
-                onClick={() => setIsOpen(!isOpen)}
+                className="text-white/80 mr-8 text-2xl px-0 py-2 rounded-2xl"
               >
-                More
-                <ChevronDown className="w-4 h-4" />
-              </Button> */}
-              {isOpen && (
-                <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-lg shadow-lg py-2 z-50">
-                  {categories.slice(4).map((cat) => (
-                    <Button
-                      key={cat}
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start text-muted-foreground hover:text-foreground"
-                    >
-                      {cat}
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-4">
-          {/* Portfolio Link */}
-          <Link href="/profile">
-            <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground">
-              Portfolio
-            </Button>
-          </Link>
-
-          {/* Wallet Section */}
-          {account ? (
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" disabled>
-                {displayAddress}
+                GOPREDIX
               </Button>
-              <Button size="sm" variant="outline" onClick={disconnectWallet}>
-                Disconnect
+            </nav>
+            </Link>
+          </div>
+          {/* Right: Bell + Portfolio/Wallet */}
+          <div className="flex items-center gap-3">
+            {/* <button type="button" className="rounded-full p-2 bg-[#15121d] hover:bg-[#271f40] border border-[#2c2442] flex items-center justify-center">
+              <Bell className="text-[#f5f5fa] w-5 h-5" />
+            </button> */}
+            <Link href="/profile">
+              <Button
+                size="sm" variant="ghost" className="text-white/80 hover:text-white rounded-full px-5">
+                Portfolio
               </Button>
-            </div>
-          ) : (
-            <Button size="sm" variant="outline" onClick={connectWallet}>
-              Connect Wallet
-            </Button>
-          )}
+            </Link>
+            {account ? (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="rounded-full px-5 bg-[#271f40] text-white border-none cursor-default" disabled>
+                  {displayAddress}
+                </Button>
+                <Button size="sm" variant="secondary" className="rounded-full px-5" onClick={disconnectWallet}>
+                  Disconnect
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="rounded-full px-7 py-2 font-semibold text-black bg-[#ECFEFF]/70 hover:bg-[#ECFEFF] transition"
+                onClick={connectWallet}
+              >
+                Login
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </header>

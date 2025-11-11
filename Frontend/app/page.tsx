@@ -160,41 +160,42 @@ export default function Home() {
       </div>
 
       {/* Content overlay for better readability */}
-      <div className="relative z-10 bg-black/80">
+      <div className="relative z-10 bg-black/80 min-h-screen">
         <Header />
 
         <div className="max-w-7xl mx-auto px-4 py-8">
           {/* Hero Section */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
-            <div>
-              <h1 className="text-4xl md:text-5xl font-bold mb-3 text-balance">Predict Market Outcomes</h1>
-              <p className="text-lg text-muted-foreground max-w-2xl">
-                Trade your predictions on major events. Buy YES or NO tokens based on your beliefs about the future.
-              </p>
+          {account && (
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
+              <div>
+                <h1 className="text-4xl md:text-5xl font-bold mb-3 text-balance">Predict Market Outcomes</h1>
+                <p className="text-lg text-muted-foreground max-w-2xl">
+                  Trade your predictions on major events. Buy YES or NO tokens based on your beliefs about the future.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 mt-4 md:mt-0">
+                <Button
+                  onClick={handleLeaderboardClick}
+                  size="lg"
+                  variant="outline"
+                  className="border-primary text-primary hover:bg-primary hover:text-black backdrop-blur-sm bg-card/80"
+                >
+                  <Trophy className="w-5 h-5 mr-2" />
+                  Leaderboard
+                </Button>
+                <Button
+                  onClick={() => setShowCreateModal(true)}
+                  size="lg"
+                  className="bg-black text-white hover:bg-black/90"
+                  disabled={!account}
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create Market
+                </Button>
+              </div>
             </div>
+          )}
 
-            <div className="flex flex-col sm:flex-row gap-3 mt-4 md:mt-0">
-              <Button
-                onClick={handleLeaderboardClick}
-                size="lg"
-                variant="outline"
-                className="border-primary text-primary hover:bg-primary hover:text-black backdrop-blur-sm bg-card/80"
-              >
-                <Trophy className="w-5 h-5 mr-2" />
-                Leaderboard
-              </Button>
-              
-              <Button
-                onClick={() => setShowCreateModal(true)}
-                size="lg"
-                className="bg-black text-white hover:bg-black/90"
-                disabled={!account}
-              >
-                <Plus className="w-5 h-5 mr-2" />
-                Create Market
-              </Button>
-            </div>
-          </div>
 
           {/* Network Warning */}
           {account && !isCorrectNetwork && (
@@ -282,37 +283,44 @@ export default function Home() {
           )}
 
           {/* Wallet Not Connected State */}
-          {!account && isInitialized && !isLoading && (
-            <div className="text-center py-16 border-2 border-dashed border-border rounded-lg backdrop-blur-sm bg-card/80">
-              <div className="max-w-md mx-auto">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                  <Wallet className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2">Connect Your Wallet</h3>
-                <p className="text-muted-foreground mb-6">
-                  Connect your wallet to view prediction markets and start trading.
+          {!account && isInitialized && (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] ">
+              {/* GOPREDIX header */}
+              <h1 className="text-4xl md:text-5xl font-bold mb-10 tracking-widest text-white ">GOPREDIX</h1>
+              {/* Centered design from reference image */}
+              <div className="max-w-2xl w-full text-center flex flex-col items-center">
+                <p className="text-base md:text-lg text-white mb-10" style={{ fontFamily: 'monospace' }}>
+                  Predict the outcome of future events and earn rewards for your accuracy.
+                  Create your own markets on any topic you can imagine.
                 </p>
-                <Button
-                  onClick={connectWallet}
-                  disabled={isConnecting}
-                  size="lg"
-                  className="bg-black text-white hover:bg-black/90"
-                >
-                  {isConnecting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      <Wallet className="w-5 h-5 mr-2" />
-                      Connect Wallet
-                    </>
-                  )}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                  <button
+                    className="px-8 py-3 rounded-full bg-[#ECFEFF]/50 text-white font-medium text-lg shadow hover:bg-[#ECFEFF] hover:text-black transition"
+                  >
+                    Explore Markets
+                  </button>
+                  <button
+                    className="px-8 py-3 rounded-full border border-[#ECFEFF]  font-medium text-lg text-white bg-transparent hover:bg-[#ECFEFF] hover:text-black transition"
+                    onClick={() => {
+                      if (!account) {
+                        connectWallet();
+                      } else {
+                        setShowCreateModal(true);
+                      }
+                    }}
+                  >
+                    Create Market
+                  </button>
+
+                </div>
               </div>
             </div>
           )}
+
+
+
+
+
 
           {/* Empty State - No markets created yet */}
           {account && isCorrectNetwork && !isLoading && !error && formattedMarkets.length === 0 && (
