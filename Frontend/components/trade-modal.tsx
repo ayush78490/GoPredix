@@ -9,7 +9,6 @@ import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarket } from "@/hooks/use-predection-market"
 import { ethers } from "ethers"
 
-
 interface TradeModalProps {
   market: any;
   outcome: "YES" | "NO" | null;
@@ -23,6 +22,7 @@ export default function TradeModal({
   onOutcomeChange,
   onClose
 }: TradeModalProps) {
+  // states as before...
   const [amount, setAmount] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,47 +34,33 @@ export default function TradeModal({
   const [slippage, setSlippage] = useState<number>(5)
   const [isEstimating, setIsEstimating] = useState(false)
 
+  // wallet and contract hooks
   const { account, connectWallet, isCorrectNetwork, switchNetwork, signer } = useWeb3Context()
   const { contract, getCurrentMultipliers } = usePredictionMarket()
 
   const numAmount = parseFloat(amount) || 0
   const hasAmount = numAmount >= 0.001
 
-  // Price normalization from basis points (0-10000) to percentage (0-100)
-  const normalizedYes = useMemo(() => {
-    if (yesPrice === null) return null
-    return yesPrice / 100
-  }, [yesPrice])
+  // Price normalization
+  const normalizedYes = useMemo(() => yesPrice !== null ? yesPrice / 100 : null, [yesPrice])
+  const normalizedNo = useMemo(() => noPrice !== null ? noPrice / 100 : null, [noPrice])
 
-  const normalizedNo = useMemo(() => {
-    if (noPrice === null) return null
-    return noPrice / 100
-  }, [noPrice])
+  // Odds calculations
+  const yesOdds = useMemo(() => (normalizedYes && normalizedYes > 0) ? 1 / normalizedYes : null, [normalizedYes])
+  const noOdds = useMemo(() => (normalizedNo && normalizedNo > 0) ? 1 / normalizedNo : null, [normalizedNo])
 
-  // Implied odds calculation (potential multiplier if you win)
-  const yesOdds = useMemo(() => {
-    if (!normalizedYes || normalizedYes <= 0) return null
-    return 1 / normalizedYes
-  }, [normalizedYes])
-
-  const noOdds = useMemo(() => {
-    if (!normalizedNo || normalizedNo <= 0) return null
-    return 1 / normalizedNo
-  }, [normalizedNo])
-
-  // Expected payout calculation (total return if outcome is correct)
+  // Expected payout
   const expectedPayout = useMemo(() => {
     if (!numAmount || !expectedOut || numAmount <= 0) return null
     return parseFloat(expectedOut)
   }, [numAmount, expectedOut])
 
-  // Payout multiplier (how much you get back for your investment)
+  // Payout multiplier
   const payoutMultiplier = useMemo(() => {
     if (!numAmount || !expectedPayout || numAmount <= 0) return null
     return expectedPayout / numAmount
   }, [numAmount, expectedPayout])
 
-  // Fetch prices and estimate output with debouncing
   useEffect(() => {
     let mounted = true
     let timeoutId: NodeJS.Timeout
@@ -83,14 +69,14 @@ export default function TradeModal({
       if (!contract || !market) return
 
       try {
-        // Always fetch current market prices
+        // Fetch market prices
         const multipliers = await getCurrentMultipliers(market.id)
 
         if (!mounted) return
         setYesPrice(multipliers.yesPrice)
         setNoPrice(multipliers.noPrice)
 
-        // Estimate trade output if amount and outcome are selected
+        // Estimate trade output
         if (hasAmount && outcome && numAmount >= 0.001) {
           setIsEstimating(true)
           try {
@@ -105,7 +91,6 @@ export default function TradeModal({
 
             if (!mounted) return
 
-            // result is a tuple: [totalOut, totalFee]
             const totalOut = ethers.formatEther(result[0])
             const totalFee = ethers.formatEther(result[1])
 
@@ -114,14 +99,10 @@ export default function TradeModal({
           } catch (error: any) {
             console.error("Error estimating trade:", error)
             if (!mounted) return
-
-            // Only clear estimates, don't show error to user during estimation
             setExpectedOut(null)
             setFeeEstimated(null)
           } finally {
-            if (mounted) {
-              setIsEstimating(false)
-            }
+            if (mounted) setIsEstimating(false)
           }
         } else {
           if (!mounted) return
@@ -131,13 +112,10 @@ export default function TradeModal({
         }
       } catch (err: any) {
         console.error("Price fetch error:", err)
-        if (mounted) {
-          setIsEstimating(false)
-        }
+        if (mounted) setIsEstimating(false)
       }
     }
 
-    // Debounce the update to avoid too many calls
     timeoutId = setTimeout(update, 400)
 
     return () => {
@@ -146,36 +124,29 @@ export default function TradeModal({
     }
   }, [contract, market, amount, outcome, hasAmount, numAmount, getCurrentMultipliers])
 
-  // Execute trade
   const handleTrade = async () => {
     setError(null)
 
-    // Validation checks
     if (!account) {
       connectWallet()
       return
     }
-
     if (!isCorrectNetwork) {
       switchNetwork()
       return
     }
-
     if (!amount || numAmount <= 0) {
       setError("Please enter a valid BNB amount")
       return
     }
-
     if (numAmount < 0.001) {
       setError("Minimum trade amount is 0.001 BNB")
       return
     }
-
     if (!outcome) {
       setError("Please select YES or NO")
       return
     }
-
     if (!signer || !contract) {
       setError("Wallet provider/contract not ready")
       return
@@ -187,7 +158,7 @@ export default function TradeModal({
     try {
       const amountInWei = ethers.parseEther(amount)
 
-      // Get fresh output estimate right before trading
+      // Get fresh estimate
       let freshEstimate
       try {
         if (outcome === "YES") {
@@ -197,8 +168,6 @@ export default function TradeModal({
         }
       } catch (estimateError: any) {
         console.error("Failed to get fresh estimate:", estimateError)
-
-        // Provide specific error messages
         if (estimateError?.message?.includes("market not open")) {
           throw new Error("Market is not open for trading")
         } else if (estimateError?.message?.includes("market ended")) {
@@ -210,17 +179,13 @@ export default function TradeModal({
 
       const estimatedOutWei = freshEstimate[0]
 
-      // Validate estimate
       if (estimatedOutWei <= BigInt(0)) {
         throw new Error("Trade output is zero. Market may have insufficient liquidity.")
       }
 
-      // Apply slippage tolerance
-      // minOut = estimatedOut * (1 - slippage%)
       const slippageBps = BigInt(Math.floor(slippage * 100))
       const minOutWei = (estimatedOutWei * (BigInt(10000) - slippageBps)) / BigInt(10000)
 
-      // Final validation
       if (minOutWei <= BigInt(0)) {
         throw new Error("Trade amount too small after slippage. Please increase the trade size.")
       }
@@ -238,17 +203,18 @@ export default function TradeModal({
 
       const contractWithSigner = contract.connect(signer) as any
 
-      // Execute trade transaction
       let tx
       if (outcome === "YES") {
-        tx = await contractWithSigner.buyYesWithBNB(
+        tx = await contractWithSigner.buyYesWithBNBFor(
           BigInt(market.id),
+          account,
           minOutWei,
           { value: amountInWei }
         )
       } else {
-        tx = await contractWithSigner.buyNoWithBNB(
+        tx = await contractWithSigner.buyNoWithBNBFor(
           BigInt(market.id),
+          account,
           minOutWei,
           { value: amountInWei }
         )
@@ -257,12 +223,10 @@ export default function TradeModal({
       setTxHash(tx.hash)
       console.log("Transaction submitted:", tx.hash)
 
-      // Wait for confirmation
       const receipt = await tx.wait()
       console.log("Transaction confirmed:", receipt)
 
       if (receipt.status === 1) {
-        // Success - clear form and close after delay
         setAmount("")
         setExpectedOut(null)
         setFeeEstimated(null)
@@ -273,14 +237,11 @@ export default function TradeModal({
     } catch (err: any) {
       console.error("Trade error:", err)
 
-      // Enhanced error handling with specific messages
       if (err?.message?.includes("slippage exceeded") || err?.reason?.includes("slippage exceeded")) {
         const suggestedSlippage = Math.min(slippage + 5, 20)
         setError(`Price moved unfavorably!
 
-
 The market price changed between when you submitted and when the transaction was processed.
-
 
 Solutions:
 • Increase slippage to ${suggestedSlippage}%
@@ -295,9 +256,7 @@ Solutions:
       ) {
         setError(`Insufficient liquidity in the market.
 
-
 The pool doesn't have enough tokens to complete your trade.
-
 
 Try:
 • Reducing your trade size
@@ -307,9 +266,7 @@ Try:
       } else if (err?.code === "UNPREDICTABLE_GAS_LIMIT") {
         setError(`Unable to estimate gas fees.
 
-
 This usually means the transaction would fail.
-
 
 Try:
 • Increasing slippage tolerance
