@@ -3,22 +3,61 @@
 import { useState, useEffect } from "react"
 import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarket, MarketStatus, Outcome } from "@/hooks/use-predection-market"
+import { useStopLossTakeProfit } from "@/hooks/useStoploss"
+import { useSellTokens, useSellEstimate } from "@/hooks/useSellToken"
 import Header from "@/components/header"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, Coins, Copy, ExternalLink, Wallet, BarChart3, CheckCircle, AlertCircle } from "lucide-react"
+import { Loader2, Coins, Copy, ExternalLink, Wallet, BarChart3, CheckCircle, AlertCircle, TrendingDown, TrendingUp, Shield, DollarSign } from "lucide-react"
 import Link from "next/link"
 import LightRays from "@/components/LightRays"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 export default function ProfilePage() {
-  const { account, connectWallet } = useWeb3Context()
+  const { account, connectWallet, provider } = useWeb3Context()
   const { getUserPositions, contractAddress, getMarketInvestment, getCurrentMultipliers, redeem } = usePredictionMarket()
+  const { 
+    createStopLossOrder, 
+    createTakeProfitOrder, 
+    loading: orderLoading, 
+    error: orderError,
+    activeOrders,
+    refreshOrders,
+    clearError
+  } = useStopLossTakeProfit(provider || undefined, account || undefined)
+  const { sellTokens, isLoading: isSelling, isSuccess: sellSuccess, error: sellError, txHash: sellTxHash } = useSellTokens()
 
   const [positions, setPositions] = useState<any[]>([])
   const [marketInvestments, setMarketInvestments] = useState<{ [key: string]: string }>({})
   const [marketOdds, setMarketOdds] = useState<{ [key: string]: { yesMultiplier: number, noMultiplier: number, yesPrice: number, noPrice: number } }>({})
   const [isLoading, setIsLoading] = useState(false)
   const [redeemingMarketId, setRedeemingMarketId] = useState<string | null>(null)
+
+  // Order Dialog State
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false)
+  const [selectedMarket, setSelectedMarket] = useState<any>(null)
+  const [orderType, setOrderType] = useState<'stopLoss' | 'takeProfit'>('stopLoss')
+  const [tokenType, setTokenType] = useState<'yes' | 'no'>('yes')
+  const [tokenAmount, setTokenAmount] = useState('')
+  const [triggerPrice, setTriggerPrice] = useState('')
+
+  // Sell Dialog State
+  const [sellDialogOpen, setSellDialogOpen] = useState(false)
+  const [selectedSellMarket, setSelectedSellMarket] = useState<any>(null)
+  const [sellTokenType, setSellTokenType] = useState<'yes' | 'no'>('yes')
+  const [sellTokenAmount, setSellTokenAmount] = useState('')
+  const [minBNBOut, setMinBNBOut] = useState('')
+  const [estimateAmount, setEstimateAmount] = useState('')
+
+  // Get sell estimate
+  const { estimate: sellEstimate, isLoading: isEstimating, fetchEstimate } = useSellEstimate(
+    selectedSellMarket?.id || 0,
+    estimateAmount,
+    sellTokenType === 'yes'
+  )
 
   useEffect(() => {
     const loadData = async () => {
@@ -75,29 +114,39 @@ export default function ProfilePage() {
     loadData()
   }, [account, getUserPositions, getMarketInvestment, getCurrentMultipliers])
 
-  // Improved market activity check
+  // Fetch estimate when amount changes
+  useEffect(() => {
+    if (estimateAmount && parseFloat(estimateAmount) > 0) {
+      fetchEstimate()
+    }
+  }, [estimateAmount, fetchEstimate])
+
+  // Update minBNBOut with 2% slippage when estimate is available
+  useEffect(() => {
+    if (sellEstimate && sellEstimate.bnbOut) {
+      const slippage = 0.98 // 2% slippage tolerance
+      const minOut = (parseFloat(sellEstimate.bnbOut) * slippage).toFixed(6)
+      setMinBNBOut(minOut)
+    }
+  }, [sellEstimate])
+
   const isMarketActive = (market: any): boolean => {
-    // First check explicit isActive flag if it exists
     if (market.isActive !== undefined) {
       return market.isActive
     }
     
-    // Fallback logic based on status and timing
     const now = Math.floor(Date.now() / 1000)
     const isOpenStatus = market.status === MarketStatus.Open
     const hasNotEnded = market.endTime > now
     
-    // Market is active if it's open and hasn't ended, OR if it's resolved but still within redemption period
     return isOpenStatus && hasNotEnded
   }
 
-  // Enhanced status checking with activity
   const getMarketStatusInfo = (market: any) => {
     const active = isMarketActive(market)
     const status = market.status as MarketStatus
     const now = Math.floor(Date.now() / 1000)
     
-    // If market is explicitly inactive
     if (!active) {
       return {
         label: "Inactive",
@@ -147,11 +196,9 @@ export default function ProfilePage() {
     setRedeemingMarketId(marketId)
     try {
       await redeem(Number(marketId))
-      // Refresh positions after successful redemption
       const userPositions = await getUserPositions(account)
       setPositions(userPositions)
       
-      // Refresh market investments
       const updatedInvestment = await getMarketInvestment(account, Number(marketId))
       setMarketInvestments(prev => ({
         ...prev,
@@ -164,7 +211,76 @@ export default function ProfilePage() {
     }
   }
 
-  // Enhanced statistics calculation
+  const handleOpenOrderDialog = (market: any, type: 'stopLoss' | 'takeProfit') => {
+    setSelectedMarket(market)
+    setOrderType(type)
+    setOrderDialogOpen(true)
+    setTokenAmount('')
+    setTriggerPrice('')
+    clearError()
+  }
+
+  const handleCreateOrder = async () => {
+    if (!selectedMarket || !tokenAmount || !triggerPrice) return
+
+    const params = {
+      marketId: selectedMarket.id.toString(),
+      isYes: tokenType === 'yes',
+      tokenAmount: tokenAmount,
+      triggerPrice: triggerPrice
+    }
+
+    const result = orderType === 'stopLoss' 
+      ? await createStopLossOrder(params)
+      : await createTakeProfitOrder(params)
+
+    if (result.success) {
+      setOrderDialogOpen(false)
+      await refreshOrders()
+    }
+  }
+
+  const handleOpenSellDialog = (market: any, type: 'yes' | 'no') => {
+    setSelectedSellMarket(market)
+    setSellTokenType(type)
+    setSellDialogOpen(true)
+    setSellTokenAmount('')
+    setMinBNBOut('')
+    setEstimateAmount('')
+  }
+
+  const handleSellTokens = async () => {
+    if (!selectedSellMarket || !sellTokenAmount || !minBNBOut) return
+
+    try {
+      await sellTokens({
+        marketId: selectedSellMarket.id,
+        tokenAmount: sellTokenAmount,
+        minBNBOut: minBNBOut,
+        isYes: sellTokenType === 'yes'
+      })
+
+      // Refresh positions after successful sale
+      if (account) {
+        const userPositions = await getUserPositions(account)
+        setPositions(userPositions)
+      }
+
+      setSellDialogOpen(false)
+    } catch (error) {
+      console.error("Failed to sell tokens:", error)
+    }
+  }
+
+  const handleSellAmountChange = (value: string) => {
+    setSellTokenAmount(value)
+    setEstimateAmount(value)
+  }
+
+  const getActiveOrdersForMarket = (marketId: string) => {
+    return activeOrders.filter(order => order.marketId === marketId)
+  }
+
   const totalInvestment = Object.values(marketInvestments).reduce((acc, val) => acc + parseFloat(val || "0"), 0)
   const totalMarkets = positions.length
   const activeMarkets = positions.filter(pos => isMarketActive(pos.market)).length
@@ -183,45 +299,27 @@ export default function ProfilePage() {
     return { outcomeText: "Even odds", confidence: 50 }
   }
 
-  // Improved hasWinningTokens function with better type checking and debugging
   const hasWinningTokens = (position: any): boolean => {
     const market = position.market
     
-    // Only check resolved markets
     if (market.status !== MarketStatus.Resolved) {
       return false
     }
     
-    // Safely parse balances
     const yesBalance = parseFloat(position.yesBalance || "0")
     const noBalance = parseFloat(position.noBalance || "0")
     
-    // Debug logging
-    // console.log('Checking winning tokens for market:', {
-    //   marketId: market.id,
-    //   status: market.status,
-    //   outcome: market.outcome,
-    //   yesBalance: yesBalance,
-    //   noBalance: noBalance,
-    //   hasYesTokens: yesBalance > 0,
-    //   hasNoTokens: noBalance > 0
-    // })
-    
-    // Check if user has tokens for the winning outcome
     if (market.outcome === Outcome.Yes && yesBalance > 0.0001) {
-      
       return true
     }
     
     if (market.outcome === Outcome.No && noBalance > 0.0001) {
-      
       return true
     }
     
     return false
   }
 
-  // Improved calculatePotentialWinnings function
   const calculatePotentialWinnings = (position: any): string => {
     const market = position.market
     
@@ -229,7 +327,6 @@ export default function ProfilePage() {
       return "0"
     }
     
-    // Safely parse balances
     const yesBalance = parseFloat(position.yesBalance || "0")
     const noBalance = parseFloat(position.noBalance || "0")
     
@@ -242,7 +339,6 @@ export default function ProfilePage() {
     return "0"
   }
 
-  // Calculate total winnings across all positions
   const totalWinnings = positions.reduce((total, position) => {
     if (hasWinningTokens(position)) {
       const winnings = parseFloat(calculatePotentialWinnings(position) || "0")
@@ -254,7 +350,6 @@ export default function ProfilePage() {
   if (!account) {
     return (
       <main className="min-h-screen bg-background relative overflow-hidden">
-        {/* Light Rays Background */}
         <div className="fixed inset-0 z-0">
           <LightRays
             raysOrigin="top-center"
@@ -269,7 +364,6 @@ export default function ProfilePage() {
           />
         </div>
 
-        {/* Content overlay */}
         <div className="relative z-10">
           <Header />
           <div className="max-w-4xl mx-auto px-4 py-12 text-center">
@@ -287,7 +381,6 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
-      {/* Light Rays Background */}
       <div className="fixed inset-0 z-0">
         <LightRays
           raysOrigin="top-center"
@@ -302,8 +395,7 @@ export default function ProfilePage() {
         />
       </div>
 
-      {/* Content overlay */}
-      <div className="relative z-10 bg-black/80">
+      <div className="relative z-10 bg-black/80 min-h-screen">
         <Header />
         <div className="max-w-6xl mx-auto px-4 py-8">
           <div className="mb-8">
@@ -375,13 +467,12 @@ export default function ProfilePage() {
                 <p className="text-sm text-muted-foreground">Resolved</p>
               </Card>
               <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="text-2xl font-bold mb-2">{inactiveMarkets}</div>
-                <p className="text-sm text-muted-foreground">Inactive</p>
+                <div className="text-2xl font-bold mb-2">{activeOrders.length}</div>
+                <p className="text-sm text-muted-foreground">Active Orders</p>
               </Card>
             </div>
           )}
 
-          {/* Total Winnings Banner */}
           {totalWinnings > 0 && (
             <Card className="mb-6 p-4 bg-gradient-to-r from-green-500 to-emerald-600 border-green-400 backdrop-blur-sm">
               <div className="flex items-center justify-between">
@@ -414,22 +505,6 @@ export default function ProfilePage() {
                   <Button variant="outline" className="backdrop-blur-sm bg-card/80">View All Markets</Button>
                 </Link>
               </div>
-              {contractAddress && (
-                <div className="mt-8 pt-6 border-t border-gray-200">
-                  <p className="text-sm text-muted-foreground mb-2">Prediction Market Contract</p>
-                  <div className="flex items-center justify-center gap-2">
-                    <code className="text-xs bg-muted px-2 py-1 rounded backdrop-blur-sm">
-                      {contractAddress.slice(0, 12)}...{contractAddress.slice(-8)}
-                    </code>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 backdrop-blur-sm bg-card/80" onClick={() => copyToClipboard(contractAddress)}>
-                      <Copy className="w-3 h-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 backdrop-blur-sm bg-card/80" onClick={() => window.open(getBlockExplorerUrl(contractAddress), '_blank')}>
-                      <ExternalLink className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </div>
-              )}
             </Card>
           )}
 
@@ -445,12 +520,16 @@ export default function ProfilePage() {
                 const potentialWinnings = calculatePotentialWinnings(position)
                 const marketActive = isMarketActive(market)
                 const statusInfo = getMarketStatusInfo(market)
+                const marketOrders = getActiveOrdersForMarket(market.id.toString())
+
+                const yesBalance = parseFloat(position.yesBalance || "0")
+                const noBalance = parseFloat(position.noBalance || "0")
+                const hasSellableTokens = yesBalance > 0 || noBalance > 0
 
                 return (
                   <Card key={index} className={`p-6 hover:shadow-lg transition-shadow backdrop-blur-sm bg-card/80 ${
                     !marketActive ? 'opacity-70 border-gray-400' : 'border-2'
                   }`}>
-                    {/* Inactive Market Warning */}
                     {!marketActive && (
                       <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 text-gray-600" />
@@ -516,10 +595,10 @@ export default function ProfilePage() {
                         <p className={`text-lg font-bold flex items-center gap-1 ${
                           marketActive ? 'text-green-600' : 'text-gray-600'
                         }`}>
-                          {parseFloat(position.yesBalance || "0").toFixed(4)}
+                          {yesBalance.toFixed(4)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          ≈ {(parseFloat(position.yesBalance || "0") * (odds.yesPrice || 50) / 100).toFixed(4)} BNB
+                          ≈ {(yesBalance * (odds.yesPrice || 50) / 100).toFixed(4)} BNB
                         </p>
                       </div>
                       <div className={`rounded-lg p-3 border backdrop-blur-sm ${
@@ -529,10 +608,10 @@ export default function ProfilePage() {
                         <p className={`text-lg font-bold flex items-center gap-1 ${
                           marketActive ? 'text-red-600' : 'text-gray-600'
                         }`}>
-                          {parseFloat(position.noBalance || "0").toFixed(4)}
+                          {noBalance.toFixed(4)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          ≈ {(parseFloat(position.noBalance || "0") * (odds.noPrice || 50) / 100).toFixed(4)} BNB
+                          ≈ {(noBalance * (odds.noPrice || 50) / 100).toFixed(4)} BNB
                         </p>
                       </div>
                       <div className={`rounded-lg p-3 border backdrop-blur-sm ${
@@ -563,7 +642,29 @@ export default function ProfilePage() {
                       </div>
                     </div>
 
-                    {/* Winnings Display for Resolved Markets */}
+                    {/* Active Orders Display */}
+                    {marketOrders.length > 0 && (
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Shield className="w-4 h-4 text-blue-600" />
+                          <span className="text-sm font-medium text-blue-800">
+                            {marketOrders.length} Active Order{marketOrders.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {marketOrders.map((order) => (
+                            <div key={order.orderId} className="text-xs text-blue-700 flex items-center justify-between">
+                              <span>
+                                {order.orderType === 'StopLoss' ? '🛡️ Stop Loss' : '🎯 Take Profit'} - 
+                                {order.isYes ? ' YES' : ' NO'} @ {(Number(order.stopLossPrice || order.takeProfitPrice) / 100).toFixed(1)}%
+                              </span>
+                              <span className="text-blue-600">{parseFloat(order.tokenAmount).toFixed(4)} tokens</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {market.status === MarketStatus.Resolved && hasWinnings && (
                       <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
                         <div className="flex items-center justify-between">
@@ -596,7 +697,6 @@ export default function ProfilePage() {
                       </div>
                     )}
 
-                    {/* No Winnings Message for Resolved Markets */}
                     {market.status === MarketStatus.Resolved && !hasWinnings && (
                       <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                         <div className="flex items-center gap-2">
@@ -611,16 +711,68 @@ export default function ProfilePage() {
                       </div>
                     )}
 
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 flex-wrap">
                       <Link href={`/market/${market.id}`}>
                         <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">View Market</Button>
                       </Link>
                       
-                      {/* Trade More Button for Active Markets */}
                       {marketActive && market.status === MarketStatus.Open && (
-                        <Link href={`/market/${market.id}?tab=trade`}>
-                          <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">Trade More</Button>
-                        </Link>
+                        <>
+                          <Link href={`/market/${market.id}?tab=trade`}>
+                            <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">Trade More</Button>
+                          </Link>
+                          
+                          {/* Sell Tokens Buttons */}
+                          {yesBalance > 0 && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="backdrop-blur-sm bg-card/80 text-blue-600 hover:text-blue-700 border-blue-300 hover:border-blue-400"
+                              onClick={() => handleOpenSellDialog(market, 'yes')}
+                            >
+                              <DollarSign className="w-4 h-4 mr-1" />
+                              Sell YES
+                            </Button>
+                          )}
+                          
+                          {noBalance > 0 && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="backdrop-blur-sm bg-card/80 text-blue-600 hover:text-blue-700 border-blue-300 hover:border-blue-400"
+                              onClick={() => handleOpenSellDialog(market, 'no')}
+                            >
+                              <DollarSign className="w-4 h-4 mr-1" />
+                              Sell NO
+                            </Button>
+                          )}
+                          
+                          {/* Stop Loss Button */}
+                          {hasSellableTokens && (
+                            <>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="backdrop-blur-sm bg-card/80 text-orange-600 hover:text-orange-700 border-orange-300 hover:border-orange-400"
+                                onClick={() => handleOpenOrderDialog(market, 'stopLoss')}
+                              >
+                                <TrendingDown className="w-4 h-4 mr-1" />
+                                Stop Loss
+                              </Button>
+                              
+                              {/* Take Profit Button */}
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="backdrop-blur-sm bg-card/80 text-green-600 hover:text-green-700 border-green-300 hover:border-green-400"
+                                onClick={() => handleOpenOrderDialog(market, 'takeProfit')}
+                              >
+                                <TrendingUp className="w-4 h-4 mr-1" />
+                                Take Profit
+                              </Button>
+                            </>
+                          )}
+                        </>
                       )}
                     </div>
                   </Card>
@@ -637,6 +789,295 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Order Creation Dialog */}
+      <Dialog open={orderDialogOpen} onOpenChange={setOrderDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {orderType === 'stopLoss' ? 'Create Stop Loss Order' : 'Create Take Profit Order'}
+            </DialogTitle>
+            <DialogDescription>
+              {orderType === 'stopLoss' 
+                ? 'Automatically sell your tokens if the price drops below a certain level to limit losses.'
+                : 'Automatically sell your tokens when the price reaches your target to lock in profits.'
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          {orderError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-sm text-red-700">{orderError}</span>
+            </div>
+          )}
+
+          <div className="space-y-4 py-4">
+            {selectedMarket && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium mb-1">Market</p>
+                <p className="text-xs text-muted-foreground line-clamp-2">{selectedMarket.question}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Token Type</Label>
+              <RadioGroup value={tokenType} onValueChange={(value: 'yes' | 'no') => setTokenType(value)}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="yes" id="yes" />
+                  <Label htmlFor="yes" className="cursor-pointer">
+                    YES Tokens ({positions.find(p => p.market.id === selectedMarket?.id)?.yesBalance || '0'} available)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="no" id="no" />
+                  <Label htmlFor="no" className="cursor-pointer">
+                    NO Tokens ({positions.find(p => p.market.id === selectedMarket?.id)?.noBalance || '0'} available)
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tokenAmount">Token Amount</Label>
+              <Input
+                id="tokenAmount"
+                type="number"
+                step="0.0001"
+                placeholder="0.0000"
+                value={tokenAmount}
+                onChange={(e) => setTokenAmount(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the amount of tokens to include in this order
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="triggerPrice">
+                {orderType === 'stopLoss' ? 'Stop Loss Price (basis points)' : 'Take Profit Price (basis points)'}
+              </Label>
+              <Input
+                id="triggerPrice"
+                type="number"
+                placeholder={orderType === 'stopLoss' ? 'e.g., 4500 (45%)' : 'e.g., 15000 (150%)'}
+                value={triggerPrice}
+                onChange={(e) => setTriggerPrice(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {orderType === 'stopLoss' 
+                  ? 'Order executes when price drops to or below this level (10000 = 100%)'
+                  : 'Order executes when price rises to or above this level (10000 = 100%)'
+                }
+              </p>
+              <div className="text-xs text-muted-foreground space-y-1 mt-2">
+                <p>Examples:</p>
+                <p>• 4500 = 45% (stop loss at 45% of pool value)</p>
+                <p>• 15000 = 150% (take profit at 1.5x)</p>
+                <p>• 20000 = 200% (take profit at 2x)</p>
+              </div>
+            </div>
+
+            {selectedMarket && marketOdds[selectedMarket.id] && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs font-medium text-blue-800 mb-2">Current Market Prices</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">YES: </span>
+                    <span className="font-medium">{marketOdds[selectedMarket.id].yesPrice / 100}%</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">NO: </span>
+                    <span className="font-medium">{marketOdds[selectedMarket.id].noPrice / 100}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setOrderDialogOpen(false)}
+              disabled={orderLoading}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateOrder}
+              disabled={orderLoading || !tokenAmount || !triggerPrice}
+            >
+              {orderLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  {orderType === 'stopLoss' ? (
+                    <TrendingDown className="w-4 h-4 mr-2" />
+                  ) : (
+                    <TrendingUp className="w-4 h-4 mr-2" />
+                  )}
+                  Create Order
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sell Tokens Dialog */}
+      <Dialog open={sellDialogOpen} onOpenChange={setSellDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              Sell {sellTokenType === 'yes' ? 'YES' : 'NO'} Tokens
+            </DialogTitle>
+            <DialogDescription>
+              Sell your {sellTokenType === 'yes' ? 'YES' : 'NO'} tokens back to the market for BNB.
+            </DialogDescription>
+          </DialogHeader>
+
+          {sellError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-sm text-red-700">{sellError.message}</span>
+            </div>
+          )}
+
+          {sellSuccess && (
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-sm text-green-700">Tokens sold successfully!</span>
+            </div>
+          )}
+
+          <div className="space-y-4 py-4">
+            {selectedSellMarket && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium mb-1">Market</p>
+                <p className="text-xs text-muted-foreground line-clamp-2">{selectedSellMarket.question}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="sellTokenAmount">Token Amount to Sell</Label>
+              <Input
+                id="sellTokenAmount"
+                type="number"
+                step="0.0001"
+                placeholder="0.0000"
+                value={sellTokenAmount}
+                onChange={(e) => handleSellAmountChange(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Available: {sellTokenType === 'yes' 
+                  ? positions.find(p => p.market.id === selectedSellMarket?.id)?.yesBalance || '0'
+                  : positions.find(p => p.market.id === selectedSellMarket?.id)?.noBalance || '0'
+                } {sellTokenType === 'yes' ? 'YES' : 'NO'} tokens
+              </p>
+            </div>
+
+            {isEstimating && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Calculating estimate...
+              </div>
+            )}
+
+            {sellEstimate && !isEstimating && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <p className="text-sm font-medium text-blue-800">Estimated Output</p>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">BNB to receive:</span>
+                    <span className="font-bold text-blue-700">{parseFloat(sellEstimate.bnbOut).toFixed(6)} BNB</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Fee:</span>
+                    <span className="text-muted-foreground">{parseFloat(sellEstimate.fee).toFixed(6)} BNB</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="minBNBOut">Minimum BNB Out (Slippage Protection)</Label>
+              <Input
+                id="minBNBOut"
+                type="number"
+                step="0.000001"
+                placeholder="0.000000"
+                value={minBNBOut}
+                onChange={(e) => setMinBNBOut(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Transaction will revert if you receive less than this amount. Default is 2% slippage.
+              </p>
+            </div>
+
+            {selectedSellMarket && marketOdds[selectedSellMarket.id] && (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs font-medium text-gray-800 mb-2">Current Market Prices</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">YES: </span>
+                    <span className="font-medium">{marketOdds[selectedSellMarket.id].yesPrice / 100}%</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">NO: </span>
+                    <span className="font-medium">{marketOdds[selectedSellMarket.id].noPrice / 100}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {sellTxHash && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-xs font-medium text-green-800 mb-1">Transaction Hash</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-green-700 font-mono truncate">{sellTxHash}</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => window.open(`https://testnet.bscscan.com/tx/${sellTxHash}`, '_blank')}
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setSellDialogOpen(false)}
+              disabled={isSelling}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSellTokens}
+              disabled={isSelling || !sellTokenAmount || !minBNBOut || parseFloat(sellTokenAmount) <= 0}
+            >
+              {isSelling ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Selling...
+                </>
+              ) : (
+                <>
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  Sell Tokens
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }

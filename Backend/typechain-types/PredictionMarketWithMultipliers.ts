@@ -23,42 +23,105 @@ import type {
   TypedContractMethod,
 } from "./common";
 
+export declare namespace IPredictionMarket {
+  export type MarketInfoStruct = {
+    creator: AddressLike;
+    question: string;
+    category: string;
+    endTime: BigNumberish;
+    status: BigNumberish;
+    outcome: BigNumberish;
+    yesPool: BigNumberish;
+    noPool: BigNumberish;
+    totalBacking: BigNumberish;
+  };
+
+  export type MarketInfoStructOutput = [
+    creator: string,
+    question: string,
+    category: string,
+    endTime: bigint,
+    status: bigint,
+    outcome: bigint,
+    yesPool: bigint,
+    noPool: bigint,
+    totalBacking: bigint
+  ] & {
+    creator: string;
+    question: string;
+    category: string;
+    endTime: bigint;
+    status: bigint;
+    outcome: bigint;
+    yesPool: bigint;
+    noPool: bigint;
+    totalBacking: bigint;
+  };
+
+  export type OrderInfoStruct = {
+    user: AddressLike;
+    marketId: BigNumberish;
+    isYes: boolean;
+    tokenAmount: BigNumberish;
+    stopLossPrice: BigNumberish;
+    takeProfitPrice: BigNumberish;
+    isActive: boolean;
+  };
+
+  export type OrderInfoStructOutput = [
+    user: string,
+    marketId: bigint,
+    isYes: boolean,
+    tokenAmount: bigint,
+    stopLossPrice: bigint,
+    takeProfitPrice: bigint,
+    isActive: boolean
+  ] & {
+    user: string;
+    marketId: bigint;
+    isYes: boolean;
+    tokenAmount: bigint;
+    stopLossPrice: bigint;
+    takeProfitPrice: bigint;
+    isActive: boolean;
+  };
+}
+
 export interface PredictionMarketWithMultipliersInterface extends Interface {
   getFunction(
     nameOrSignature:
-      | "DISPUTE_PERIOD"
-      | "MINIMUM_LIQUIDITY"
-      | "MIN_INITIAL_LIQUIDITY"
       | "addLiquidity"
-      | "buyNoWithBNB"
-      | "buyYesWithBNB"
+      | "buyNoWithBNBFor"
+      | "buyYesWithBNBFor"
+      | "cancelOrder"
+      | "checkOrderTrigger"
       | "claimRedemption"
       | "createMarket"
+      | "createStopLossOrder"
+      | "createTakeProfitOrder"
+      | "executeOrder"
       | "feeBps"
-      | "formatMultiplier"
-      | "getAllMarkets"
-      | "getBuyNoMultiplier"
       | "getBuyNoOutput"
-      | "getBuyYesMultiplier"
       | "getBuyYesOutput"
       | "getCurrentMultipliers"
-      | "getMarket"
-      | "getSwapMultiplier"
-      | "getTradingInfo"
-      | "getUserInvestment"
-      | "getUserTotalInvestment"
+      | "getMarketInfo"
+      | "getOrderInfo"
+      | "getUserOrders"
       | "lpBalances"
       | "lpFeeBps"
       | "markets"
       | "nextMarketId"
+      | "nextOrderId"
+      | "orders"
       | "owner"
       | "removeLiquidity"
       | "requestResolution"
       | "resolutionServer"
       | "resolveMarket"
-      | "swapNoForYes"
-      | "swapYesForNo"
+      | "sellNoForBNB"
+      | "sellYesForBNB"
       | "userInvestments"
+      | "userOrders"
       | "withdrawPlatformFees"
   ): FunctionFragment;
 
@@ -69,35 +132,35 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
       | "LiquidityRemoved"
       | "MarketCreated"
       | "MarketResolved"
+      | "OrderCancelled"
+      | "OrderCreated"
+      | "OrderExecuted"
       | "RedemptionClaimed"
       | "ResolutionRequested"
+      | "SellForBNB"
       | "Swap"
       | "UserInvestmentUpdated"
   ): EventFragment;
 
   encodeFunctionData(
-    functionFragment: "DISPUTE_PERIOD",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "MINIMUM_LIQUIDITY",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "MIN_INITIAL_LIQUIDITY",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "addLiquidity",
     values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "buyNoWithBNB",
-    values: [BigNumberish, BigNumberish]
+    functionFragment: "buyNoWithBNBFor",
+    values: [BigNumberish, AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "buyYesWithBNB",
-    values: [BigNumberish, BigNumberish]
+    functionFragment: "buyYesWithBNBFor",
+    values: [BigNumberish, AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "cancelOrder",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "checkOrderTrigger",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "claimRedemption",
@@ -107,25 +170,21 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     functionFragment: "createMarket",
     values: [string, string, BigNumberish, BigNumberish, BigNumberish]
   ): string;
-  encodeFunctionData(functionFragment: "feeBps", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "formatMultiplier",
+    functionFragment: "createStopLossOrder",
+    values: [BigNumberish, boolean, BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "createTakeProfitOrder",
+    values: [BigNumberish, boolean, BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "executeOrder",
     values: [BigNumberish]
   ): string;
-  encodeFunctionData(
-    functionFragment: "getAllMarkets",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getBuyNoMultiplier",
-    values: [BigNumberish, BigNumberish]
-  ): string;
+  encodeFunctionData(functionFragment: "feeBps", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "getBuyNoOutput",
-    values: [BigNumberish, BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getBuyYesMultiplier",
     values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
@@ -137,23 +196,15 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "getMarket",
+    functionFragment: "getMarketInfo",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "getSwapMultiplier",
-    values: [BigNumberish, BigNumberish, boolean]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getTradingInfo",
+    functionFragment: "getOrderInfo",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "getUserInvestment",
-    values: [BigNumberish, AddressLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getUserTotalInvestment",
+    functionFragment: "getUserOrders",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
@@ -168,6 +219,14 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   encodeFunctionData(
     functionFragment: "nextMarketId",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "nextOrderId",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "orders",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
@@ -187,11 +246,11 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     values: [BigNumberish, BigNumberish, string, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "swapNoForYes",
+    functionFragment: "sellNoForBNB",
     values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "swapYesForNo",
+    functionFragment: "sellYesForBNB",
     values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
@@ -199,32 +258,32 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     values: [BigNumberish, AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "userOrders",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "withdrawPlatformFees",
     values: [BigNumberish]
   ): string;
 
   decodeFunctionResult(
-    functionFragment: "DISPUTE_PERIOD",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "MINIMUM_LIQUIDITY",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "MIN_INITIAL_LIQUIDITY",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "addLiquidity",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "buyNoWithBNB",
+    functionFragment: "buyNoWithBNBFor",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "buyYesWithBNB",
+    functionFragment: "buyYesWithBNBFor",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "cancelOrder",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "checkOrderTrigger",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -235,25 +294,21 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     functionFragment: "createMarket",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "createStopLossOrder",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "createTakeProfitOrder",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "executeOrder",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "feeBps", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "formatMultiplier",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getAllMarkets",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getBuyNoMultiplier",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "getBuyNoOutput",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getBuyYesMultiplier",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -264,21 +319,16 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     functionFragment: "getCurrentMultipliers",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "getMarket", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "getSwapMultiplier",
+    functionFragment: "getMarketInfo",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "getTradingInfo",
+    functionFragment: "getOrderInfo",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "getUserInvestment",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getUserTotalInvestment",
+    functionFragment: "getUserOrders",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "lpBalances", data: BytesLike): Result;
@@ -288,6 +338,11 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     functionFragment: "nextMarketId",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "nextOrderId",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "orders", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "removeLiquidity",
@@ -306,17 +361,18 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "swapNoForYes",
+    functionFragment: "sellNoForBNB",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "swapYesForNo",
+    functionFragment: "sellYesForBNB",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "userInvestments",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "userOrders", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "withdrawPlatformFees",
     data: BytesLike
@@ -466,6 +522,83 @@ export namespace MarketResolvedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace OrderCancelledEvent {
+  export type InputTuple = [
+    orderId: BigNumberish,
+    user: AddressLike,
+    marketId: BigNumberish
+  ];
+  export type OutputTuple = [orderId: bigint, user: string, marketId: bigint];
+  export interface OutputObject {
+    orderId: bigint;
+    user: string;
+    marketId: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace OrderCreatedEvent {
+  export type InputTuple = [
+    orderId: BigNumberish,
+    user: AddressLike,
+    marketId: BigNumberish,
+    orderType: BigNumberish,
+    isYes: boolean,
+    tokenAmount: BigNumberish,
+    triggerPrice: BigNumberish
+  ];
+  export type OutputTuple = [
+    orderId: bigint,
+    user: string,
+    marketId: bigint,
+    orderType: bigint,
+    isYes: boolean,
+    tokenAmount: bigint,
+    triggerPrice: bigint
+  ];
+  export interface OutputObject {
+    orderId: bigint;
+    user: string;
+    marketId: bigint;
+    orderType: bigint;
+    isYes: boolean;
+    tokenAmount: bigint;
+    triggerPrice: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace OrderExecutedEvent {
+  export type InputTuple = [
+    orderId: BigNumberish,
+    user: AddressLike,
+    marketId: BigNumberish,
+    amountReceived: BigNumberish
+  ];
+  export type OutputTuple = [
+    orderId: bigint,
+    user: string,
+    marketId: bigint,
+    amountReceived: bigint
+  ];
+  export interface OutputObject {
+    orderId: bigint;
+    user: string;
+    marketId: bigint;
+    amountReceived: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace RedemptionClaimedEvent {
   export type InputTuple = [
     id: BigNumberish,
@@ -499,6 +632,34 @@ export namespace ResolutionRequestedEvent {
     id: bigint;
     requester: string;
     requestedAt: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace SellForBNBEvent {
+  export type InputTuple = [
+    id: BigNumberish,
+    user: AddressLike,
+    sellYes: boolean,
+    tokenIn: BigNumberish,
+    bnbOut: BigNumberish
+  ];
+  export type OutputTuple = [
+    id: bigint,
+    user: string,
+    sellYes: boolean,
+    tokenIn: bigint,
+    bnbOut: bigint
+  ];
+  export interface OutputObject {
+    id: bigint;
+    user: string;
+    sellYes: boolean;
+    tokenIn: bigint;
+    bnbOut: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -605,28 +766,34 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  DISPUTE_PERIOD: TypedContractMethod<[], [bigint], "view">;
-
-  MINIMUM_LIQUIDITY: TypedContractMethod<[], [bigint], "view">;
-
-  MIN_INITIAL_LIQUIDITY: TypedContractMethod<[], [bigint], "view">;
-
   addLiquidity: TypedContractMethod<
     [id: BigNumberish, yesAmount: BigNumberish, noAmount: BigNumberish],
     [void],
     "nonpayable"
   >;
 
-  buyNoWithBNB: TypedContractMethod<
-    [id: BigNumberish, minNoOut: BigNumberish],
+  buyNoWithBNBFor: TypedContractMethod<
+    [id: BigNumberish, beneficiary: AddressLike, minNoOut: BigNumberish],
     [void],
     "payable"
   >;
 
-  buyYesWithBNB: TypedContractMethod<
-    [id: BigNumberish, minYesOut: BigNumberish],
+  buyYesWithBNBFor: TypedContractMethod<
+    [id: BigNumberish, beneficiary: AddressLike, minYesOut: BigNumberish],
     [void],
     "payable"
+  >;
+
+  cancelOrder: TypedContractMethod<
+    [orderId: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  checkOrderTrigger: TypedContractMethod<
+    [orderId: BigNumberish],
+    [[boolean, bigint, bigint]],
+    "view"
   >;
 
   claimRedemption: TypedContractMethod<
@@ -647,43 +814,39 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "payable"
   >;
 
-  feeBps: TypedContractMethod<[], [bigint], "view">;
-
-  formatMultiplier: TypedContractMethod<
-    [multiplier: BigNumberish],
-    [string],
-    "view"
-  >;
-
-  getAllMarkets: TypedContractMethod<[], [bigint], "view">;
-
-  getBuyNoMultiplier: TypedContractMethod<
-    [id: BigNumberish, bnbAmount: BigNumberish],
+  createStopLossOrder: TypedContractMethod<
     [
-      [bigint, bigint, bigint] & {
-        multiplier: bigint;
-        totalNoOut: bigint;
-        totalFee: bigint;
-      }
+      marketId: BigNumberish,
+      isYes: boolean,
+      tokenAmount: BigNumberish,
+      stopLossPrice: BigNumberish
     ],
-    "view"
+    [bigint],
+    "nonpayable"
   >;
+
+  createTakeProfitOrder: TypedContractMethod<
+    [
+      marketId: BigNumberish,
+      isYes: boolean,
+      tokenAmount: BigNumberish,
+      takeProfitPrice: BigNumberish
+    ],
+    [bigint],
+    "nonpayable"
+  >;
+
+  executeOrder: TypedContractMethod<
+    [orderId: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  feeBps: TypedContractMethod<[], [bigint], "view">;
 
   getBuyNoOutput: TypedContractMethod<
     [id: BigNumberish, bnbAmount: BigNumberish],
     [[bigint, bigint] & { totalNoOut: bigint; totalFee: bigint }],
-    "view"
-  >;
-
-  getBuyYesMultiplier: TypedContractMethod<
-    [id: BigNumberish, bnbAmount: BigNumberish],
-    [
-      [bigint, bigint, bigint] & {
-        multiplier: bigint;
-        totalYesOut: bigint;
-        totalFee: bigint;
-      }
-    ],
     "view"
   >;
 
@@ -706,71 +869,19 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "view"
   >;
 
-  getMarket: TypedContractMethod<
+  getMarketInfo: TypedContractMethod<
     [id: BigNumberish],
-    [
-      [
-        string,
-        string,
-        string,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint
-      ] & {
-        creator: string;
-        question: string;
-        category: string;
-        endTime: bigint;
-        status: bigint;
-        outcome: bigint;
-        yesPool: bigint;
-        noPool: bigint;
-        totalBacking: bigint;
-      }
-    ],
+    [IPredictionMarket.MarketInfoStructOutput],
     "view"
   >;
 
-  getSwapMultiplier: TypedContractMethod<
-    [id: BigNumberish, amountIn: BigNumberish, yesIn: boolean],
-    [
-      [bigint, bigint, bigint] & {
-        multiplier: bigint;
-        amountOut: bigint;
-        fee: bigint;
-      }
-    ],
-    "view"
-  >;
-
-  getTradingInfo: TypedContractMethod<
+  getOrderInfo: TypedContractMethod<
     [id: BigNumberish],
-    [
-      [bigint, bigint, bigint, bigint, bigint] & {
-        yesMultiplier: bigint;
-        noMultiplier: bigint;
-        yesPrice: bigint;
-        noPrice: bigint;
-        totalLiquidity: bigint;
-      }
-    ],
+    [IPredictionMarket.OrderInfoStructOutput],
     "view"
   >;
 
-  getUserInvestment: TypedContractMethod<
-    [marketId: BigNumberish, user: AddressLike],
-    [bigint],
-    "view"
-  >;
-
-  getUserTotalInvestment: TypedContractMethod<
-    [user: AddressLike],
-    [bigint],
-    "view"
-  >;
+  getUserOrders: TypedContractMethod<[user: AddressLike], [bigint[]], "view">;
 
   lpBalances: TypedContractMethod<
     [arg0: BigNumberish, arg1: AddressLike],
@@ -832,6 +943,36 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
 
   nextMarketId: TypedContractMethod<[], [bigint], "view">;
 
+  nextOrderId: TypedContractMethod<[], [bigint], "view">;
+
+  orders: TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [
+        bigint,
+        string,
+        bigint,
+        boolean,
+        bigint,
+        bigint,
+        bigint,
+        boolean,
+        bigint
+      ] & {
+        orderId: bigint;
+        user: string;
+        marketId: bigint;
+        isYes: boolean;
+        tokenAmount: bigint;
+        triggerPrice: bigint;
+        orderType: bigint;
+        isActive: boolean;
+        createdAt: bigint;
+      }
+    ],
+    "view"
+  >;
+
   owner: TypedContractMethod<[], [string], "view">;
 
   removeLiquidity: TypedContractMethod<
@@ -859,14 +1000,14 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "nonpayable"
   >;
 
-  swapNoForYes: TypedContractMethod<
-    [id: BigNumberish, noIn: BigNumberish, minYesOut: BigNumberish],
+  sellNoForBNB: TypedContractMethod<
+    [id: BigNumberish, tokenAmount: BigNumberish, minBNBOut: BigNumberish],
     [void],
     "nonpayable"
   >;
 
-  swapYesForNo: TypedContractMethod<
-    [id: BigNumberish, yesIn: BigNumberish, minNoOut: BigNumberish],
+  sellYesForBNB: TypedContractMethod<
+    [id: BigNumberish, tokenAmount: BigNumberish, minBNBOut: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -874,6 +1015,12 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
   userInvestments: TypedContractMethod<
     [arg0: BigNumberish, arg1: AddressLike],
     [[bigint, bigint] & { totalInvested: bigint; lastUpdated: bigint }],
+    "view"
+  >;
+
+  userOrders: TypedContractMethod<
+    [arg0: AddressLike, arg1: BigNumberish],
+    [bigint],
     "view"
   >;
 
@@ -888,15 +1035,6 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
   ): T;
 
   getFunction(
-    nameOrSignature: "DISPUTE_PERIOD"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "MINIMUM_LIQUIDITY"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "MIN_INITIAL_LIQUIDITY"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
     nameOrSignature: "addLiquidity"
   ): TypedContractMethod<
     [id: BigNumberish, yesAmount: BigNumberish, noAmount: BigNumberish],
@@ -904,18 +1042,28 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "buyNoWithBNB"
+    nameOrSignature: "buyNoWithBNBFor"
   ): TypedContractMethod<
-    [id: BigNumberish, minNoOut: BigNumberish],
+    [id: BigNumberish, beneficiary: AddressLike, minNoOut: BigNumberish],
     [void],
     "payable"
   >;
   getFunction(
-    nameOrSignature: "buyYesWithBNB"
+    nameOrSignature: "buyYesWithBNBFor"
   ): TypedContractMethod<
-    [id: BigNumberish, minYesOut: BigNumberish],
+    [id: BigNumberish, beneficiary: AddressLike, minYesOut: BigNumberish],
     [void],
     "payable"
+  >;
+  getFunction(
+    nameOrSignature: "cancelOrder"
+  ): TypedContractMethod<[orderId: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "checkOrderTrigger"
+  ): TypedContractMethod<
+    [orderId: BigNumberish],
+    [[boolean, bigint, bigint]],
+    "view"
   >;
   getFunction(
     nameOrSignature: "claimRedemption"
@@ -934,45 +1082,40 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "payable"
   >;
   getFunction(
+    nameOrSignature: "createStopLossOrder"
+  ): TypedContractMethod<
+    [
+      marketId: BigNumberish,
+      isYes: boolean,
+      tokenAmount: BigNumberish,
+      stopLossPrice: BigNumberish
+    ],
+    [bigint],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "createTakeProfitOrder"
+  ): TypedContractMethod<
+    [
+      marketId: BigNumberish,
+      isYes: boolean,
+      tokenAmount: BigNumberish,
+      takeProfitPrice: BigNumberish
+    ],
+    [bigint],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "executeOrder"
+  ): TypedContractMethod<[orderId: BigNumberish], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "feeBps"
   ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "formatMultiplier"
-  ): TypedContractMethod<[multiplier: BigNumberish], [string], "view">;
-  getFunction(
-    nameOrSignature: "getAllMarkets"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "getBuyNoMultiplier"
-  ): TypedContractMethod<
-    [id: BigNumberish, bnbAmount: BigNumberish],
-    [
-      [bigint, bigint, bigint] & {
-        multiplier: bigint;
-        totalNoOut: bigint;
-        totalFee: bigint;
-      }
-    ],
-    "view"
-  >;
   getFunction(
     nameOrSignature: "getBuyNoOutput"
   ): TypedContractMethod<
     [id: BigNumberish, bnbAmount: BigNumberish],
     [[bigint, bigint] & { totalNoOut: bigint; totalFee: bigint }],
-    "view"
-  >;
-  getFunction(
-    nameOrSignature: "getBuyYesMultiplier"
-  ): TypedContractMethod<
-    [id: BigNumberish, bnbAmount: BigNumberish],
-    [
-      [bigint, bigint, bigint] & {
-        multiplier: bigint;
-        totalYesOut: bigint;
-        totalFee: bigint;
-      }
-    ],
     "view"
   >;
   getFunction(
@@ -997,72 +1140,22 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "view"
   >;
   getFunction(
-    nameOrSignature: "getMarket"
+    nameOrSignature: "getMarketInfo"
   ): TypedContractMethod<
     [id: BigNumberish],
-    [
-      [
-        string,
-        string,
-        string,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint
-      ] & {
-        creator: string;
-        question: string;
-        category: string;
-        endTime: bigint;
-        status: bigint;
-        outcome: bigint;
-        yesPool: bigint;
-        noPool: bigint;
-        totalBacking: bigint;
-      }
-    ],
+    [IPredictionMarket.MarketInfoStructOutput],
     "view"
   >;
   getFunction(
-    nameOrSignature: "getSwapMultiplier"
-  ): TypedContractMethod<
-    [id: BigNumberish, amountIn: BigNumberish, yesIn: boolean],
-    [
-      [bigint, bigint, bigint] & {
-        multiplier: bigint;
-        amountOut: bigint;
-        fee: bigint;
-      }
-    ],
-    "view"
-  >;
-  getFunction(
-    nameOrSignature: "getTradingInfo"
+    nameOrSignature: "getOrderInfo"
   ): TypedContractMethod<
     [id: BigNumberish],
-    [
-      [bigint, bigint, bigint, bigint, bigint] & {
-        yesMultiplier: bigint;
-        noMultiplier: bigint;
-        yesPrice: bigint;
-        noPrice: bigint;
-        totalLiquidity: bigint;
-      }
-    ],
+    [IPredictionMarket.OrderInfoStructOutput],
     "view"
   >;
   getFunction(
-    nameOrSignature: "getUserInvestment"
-  ): TypedContractMethod<
-    [marketId: BigNumberish, user: AddressLike],
-    [bigint],
-    "view"
-  >;
-  getFunction(
-    nameOrSignature: "getUserTotalInvestment"
-  ): TypedContractMethod<[user: AddressLike], [bigint], "view">;
+    nameOrSignature: "getUserOrders"
+  ): TypedContractMethod<[user: AddressLike], [bigint[]], "view">;
   getFunction(
     nameOrSignature: "lpBalances"
   ): TypedContractMethod<
@@ -1128,6 +1221,38 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     nameOrSignature: "nextMarketId"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "nextOrderId"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "orders"
+  ): TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [
+        bigint,
+        string,
+        bigint,
+        boolean,
+        bigint,
+        bigint,
+        bigint,
+        boolean,
+        bigint
+      ] & {
+        orderId: bigint;
+        user: string;
+        marketId: bigint;
+        isYes: boolean;
+        tokenAmount: bigint;
+        triggerPrice: bigint;
+        orderType: bigint;
+        isActive: boolean;
+        createdAt: bigint;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -1160,16 +1285,16 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "swapNoForYes"
+    nameOrSignature: "sellNoForBNB"
   ): TypedContractMethod<
-    [id: BigNumberish, noIn: BigNumberish, minYesOut: BigNumberish],
+    [id: BigNumberish, tokenAmount: BigNumberish, minBNBOut: BigNumberish],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "swapYesForNo"
+    nameOrSignature: "sellYesForBNB"
   ): TypedContractMethod<
-    [id: BigNumberish, yesIn: BigNumberish, minNoOut: BigNumberish],
+    [id: BigNumberish, tokenAmount: BigNumberish, minBNBOut: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -1178,6 +1303,13 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
   ): TypedContractMethod<
     [arg0: BigNumberish, arg1: AddressLike],
     [[bigint, bigint] & { totalInvested: bigint; lastUpdated: bigint }],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "userOrders"
+  ): TypedContractMethod<
+    [arg0: AddressLike, arg1: BigNumberish],
+    [bigint],
     "view"
   >;
   getFunction(
@@ -1220,6 +1352,27 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     MarketResolvedEvent.OutputObject
   >;
   getEvent(
+    key: "OrderCancelled"
+  ): TypedContractEvent<
+    OrderCancelledEvent.InputTuple,
+    OrderCancelledEvent.OutputTuple,
+    OrderCancelledEvent.OutputObject
+  >;
+  getEvent(
+    key: "OrderCreated"
+  ): TypedContractEvent<
+    OrderCreatedEvent.InputTuple,
+    OrderCreatedEvent.OutputTuple,
+    OrderCreatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "OrderExecuted"
+  ): TypedContractEvent<
+    OrderExecutedEvent.InputTuple,
+    OrderExecutedEvent.OutputTuple,
+    OrderExecutedEvent.OutputObject
+  >;
+  getEvent(
     key: "RedemptionClaimed"
   ): TypedContractEvent<
     RedemptionClaimedEvent.InputTuple,
@@ -1232,6 +1385,13 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     ResolutionRequestedEvent.InputTuple,
     ResolutionRequestedEvent.OutputTuple,
     ResolutionRequestedEvent.OutputObject
+  >;
+  getEvent(
+    key: "SellForBNB"
+  ): TypedContractEvent<
+    SellForBNBEvent.InputTuple,
+    SellForBNBEvent.OutputTuple,
+    SellForBNBEvent.OutputObject
   >;
   getEvent(
     key: "Swap"
@@ -1304,6 +1464,39 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
       MarketResolvedEvent.OutputObject
     >;
 
+    "OrderCancelled(uint256,address,uint256)": TypedContractEvent<
+      OrderCancelledEvent.InputTuple,
+      OrderCancelledEvent.OutputTuple,
+      OrderCancelledEvent.OutputObject
+    >;
+    OrderCancelled: TypedContractEvent<
+      OrderCancelledEvent.InputTuple,
+      OrderCancelledEvent.OutputTuple,
+      OrderCancelledEvent.OutputObject
+    >;
+
+    "OrderCreated(uint256,address,uint256,uint8,bool,uint256,uint256)": TypedContractEvent<
+      OrderCreatedEvent.InputTuple,
+      OrderCreatedEvent.OutputTuple,
+      OrderCreatedEvent.OutputObject
+    >;
+    OrderCreated: TypedContractEvent<
+      OrderCreatedEvent.InputTuple,
+      OrderCreatedEvent.OutputTuple,
+      OrderCreatedEvent.OutputObject
+    >;
+
+    "OrderExecuted(uint256,address,uint256,uint256)": TypedContractEvent<
+      OrderExecutedEvent.InputTuple,
+      OrderExecutedEvent.OutputTuple,
+      OrderExecutedEvent.OutputObject
+    >;
+    OrderExecuted: TypedContractEvent<
+      OrderExecutedEvent.InputTuple,
+      OrderExecutedEvent.OutputTuple,
+      OrderExecutedEvent.OutputObject
+    >;
+
     "RedemptionClaimed(uint256,address,uint256)": TypedContractEvent<
       RedemptionClaimedEvent.InputTuple,
       RedemptionClaimedEvent.OutputTuple,
@@ -1324,6 +1517,17 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
       ResolutionRequestedEvent.InputTuple,
       ResolutionRequestedEvent.OutputTuple,
       ResolutionRequestedEvent.OutputObject
+    >;
+
+    "SellForBNB(uint256,address,bool,uint256,uint256)": TypedContractEvent<
+      SellForBNBEvent.InputTuple,
+      SellForBNBEvent.OutputTuple,
+      SellForBNBEvent.OutputObject
+    >;
+    SellForBNB: TypedContractEvent<
+      SellForBNBEvent.InputTuple,
+      SellForBNBEvent.OutputTuple,
+      SellForBNBEvent.OutputObject
     >;
 
     "Swap(uint256,address,bool,uint256,uint256,uint256)": TypedContractEvent<

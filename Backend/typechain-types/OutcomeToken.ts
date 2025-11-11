@@ -103,13 +103,13 @@ export namespace ApprovalEvent {
   export type InputTuple = [
     owner: AddressLike,
     spender: AddressLike,
-    value: BigNumberish
+    amount: BigNumberish
   ];
-  export type OutputTuple = [owner: string, spender: string, value: bigint];
+  export type OutputTuple = [owner: string, spender: string, amount: bigint];
   export interface OutputObject {
     owner: string;
     spender: string;
-    value: bigint;
+    amount: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -121,13 +121,13 @@ export namespace TransferEvent {
   export type InputTuple = [
     from: AddressLike,
     to: AddressLike,
-    value: BigNumberish
+    amount: BigNumberish
   ];
-  export type OutputTuple = [from: string, to: string, value: bigint];
+  export type OutputTuple = [from: string, to: string, amount: bigint];
   export interface OutputObject {
     from: string;
     to: string;
-    value: bigint;
+    amount: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -185,7 +185,7 @@ export interface OutcomeToken extends BaseContract {
   >;
 
   approve: TypedContractMethod<
-    [spender: AddressLike, value: BigNumberish],
+    [spender: AddressLike, amount: BigNumberish],
     [boolean],
     "nonpayable"
   >;
@@ -193,7 +193,7 @@ export interface OutcomeToken extends BaseContract {
   balanceOf: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
 
   burn: TypedContractMethod<
-    [from: AddressLike, value: BigNumberish],
+    [from: AddressLike, amount: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -203,7 +203,7 @@ export interface OutcomeToken extends BaseContract {
   market: TypedContractMethod<[], [string], "view">;
 
   mint: TypedContractMethod<
-    [to: AddressLike, value: BigNumberish],
+    [to: AddressLike, amount: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -215,13 +215,13 @@ export interface OutcomeToken extends BaseContract {
   totalSupply: TypedContractMethod<[], [bigint], "view">;
 
   transfer: TypedContractMethod<
-    [to: AddressLike, value: BigNumberish],
+    [to: AddressLike, amount: BigNumberish],
     [boolean],
     "nonpayable"
   >;
 
   transferFrom: TypedContractMethod<
-    [from: AddressLike, to: AddressLike, value: BigNumberish],
+    [from: AddressLike, to: AddressLike, amount: BigNumberish],
     [boolean],
     "nonpayable"
   >;
@@ -240,7 +240,7 @@ export interface OutcomeToken extends BaseContract {
   getFunction(
     nameOrSignature: "approve"
   ): TypedContractMethod<
-    [spender: AddressLike, value: BigNumberish],
+    [spender: AddressLike, amount: BigNumberish],
     [boolean],
     "nonpayable"
   >;
@@ -250,7 +250,7 @@ export interface OutcomeToken extends BaseContract {
   getFunction(
     nameOrSignature: "burn"
   ): TypedContractMethod<
-    [from: AddressLike, value: BigNumberish],
+    [from: AddressLike, amount: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -263,7 +263,7 @@ export interface OutcomeToken extends BaseContract {
   getFunction(
     nameOrSignature: "mint"
   ): TypedContractMethod<
-    [to: AddressLike, value: BigNumberish],
+    [to: AddressLike, amount: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -279,14 +279,14 @@ export interface OutcomeToken extends BaseContract {
   getFunction(
     nameOrSignature: "transfer"
   ): TypedContractMethod<
-    [to: AddressLike, value: BigNumberish],
+    [to: AddressLike, amount: BigNumberish],
     [boolean],
     "nonpayable"
   >;
   getFunction(
     nameOrSignature: "transferFrom"
   ): TypedContractMethod<
-    [from: AddressLike, to: AddressLike, value: BigNumberish],
+    [from: AddressLike, to: AddressLike, amount: BigNumberish],
     [boolean],
     "nonpayable"
   >;

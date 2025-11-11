@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @notice Simple ERC20 for outcome tokens
 contract OutcomeToken {
     string public name;
     string public symbol;
@@ -12,8 +11,8 @@ contract OutcomeToken {
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     constructor(string memory _name, string memory _symbol, address _market) {
         name = _name;
@@ -26,65 +25,97 @@ contract OutcomeToken {
         _;
     }
 
-    function transfer(address to, uint256 value) external returns (bool) {
+    function transfer(address to, uint256 amount) external returns (bool) {
         require(to != address(0), "zero address");
-        require(balanceOf[msg.sender] >= value, "insufficient balance");
+        uint256 senderBalance = balanceOf[msg.sender];
+        require(senderBalance >= amount, "insufficient balance");
         unchecked {
-            balanceOf[msg.sender] -= value;
-            balanceOf[to] += value;
+            balanceOf[msg.sender] = senderBalance - amount;
+            balanceOf[to] += amount;
         }
-        emit Transfer(msg.sender, to, value);
+        emit Transfer(msg.sender, to, amount);
         return true;
     }
 
-    function approve(address spender, uint256 value) external returns (bool) {
-        allowance[msg.sender][spender] = value;
-        emit Approval(msg.sender, spender, value);
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 value) external returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         require(to != address(0), "zero address");
         uint256 allowed = allowance[from][msg.sender];
-        require(allowed >= value, "insufficient allowance");
-        if (allowed != type(uint256).max) {
-            allowance[from][msg.sender] = allowed - value;
-        }
-        require(balanceOf[from] >= value, "insufficient balance");
+        require(allowed >= amount, "insufficient allowance");
+        if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
+        uint256 senderBalance = balanceOf[from];
+        require(senderBalance >= amount, "insufficient balance");
         unchecked {
-            balanceOf[from] -= value;
-            balanceOf[to] += value;
+            balanceOf[from] = senderBalance - amount;
+            balanceOf[to] += amount;
         }
-        emit Transfer(from, to, value);
+        emit Transfer(from, to, amount);
         return true;
     }
 
-    function mint(address to, uint256 value) external onlyMarket {
+    function mint(address to, uint256 amount) external onlyMarket {
         require(to != address(0), "zero address");
-        totalSupply += value;
+        totalSupply += amount;
         unchecked {
-            balanceOf[to] += value;
+            balanceOf[to] += amount;
         }
-        emit Transfer(address(0), to, value);
+        emit Transfer(address(0), to, amount);
     }
 
-    function burn(address from, uint256 value) external onlyMarket {
-        require(balanceOf[from] >= value, "insufficient balance");
+    function burn(address from, uint256 amount) external onlyMarket {
+        uint256 senderBalance = balanceOf[from];
+        require(senderBalance >= amount, "insufficient balance");
         unchecked {
-            balanceOf[from] -= value;
-            totalSupply -= value;
+            balanceOf[from] = senderBalance - amount;
+            totalSupply -= amount;
         }
-        emit Transfer(from, address(0), value);
+        emit Transfer(from, address(0), amount);
     }
 }
 
-// ====================================================================
-// PREDICTION MARKET WITH MULTIPLIER CALCULATIONS - FULL FIXED VERSION
-// ====================================================================
+interface IPredictionMarket {
+    struct MarketInfo {
+        address creator;
+        string question;
+        string category;
+        uint256 endTime;
+        uint8 status;
+        uint8 outcome;
+        uint256 yesPool;
+        uint256 noPool;
+        uint256 totalBacking;
+    }
 
-contract PredictionMarketWithMultipliers {
+    struct OrderInfo {
+        address user;
+        uint256 marketId;
+        bool isYes;
+        uint256 tokenAmount;
+        uint256 stopLossPrice;
+        uint256 takeProfitPrice;
+        bool isActive;
+    }
+
+    function getMarketInfo(uint256 marketId) external view returns (MarketInfo memory);
+    function getCurrentMultipliers(uint256 id) external view returns (uint256, uint256, uint256, uint256);
+    function buyYesWithBNBFor(uint256 id, address beneficiary, uint256 minYesOut) external payable;
+    function buyNoWithBNBFor(uint256 id, address beneficiary, uint256 minNoOut) external payable;
+    function createStopLossOrder(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 stopLossPrice) external returns (uint256);
+    function createTakeProfitOrder(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 takeProfitPrice) external returns (uint256);
+    function executeOrder(uint256 orderId) external;
+    function getUserOrders(address user) external view returns (uint256[] memory);
+    function getOrderInfo(uint256 orderId) external view returns (OrderInfo memory);
+}
+
+contract PredictionMarketWithMultipliers is IPredictionMarket {
     enum MarketStatus { Open, Closed, ResolutionRequested, Resolved, Disputed }
     enum Outcome { Undecided, Yes, No }
+    enum OrderType { StopLoss, TakeProfit }
 
     struct Market {
         address creator;
@@ -100,53 +131,63 @@ contract PredictionMarketWithMultipliers {
         uint256 lpTotalSupply;
         uint256 totalBacking;
         uint256 platformFees;
-        // AI Resolution system
         uint256 resolutionRequestedAt;
         address resolutionRequester;
         string resolutionReason;
         uint256 resolutionConfidence;
-        // Dispute system
         uint256 disputeDeadline;
         address disputer;
         string disputeReason;
     }
 
-    // State variables
-    uint256 public nextMarketId;
-    mapping(uint256 => Market) public markets;
-    mapping(uint256 => mapping(address => uint256)) public lpBalances;
-    
-    // AI Resolution system
-    address public resolutionServer;
-    address public owner;
-    uint32 public feeBps;
-    uint32 public lpFeeBps;
-    
-    // Constants
-    uint256 public constant MINIMUM_LIQUIDITY = 1000;
-    uint256 public constant MIN_INITIAL_LIQUIDITY = 0.01 ether;
-    uint256 public constant DISPUTE_PERIOD = 7 days;
-    uint256 private _lock = 1;
+    struct Order {
+        uint256 orderId;
+        address user;
+        uint256 marketId;
+        bool isYes;
+        uint256 tokenAmount;
+        uint256 triggerPrice;
+        OrderType orderType;
+        bool isActive;
+        uint256 createdAt;
+    }
 
-    // Investment Tracking
     struct UserInvestment {
         uint256 totalInvested;
         uint256 lastUpdated;
     }
-    
-    mapping(uint256 => mapping(address => UserInvestment)) public userInvestments;
-    
-    event UserInvestmentUpdated(uint256 indexed marketId, address indexed user, uint256 totalInvested, uint256 timestamp);
 
-    // Events
+    uint256 public nextMarketId;
+    uint256 public nextOrderId;
+    mapping(uint256 => Market) public markets;
+    mapping(uint256 => mapping(address => uint256)) public lpBalances;
+    mapping(uint256 => Order) public orders;
+    mapping(address => uint256[]) public userOrders;
+    mapping(uint256 => mapping(address => UserInvestment)) public userInvestments;
+
+    address public resolutionServer;
+    address public owner;
+    uint32 public feeBps;
+    uint32 public lpFeeBps;
+
+    uint256 constant MINIMUM_LIQUIDITY = 1_000;
+    uint256 constant MIN_INITIAL_LIQUIDITY = 0.01 ether;
+    uint256 constant DISPUTE_PERIOD = 7 days;
+    uint256 private _lock = 1;
+
+    event UserInvestmentUpdated(uint256 indexed marketId, address indexed user, uint256 totalInvested, uint256 timestamp);
     event MarketCreated(uint256 indexed id, string question, string category, address yesToken, address noToken, uint256 endTime);
     event LiquidityAdded(uint256 indexed id, address indexed provider, uint256 yesAmount, uint256 noAmount, uint256 lpTokens);
     event LiquidityRemoved(uint256 indexed id, address indexed provider, uint256 yesAmount, uint256 noAmount, uint256 lpTokens);
     event Swap(uint256 indexed id, address indexed user, bool yesIn, uint256 amountIn, uint256 amountOut, uint256 fee);
     event BuyWithBNB(uint256 indexed id, address indexed user, bool buyYes, uint256 bnbIn, uint256 tokenOut);
+    event SellForBNB(uint256 indexed id, address indexed user, bool sellYes, uint256 tokenIn, uint256 bnbOut);
     event ResolutionRequested(uint256 indexed id, address requester, uint256 requestedAt);
     event MarketResolved(uint256 indexed id, Outcome outcome, string reason, uint256 confidence, address resolvedBy);
     event RedemptionClaimed(uint256 indexed id, address indexed user, uint256 amountClaimed);
+    event OrderCreated(uint256 indexed orderId, address indexed user, uint256 indexed marketId, OrderType orderType, bool isYes, uint256 tokenAmount, uint256 triggerPrice);
+    event OrderExecuted(uint256 indexed orderId, address indexed user, uint256 indexed marketId, uint256 amountReceived);
+    event OrderCancelled(uint256 indexed orderId, address indexed user, uint256 indexed marketId);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
@@ -179,452 +220,296 @@ contract PredictionMarketWithMultipliers {
         resolutionServer = _resolutionServer;
     }
 
-    // ============ Investment Tracking Functions ============
-    
-    function getUserInvestment(uint256 marketId, address user) external view returns (uint256) {
-        return userInvestments[marketId][user].totalInvested;
-    }
-    
-    function getUserTotalInvestment(address user) external view returns (uint256) {
-        uint256 total = 0;
-        for (uint256 i = 0; i < nextMarketId; i++) {
-            total += userInvestments[i][user].totalInvested;
-        }
-        return total;
-    }
-    
-    function _updateUserInvestment(uint256 marketId, address user, uint256 additionalInvestment) internal {
-        UserInvestment storage investment = userInvestments[marketId][user];
-        investment.totalInvested += additionalInvestment;
-        investment.lastUpdated = block.timestamp;
-        
-        emit UserInvestmentUpdated(marketId, user, investment.totalInvested, block.timestamp);
+    function getMarketInfo(uint256 id) external view override marketExists(id) returns (MarketInfo memory mInfo) {
+        Market storage m = markets[id];
+        mInfo.creator = m.creator;
+        mInfo.question = m.question;
+        mInfo.category = m.category;
+        mInfo.endTime = m.endTime;
+        mInfo.status = uint8(m.status);
+        mInfo.outcome = uint8(m.outcome);
+        mInfo.yesPool = m.yesPool;
+        mInfo.noPool = m.noPool;
+        mInfo.totalBacking = m.totalBacking;
     }
 
-    // ---------------------------------------------------------------
-    // Market Creation
-    // ---------------------------------------------------------------
-    
-    function createMarket(
-        string calldata question,
-        string calldata category,
-        uint256 endTime,
-        uint256 initialYes,
-        uint256 initialNo
-    ) external payable nonReentrant returns (uint256) {
-        require(endTime > block.timestamp + 1 hours, "end time too soon");
-        require(bytes(question).length > 0 && bytes(question).length <= 280, "invalid question");
-        require(bytes(category).length > 0, "category required");
-        require(initialYes > 0 && initialNo > 0, "need initial liquidity");
-        
-        uint256 totalRequired = initialYes + initialNo;
-        require(totalRequired >= MIN_INITIAL_LIQUIDITY, "liquidity too low");
-        require(msg.value >= totalRequired, "insufficient BNB");
+    function getOrderInfo(uint256 id) external view override returns (OrderInfo memory oInfo) {
+        Order storage order = orders[id];
+        oInfo.user = order.user;
+        oInfo.marketId = order.marketId;
+        oInfo.isYes = order.isYes;
+        oInfo.tokenAmount = order.tokenAmount;
+        oInfo.stopLossPrice = order.orderType == OrderType.StopLoss ? order.triggerPrice : 0;
+        oInfo.takeProfitPrice = order.orderType == OrderType.TakeProfit ? order.triggerPrice : 0;
+        oInfo.isActive = order.isActive;
+    }
+
+    function getUserOrders(address user) external view override returns (uint256[] memory) {
+        return userOrders[user];
+    }
+
+    // These two functions were missing and are needed for frontend trade estimation
+
+    function getBuyYesOutput(uint256 id, uint256 bnbAmount) external view marketExists(id) returns (uint256 totalYesOut, uint256 totalFee) {
+        Market storage m = markets[id];
+        require(m.status == MarketStatus.Open, "market not open");
+        require(bnbAmount > 0, "zero amount");
+
+        uint256 platformFee = (bnbAmount * feeBps) / 10000;
+        uint256 noAfterFee = bnbAmount - platformFee;
+        uint256 yesOutFromSwap = _getAmountOut(noAfterFee, m.noPool, m.yesPool);
+
+        totalYesOut = bnbAmount + yesOutFromSwap;
+        totalFee = platformFee;
+    }
+
+    function getBuyNoOutput(uint256 id, uint256 bnbAmount) external view marketExists(id) returns (uint256 totalNoOut, uint256 totalFee) {
+        Market storage m = markets[id];
+        require(m.status == MarketStatus.Open, "market not open");
+        require(bnbAmount > 0, "zero amount");
+
+        uint256 platformFee = (bnbAmount * feeBps) / 10000;
+        uint256 yesAfterFee = bnbAmount - platformFee;
+        uint256 noOutFromSwap = _getAmountOut(yesAfterFee, m.yesPool, m.noPool);
+
+        totalNoOut = bnbAmount + noOutFromSwap;
+        totalFee = platformFee;
+    }
+
+    function buyYesWithBNBFor(uint256 id, address beneficiary, uint256 minYesOut) external payable override nonReentrant marketExists(id) {
+        _buyWithBNB(id, beneficiary, minYesOut, true);
+    }
+
+    function buyNoWithBNBFor(uint256 id, address beneficiary, uint256 minNoOut) external payable override nonReentrant marketExists(id) {
+        _buyWithBNB(id, beneficiary, minNoOut, false);
+    }
+
+    function _buyWithBNB(uint256 id, address beneficiary, uint256 minOut, bool isYes) internal {
+        require(beneficiary != address(0));
+        Market storage m = markets[id];
+        require(m.status == MarketStatus.Open && block.timestamp < m.endTime && msg.value > 0);
+
+        uint256 amountIn = msg.value;
+        _updateUserInvestment(id, beneficiary, amountIn);
+
+        uint256 platformFee = (amountIn * feeBps) / 10000;
+        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
+        uint256 protocolFee = platformFee - lpFee;
+        uint256 amountAfterFee = amountIn - platformFee;
+
+        m.platformFees += protocolFee;
+
+        uint256 outAmount;
+        uint256 totalOut;
+        if (isYes) {
+            outAmount = _getAmountOut(amountAfterFee, m.noPool, m.yesPool);
+            require(outAmount <= m.yesPool && outAmount + amountIn >= minOut);
+            totalOut = outAmount + amountIn;
+
+            m.noPool += amountAfterFee + lpFee;
+            m.yesPool -= outAmount;
+            m.yesToken.mint(beneficiary, totalOut);
+        } else {
+            outAmount = _getAmountOut(amountAfterFee, m.yesPool, m.noPool);
+            require(outAmount <= m.noPool && outAmount + amountIn >= minOut);
+            totalOut = outAmount + amountIn;
+
+            m.yesPool += amountAfterFee + lpFee;
+            m.noPool -= outAmount;
+            m.noToken.mint(beneficiary, totalOut);
+        }
+        m.totalBacking += amountIn;
+
+        emit BuyWithBNB(id, beneficiary, isYes, amountIn, totalOut);
+    }
+
+    function sellYesForBNB(uint256 id, uint256 tokenAmount, uint256 minBNBOut) external nonReentrant marketExists(id) {
+        _sellForBNB(id, tokenAmount, minBNBOut, true);
+    }
+
+    function sellNoForBNB(uint256 id, uint256 tokenAmount, uint256 minBNBOut) external nonReentrant marketExists(id) {
+        _sellForBNB(id, tokenAmount, minBNBOut, false);
+    }
+
+    function _sellForBNB(uint256 id, uint256 tokenAmount, uint256 minBNBOut, bool isYes) internal {
+        Market storage m = markets[id];
+        require(m.status == MarketStatus.Open && block.timestamp < m.endTime && tokenAmount > 0);
+
+        OutcomeToken token = isYes ? m.yesToken : m.noToken;
+        require(token.balanceOf(msg.sender) >= tokenAmount);
+
+        uint256 platformFee = (tokenAmount * feeBps) / 10000;
+        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
+        uint256 protocolFee = platformFee - lpFee;
+        uint256 tokenAfterFee = tokenAmount - platformFee;
+
+        m.platformFees += protocolFee;
+
+        uint256 outAmount;
+        if (isYes) {
+            outAmount = _getAmountOut(tokenAfterFee, m.yesPool, m.noPool);
+            require(outAmount <= m.noPool);
+        } else {
+            outAmount = _getAmountOut(tokenAfterFee, m.noPool, m.yesPool);
+            require(outAmount <= m.yesPool);
+        }
+
+        require(outAmount >= minBNBOut && address(this).balance >= outAmount);
+
+        token.burn(msg.sender, tokenAmount);
+
+        if (isYes) {
+            m.yesPool += tokenAfterFee + lpFee;
+            m.noPool -= outAmount;
+        } else {
+            m.noPool += tokenAfterFee + lpFee;
+            m.yesPool -= outAmount;
+        }
+
+        m.totalBacking -= outAmount;
+
+        _transferBNB(msg.sender, outAmount);
+
+        emit SellForBNB(id, msg.sender, isYes, tokenAmount, outAmount);
+    }
+
+    function createStopLossOrder(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 stopLossPrice) external override marketExists(marketId) returns (uint256) {
+        return _createOrder(marketId, isYes, tokenAmount, stopLossPrice, OrderType.StopLoss);
+    }
+
+    function createTakeProfitOrder(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 takeProfitPrice) external override marketExists(marketId) returns (uint256) {
+        return _createOrder(marketId, isYes, tokenAmount, takeProfitPrice, OrderType.TakeProfit);
+    }
+
+    function _createOrder(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 triggerPrice, OrderType orderType) internal returns (uint256) {
+        Market storage m = markets[marketId];
+        require(m.status == MarketStatus.Open && tokenAmount > 0);
+
+        if (orderType == OrderType.StopLoss) { require(triggerPrice > 0 && triggerPrice < 10000); }
+        else { require(triggerPrice > 10000); }
+
+        OutcomeToken token = isYes ? m.yesToken : m.noToken;
+        require(token.balanceOf(msg.sender) >= tokenAmount);
+
+        uint256 orderId = nextOrderId++;
+        orders[orderId] = Order(orderId, msg.sender, marketId, isYes, tokenAmount, triggerPrice, orderType, true, block.timestamp);
+        userOrders[msg.sender].push(orderId);
+
+        emit OrderCreated(orderId, msg.sender, marketId, orderType, isYes, tokenAmount, triggerPrice);
+
+        return orderId;
+    }
+
+    function executeOrder(uint256 orderId) external override nonReentrant {
+        Order storage order = orders[orderId];
+        require(order.isActive);
+
+        Market storage m = markets[order.marketId];
+        require(m.status == MarketStatus.Open && block.timestamp < m.endTime);
+
+        uint256 totalPool = m.yesPool + m.noPool;
+        require(totalPool > 0);
+
+        uint256 currentPrice = order.isYes ? (m.yesPool * 10000) / totalPool : (m.noPool * 10000) / totalPool;
+        bool isTriggered = order.orderType == OrderType.StopLoss ? currentPrice <= order.triggerPrice : currentPrice >= order.triggerPrice;
+        require(isTriggered);
+
+        OutcomeToken tokenIn = order.isYes ? m.yesToken : m.noToken;
+        require(tokenIn.balanceOf(order.user) >= order.tokenAmount);
+
+        uint256 platformFee = (order.tokenAmount * feeBps) / 10000;
+        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
+        uint256 protocolFee = platformFee - lpFee;
+        uint256 amountAfterFee = order.tokenAmount - platformFee;
+        m.platformFees += protocolFee;
+
+        uint256 amountOut;
+        OutcomeToken tokenOut;
+        if (order.isYes) {
+            amountOut = _getAmountOut(amountAfterFee, m.yesPool, m.noPool);
+            require(amountOut <= m.noPool);
+            tokenIn.burn(order.user, order.tokenAmount);
+            m.yesPool += amountAfterFee + lpFee;
+            m.noPool -= amountOut;
+            tokenOut = m.noToken;
+        } else {
+            amountOut = _getAmountOut(amountAfterFee, m.noPool, m.yesPool);
+            require(amountOut <= m.yesPool);
+            tokenIn.burn(order.user, order.tokenAmount);
+            m.noPool += amountAfterFee + lpFee;
+            m.yesPool -= amountOut;
+            tokenOut = m.yesToken;
+        }
+
+        tokenOut.mint(order.user, amountOut);
+        order.isActive = false;
+
+        emit OrderExecuted(orderId, order.user, order.marketId, amountOut);
+        emit Swap(order.marketId, order.user, order.isYes, order.tokenAmount, amountOut, platformFee);
+    }
+
+    function cancelOrder(uint256 orderId) external {
+        Order storage order = orders[orderId];
+        require(order.user == msg.sender && order.isActive);
+        order.isActive = false;
+        emit OrderCancelled(orderId, msg.sender, order.marketId);
+    }
+
+    function checkOrderTrigger(uint256 orderId) external view returns (bool, uint256, uint256) {
+        Order storage order = orders[orderId];
+        require(order.isActive);
+        Market storage m = markets[order.marketId];
+        uint256 totalPool = m.yesPool + m.noPool;
+        if (totalPool == 0) return (false, 0, order.triggerPrice);
+        uint256 price = order.isYes ? (m.yesPool * 10000) / totalPool : (m.noPool * 10000) / totalPool;
+        bool triggered = order.orderType == OrderType.StopLoss ? price <= order.triggerPrice : price >= order.triggerPrice;
+        return (triggered, price, order.triggerPrice);
+    }
+
+    function createMarket(string calldata question, string calldata category, uint256 endTime, uint256 initialYes, uint256 initialNo) external payable nonReentrant returns (uint256) {
+        require(endTime > block.timestamp + 1 hours);
+        require(bytes(question).length > 0 && bytes(question).length <= 280);
+        require(bytes(category).length > 0);
+        require(initialYes > 0 && initialNo > 0 && (initialYes + initialNo) >= MIN_INITIAL_LIQUIDITY);
+        require(msg.value >= (initialYes + initialNo));
 
         uint256 id = nextMarketId++;
+        OutcomeToken yesToken = new OutcomeToken(string.concat("YES: ", _truncate(question, 50)), string.concat("YES", _toString(id)), address(this));
+        OutcomeToken noToken = new OutcomeToken(string.concat("NO: ", _truncate(question, 50)), string.concat("NO", _toString(id)), address(this));
 
-        OutcomeToken yesToken = new OutcomeToken(
-            string.concat("YES: ", _truncate(question, 50)),
-            string.concat("YES", _toString(id)),
-            address(this)
-        );
-        
-        OutcomeToken noToken = new OutcomeToken(
-            string.concat("NO: ", _truncate(question, 50)),
-            string.concat("NO", _toString(id)),
-            address(this)
-        );
+        markets[id] = Market(msg.sender, question, category, endTime, MarketStatus.Open, Outcome.Undecided, yesToken, noToken, initialYes, initialNo, 0, initialYes + initialNo, 0, 0, address(0), "", 0, 0, address(0), "");
 
-        markets[id] = Market({
-            creator: msg.sender,
-            question: question,
-            category: category,
-            endTime: endTime,
-            status: MarketStatus.Open,
-            outcome: Outcome.Undecided,
-            yesToken: yesToken,
-            noToken: noToken,
-            yesPool: initialYes,
-            noPool: initialNo,
-            lpTotalSupply: 0,
-            totalBacking: totalRequired,
-            platformFees: 0,
-            resolutionRequestedAt: 0,
-            resolutionRequester: address(0),
-            resolutionReason: "",
-            resolutionConfidence: 0,
-            disputeDeadline: 0,
-            disputer: address(0),
-            disputeReason: ""
-        });
-
-        // Mint initial tokens to contract (for liquidity pool)
         yesToken.mint(address(this), initialYes);
         noToken.mint(address(this), initialNo);
 
         uint256 liquidity = _sqrt(initialYes * initialNo);
-        require(liquidity > MINIMUM_LIQUIDITY, "insufficient liquidity value");
-        
+        require(liquidity > MINIMUM_LIQUIDITY);
+
         markets[id].lpTotalSupply = liquidity;
         lpBalances[id][msg.sender] = liquidity - MINIMUM_LIQUIDITY;
         lpBalances[id][address(1)] = MINIMUM_LIQUIDITY;
 
-        if (msg.value > totalRequired) {
-            _transferBNB(msg.sender, msg.value - totalRequired);
+        if (msg.value > (initialYes + initialNo)) {
+            _transferBNB(msg.sender, msg.value - (initialYes + initialNo));
         }
 
         emit MarketCreated(id, question, category, address(yesToken), address(noToken), endTime);
         emit LiquidityAdded(id, msg.sender, initialYes, initialNo, liquidity - MINIMUM_LIQUIDITY);
-        
+
         return id;
     }
 
-    // ---------------------------------------------------------------
-    // Trading with BNB
-    // ---------------------------------------------------------------
-
-    function buyYesWithBNB(uint256 id, uint256 minYesOut) 
-        external 
-        payable 
-        nonReentrant 
-        marketExists(id) 
-    {
+    function addLiquidity(uint256 id, uint256 yesAmount, uint256 noAmount) external nonReentrant marketExists(id) {
         Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(block.timestamp < m.endTime, "market ended");
-        require(msg.value > 0, "zero BNB");
-
-        uint256 bnbAmount = msg.value;
-        _updateUserInvestment(id, msg.sender, bnbAmount);
-
-        uint256 noAmount = bnbAmount;
-        uint256 platformFee = (noAmount * feeBps) / 10000;
-        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
-        uint256 protocolFee = platformFee - lpFee;
-        uint256 noAfterFee = noAmount - platformFee;
-
-        m.platformFees += protocolFee;
-
-        uint256 yesOutFromSwap = _getAmountOut(noAfterFee, m.noPool, m.yesPool);
-        require(yesOutFromSwap <= m.yesPool, "insufficient YES liquidity");
-
-        uint256 totalYesOut = bnbAmount + yesOutFromSwap;
-        require(totalYesOut >= minYesOut, "slippage exceeded");
-
-        m.noPool += noAfterFee + lpFee;
-        m.yesPool -= yesOutFromSwap;
-
-        m.yesToken.mint(msg.sender, totalYesOut);
-        m.totalBacking += bnbAmount;
-
-        emit BuyWithBNB(id, msg.sender, true, bnbAmount, totalYesOut);
-    }
-
-    function buyNoWithBNB(uint256 id, uint256 minNoOut) 
-        external 
-        payable 
-        nonReentrant 
-        marketExists(id) 
-    {
-        Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(block.timestamp < m.endTime, "market ended");
-        require(msg.value > 0, "zero BNB");
-
-        uint256 bnbAmount = msg.value;
-        _updateUserInvestment(id, msg.sender, bnbAmount);
-
-        uint256 yesAmount = bnbAmount;
-        uint256 platformFee = (yesAmount * feeBps) / 10000;
-        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
-        uint256 protocolFee = platformFee - lpFee;
-        uint256 yesAfterFee = yesAmount - platformFee;
-
-        m.platformFees += protocolFee;
-
-        uint256 noOutFromSwap = _getAmountOut(yesAfterFee, m.yesPool, m.noPool);
-        require(noOutFromSwap <= m.noPool, "insufficient NO liquidity");
-
-        uint256 totalNoOut = bnbAmount + noOutFromSwap;
-        require(totalNoOut >= minNoOut, "slippage exceeded");
-
-        m.yesPool += yesAfterFee + lpFee;
-        m.noPool -= noOutFromSwap;
-
-        m.noToken.mint(msg.sender, totalNoOut);
-        m.totalBacking += bnbAmount;
-
-        emit BuyWithBNB(id, msg.sender, false, bnbAmount, totalNoOut);
-    }
-
-    // ---------------------------------------------------------------
-    // Output Calculation Functions
-    // ---------------------------------------------------------------
-
-    function getBuyYesOutput(uint256 id, uint256 bnbAmount) 
-        external 
-        view 
-        marketExists(id)
-        returns (uint256 totalYesOut, uint256 totalFee) 
-    {
-        Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(bnbAmount > 0, "zero amount");
-        
-        uint256 platformFee = (bnbAmount * feeBps) / 10000;
-        uint256 noAfterFee = bnbAmount - platformFee;
-        
-        uint256 yesOutFromSwap = _getAmountOut(noAfterFee, m.noPool, m.yesPool);
-        
-        totalYesOut = bnbAmount + yesOutFromSwap;
-        totalFee = platformFee;
-    }
-
-    function getBuyNoOutput(uint256 id, uint256 bnbAmount) 
-        external 
-        view 
-        marketExists(id)
-        returns (uint256 totalNoOut, uint256 totalFee) 
-    {
-        Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(bnbAmount > 0, "zero amount");
-        
-        uint256 platformFee = (bnbAmount * feeBps) / 10000;
-        uint256 yesAfterFee = bnbAmount - platformFee;
-        
-        uint256 noOutFromSwap = _getAmountOut(yesAfterFee, m.yesPool, m.noPool);
-        
-        totalNoOut = bnbAmount + noOutFromSwap;
-        totalFee = platformFee;
-    }
-
-    // ---------------------------------------------------------------
-    // MULTIPLIER CALCULATION FUNCTIONS - FIXED ✅
-    // ---------------------------------------------------------------
-
-    function getBuyYesMultiplier(uint256 id, uint256 bnbAmount) 
-        external 
-        view 
-        marketExists(id)
-        returns (uint256 multiplier, uint256 totalYesOut, uint256 totalFee) 
-    {
-        Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(bnbAmount > 0, "zero amount");
-        
-        uint256 platformFee = (bnbAmount * feeBps) / 10000;
-        uint256 noAfterFee = bnbAmount - platformFee;
-        
-        uint256 yesOutFromSwap = _getAmountOut(noAfterFee, m.noPool, m.yesPool);
-        
-        totalYesOut = bnbAmount + yesOutFromSwap;
-        totalFee = platformFee;
-        
-        // ✅ FIXED: Changed from (10000 * 10000) to (10000 * 100)
-        multiplier = (totalYesOut * 10000) / bnbAmount;
-    }
-
-    function getBuyNoMultiplier(uint256 id, uint256 bnbAmount) 
-        external 
-        view 
-        marketExists(id)
-        returns (uint256 multiplier, uint256 totalNoOut, uint256 totalFee) 
-    {
-        Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(bnbAmount > 0, "zero amount");
-        
-        uint256 platformFee = (bnbAmount * feeBps) / 10000;
-        uint256 yesAfterFee = bnbAmount - platformFee;
-        
-        uint256 noOutFromSwap = _getAmountOut(yesAfterFee, m.yesPool, m.noPool);
-        
-        totalNoOut = bnbAmount + noOutFromSwap;
-        totalFee = platformFee;
-        
-        // ✅ FIXED: Correct multiplier calculation
-        multiplier = (totalNoOut * 10000) / bnbAmount;
-    }
-
-    // ✅ MAIN FIX: getCurrentMultipliers
-    function getCurrentMultipliers(uint256 id) 
-        external 
-        view 
-        marketExists(id)
-        returns (
-            uint256 yesMultiplier, 
-            uint256 noMultiplier, 
-            uint256 yesPrice, 
-            uint256 noPrice
-        ) 
-    {
-        Market storage m = markets[id];
-        uint256 totalValue = m.yesPool + m.noPool;
-        
-        if (totalValue == 0) {
-            return (10000, 10000, 5000, 5000);
-        }
-        
-        yesPrice = (m.yesPool * 10000) / totalValue;
-        noPrice = (m.noPool * 10000) / totalValue;
-        
-        // ✅ FIXED: Changed from (10000 * 10000) / yesPrice to (10000 * 100) / yesPrice
-        // This ensures 2.5x displays as 2.5x, not 252.7x
-        if (yesPrice > 0) {
-            yesMultiplier = (10000 * 100) / yesPrice;
-        } else {
-            yesMultiplier = type(uint256).max;
-        }
-        
-        if (noPrice > 0) {
-            noMultiplier = (10000 * 100) / noPrice;
-        } else {
-            noMultiplier = type(uint256).max;
-        }
-    }
-
-    // ✅ MAIN FIX: getTradingInfo
-    function getTradingInfo(uint256 id)
-        external
-        view
-        marketExists(id)
-        returns (
-            uint256 yesMultiplier,
-            uint256 noMultiplier,
-            uint256 yesPrice,
-            uint256 noPrice,
-            uint256 totalLiquidity
-        )
-    {
-        Market storage m = markets[id];
-        totalLiquidity = m.yesPool + m.noPool;
-        
-        if (totalLiquidity == 0) {
-            return (10000, 10000, 5000, 5000, 0);
-        }
-        
-        yesPrice = (m.yesPool * 10000) / totalLiquidity;
-        noPrice = (m.noPool * 10000) / totalLiquidity;
-        
-        // ✅ FIXED: Changed multiplier calculation
-        if (yesPrice > 0) {
-            yesMultiplier = (10000 * 100) / yesPrice;
-        }
-        
-        if (noPrice > 0) {
-            noMultiplier = (10000 * 100) / noPrice;
-        }
-    }
-
-    function getSwapMultiplier(uint256 id, uint256 amountIn, bool yesIn) 
-        external 
-        view 
-        marketExists(id)
-        returns (uint256 multiplier, uint256 amountOut, uint256 fee) 
-    {
-        Market storage m = markets[id];
-        require(amountIn > 0, "zero input");
-        
-        fee = (amountIn * feeBps) / 10000;
-        uint256 amountInAfterFee = amountIn - fee;
-        
-        if (yesIn) {
-            amountOut = _getAmountOut(amountInAfterFee, m.yesPool, m.noPool);
-        } else {
-            amountOut = _getAmountOut(amountInAfterFee, m.noPool, m.yesPool);
-        }
-        
-        if (amountIn > 0) {
-            multiplier = (amountOut * 10000) / amountIn;
-        }
-    }
-
-    // ---------------------------------------------------------------
-    // Token-to-Token Swaps
-    // ---------------------------------------------------------------
-    
-    function swapYesForNo(uint256 id, uint256 yesIn, uint256 minNoOut) 
-        external 
-        nonReentrant 
-        marketExists(id) 
-    {
-        _swap(id, true, yesIn, minNoOut);
-    }
-
-    function swapNoForYes(uint256 id, uint256 noIn, uint256 minYesOut) 
-        external 
-        nonReentrant 
-        marketExists(id) 
-    {
-        _swap(id, false, noIn, minYesOut);
-    }
-
-    function _swap(uint256 id, bool yesIn, uint256 amountIn, uint256 minOut) internal {
-        Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(block.timestamp < m.endTime, "market ended");
-        require(amountIn > 0, "zero input");
-
-        uint256 platformFee = (amountIn * feeBps) / 10000;
-        uint256 amountInAfterFee = amountIn - platformFee;
-        
-        uint256 lpFee = (platformFee * lpFeeBps) / 10000;
-        m.platformFees += platformFee - lpFee;
-
-        uint256 amountOut;
-        if (yesIn) {
-            require(m.yesToken.balanceOf(msg.sender) >= amountIn, "insufficient YES balance");
-            
-            amountOut = _getAmountOut(amountInAfterFee, m.yesPool, m.noPool);
-            require(amountOut >= minOut, "slippage exceeded");
-            require(amountOut <= m.noPool, "insufficient NO liquidity");
-
-            m.yesToken.burn(msg.sender, amountIn);
-            
-            m.yesPool += amountInAfterFee + lpFee;
-            m.noPool -= amountOut;
-            
-            m.noToken.mint(msg.sender, amountOut);
-        } else {
-            require(m.noToken.balanceOf(msg.sender) >= amountIn, "insufficient NO balance");
-            
-            amountOut = _getAmountOut(amountInAfterFee, m.noPool, m.yesPool);
-            require(amountOut >= minOut, "slippage exceeded");
-            require(amountOut <= m.yesPool, "insufficient YES liquidity");
-
-            m.noToken.burn(msg.sender, amountIn);
-            
-            m.noPool += amountInAfterFee + lpFee;
-            m.yesPool -= amountOut;
-            
-            m.yesToken.mint(msg.sender, amountOut);
-        }
-
-        emit Swap(id, msg.sender, yesIn, amountIn, amountOut, platformFee);
-    }
-
-    // ---------------------------------------------------------------
-    // Liquidity Provider Functions
-    // ---------------------------------------------------------------
-
-    function addLiquidity(uint256 id, uint256 yesAmount, uint256 noAmount) 
-        external 
-        nonReentrant 
-        marketExists(id) 
-    {
-        Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(yesAmount > 0 && noAmount > 0, "need both amounts");
-
-        require(m.yesToken.balanceOf(msg.sender) >= yesAmount, "insufficient YES balance");
-        require(m.noToken.balanceOf(msg.sender) >= noAmount, "insufficient NO balance");
+        require(m.status == MarketStatus.Open);
+        require(yesAmount > 0 && noAmount > 0);
+        require(m.yesToken.balanceOf(msg.sender) >= yesAmount && m.noToken.balanceOf(msg.sender) >= noAmount);
 
         m.yesToken.burn(msg.sender, yesAmount);
         m.noToken.burn(msg.sender, noAmount);
 
         uint256 liquidity = _sqrt(yesAmount * noAmount);
-        require(liquidity > 0, "insufficient liquidity minted");
+        require(liquidity > 0);
 
         m.lpTotalSupply += liquidity;
         lpBalances[id][msg.sender] += liquidity;
@@ -635,17 +520,11 @@ contract PredictionMarketWithMultipliers {
         emit LiquidityAdded(id, msg.sender, yesAmount, noAmount, liquidity);
     }
 
-    function removeLiquidity(uint256 id, uint256 lpAmount) 
-        external 
-        nonReentrant 
-        marketExists(id) 
-    {
+    function removeLiquidity(uint256 id, uint256 lpAmount) external nonReentrant marketExists(id) {
         Market storage m = markets[id];
-        require(lpAmount > 0, "zero LP amount");
-        require(lpBalances[id][msg.sender] >= lpAmount, "insufficient LP balance");
-
+        require(lpAmount > 0 && lpBalances[id][msg.sender] >= lpAmount);
         uint256 totalSupply = m.lpTotalSupply;
-        require(totalSupply > 0, "no liquidity in pool");
+        require(totalSupply > 0);
 
         uint256 yesAmount = (m.yesPool * lpAmount) / totalSupply;
         uint256 noAmount = (m.noPool * lpAmount) / totalSupply;
@@ -662,35 +541,10 @@ contract PredictionMarketWithMultipliers {
         emit LiquidityRemoved(id, msg.sender, yesAmount, noAmount, lpAmount);
     }
 
-    // ---------------------------------------------------------------
-    // Constant Product Formula
-    // ---------------------------------------------------------------
-    
-    function _getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) 
-        internal 
-        pure 
-        returns (uint256) 
-    {
-        require(amountIn > 0, "invalid amountIn");
-        require(reserveIn > 0 && reserveOut > 0, "insufficient liquidity");
-        
-        uint256 numerator = amountIn * reserveOut;
-        uint256 denominator = reserveIn + amountIn;
-        
-        return numerator / denominator;
-    }
-
-    // ---------------------------------------------------------------
-    // Resolution Functions
-    // ---------------------------------------------------------------
-
-    function requestResolution(uint256 id, string calldata reason) 
-        external 
-        marketExists(id)
-    {
+    function requestResolution(uint256 id, string calldata reason) external marketExists(id) {
         Market storage m = markets[id];
-        require(m.status == MarketStatus.Open, "market not open");
-        require(block.timestamp >= m.endTime, "market still ongoing");
+        require(m.status == MarketStatus.Open);
+        require(block.timestamp >= m.endTime);
 
         m.status = MarketStatus.ResolutionRequested;
         m.resolutionRequestedAt = block.timestamp;
@@ -701,19 +555,10 @@ contract PredictionMarketWithMultipliers {
         emit ResolutionRequested(id, msg.sender, block.timestamp);
     }
 
-    function resolveMarket(
-        uint256 id, 
-        uint8 outcomeIndex, 
-        string calldata reason,
-        uint256 confidence
-    ) 
-        external 
-        onlyServer 
-        marketExists(id)
-    {
+    function resolveMarket(uint256 id, uint8 outcomeIndex, string calldata reason, uint256 confidence) external onlyServer marketExists(id) {
         Market storage m = markets[id];
-        require(m.status == MarketStatus.ResolutionRequested, "not in resolution phase");
-        require(outcomeIndex <= 2, "invalid outcome");
+        require(m.status == MarketStatus.ResolutionRequested);
+        require(outcomeIndex <= 2);
 
         m.outcome = Outcome(outcomeIndex);
         m.status = MarketStatus.Resolved;
@@ -723,109 +568,72 @@ contract PredictionMarketWithMultipliers {
         emit MarketResolved(id, m.outcome, reason, confidence, msg.sender);
     }
 
-    function claimRedemption(uint256 id) 
-        external 
-        nonReentrant 
-        marketExists(id)
-    {
+    function claimRedemption(uint256 id) external nonReentrant marketExists(id) {
         Market storage m = markets[id];
-        require(m.status == MarketStatus.Resolved, "market not resolved");
+        require(m.status == MarketStatus.Resolved);
 
         uint256 yesTokens = m.yesToken.balanceOf(msg.sender);
         uint256 noTokens = m.noToken.balanceOf(msg.sender);
 
         if (m.outcome == Outcome.Yes) {
-            require(yesTokens > 0, "no YES tokens to redeem");
+            require(yesTokens > 0);
             m.yesToken.burn(msg.sender, yesTokens);
             _transferBNB(msg.sender, yesTokens);
             emit RedemptionClaimed(id, msg.sender, yesTokens);
         } else if (m.outcome == Outcome.No) {
-            require(noTokens > 0, "no NO tokens to redeem");
+            require(noTokens > 0);
             m.noToken.burn(msg.sender, noTokens);
             _transferBNB(msg.sender, noTokens);
             emit RedemptionClaimed(id, msg.sender, noTokens);
         }
     }
 
-    function withdrawPlatformFees(uint256 id) 
-        external 
-        onlyOwner 
-        nonReentrant 
-        marketExists(id)
-    {
+    function withdrawPlatformFees(uint256 id) external onlyOwner nonReentrant marketExists(id) {
         Market storage m = markets[id];
         uint256 fees = m.platformFees;
-        require(fees > 0, "no fees to withdraw");
-        
+        require(fees > 0);
+
         m.platformFees = 0;
         _transferBNB(owner, fees);
     }
 
-    // ---------------------------------------------------------------
-    // Helper Functions
-    // ---------------------------------------------------------------
-
-    function formatMultiplier(uint256 multiplier) external pure returns (string memory) {
-        if (multiplier >= 1000000) return "100x+";
-        
-        uint256 integerPart = multiplier / 10000;
-        uint256 fractionalPart = (multiplier % 10000) / 1000;
-        
-        if (fractionalPart == 0) {
-            return string(abi.encodePacked(_toString(integerPart), "x"));
-        } else {
-            return string(abi.encodePacked(_toString(integerPart), ".", _toString(fractionalPart), "x"));
-        }
-    }
-
-    function getMarket(uint256 id) 
-        external 
-        view 
-        marketExists(id)
-        returns (
-            address creator,
-            string memory question,
-            string memory category,
-            uint256 endTime,
-            MarketStatus status,
-            Outcome outcome,
-            uint256 yesPool,
-            uint256 noPool,
-            uint256 totalBacking
-        ) 
-    {
+    function getCurrentMultipliers(uint256 id) external view override marketExists(id) returns (uint256 yesMultiplier, uint256 noMultiplier, uint256 yesPrice, uint256 noPrice) {
         Market storage m = markets[id];
-        return (
-            m.creator,
-            m.question,
-            m.category,
-            m.endTime,
-            m.status,
-            m.outcome,
-            m.yesPool,
-            m.noPool,
-            m.totalBacking
-        );
+        uint256 totalPool = m.yesPool + m.noPool;
+        if (totalPool == 0) return (10000, 10000, 5000, 5000);
+
+        yesPrice = (m.yesPool * 10000) / totalPool;
+        noPrice = (m.noPool * 10000) / totalPool;
+
+        yesMultiplier = yesPrice > 0 ? (1e6) / yesPrice : type(uint256).max;
+        noMultiplier = noPrice > 0 ? (1e6) / noPrice : type(uint256).max;
     }
 
-    function getAllMarkets() external view returns (uint256) {
-        return nextMarketId;
+    function _updateUserInvestment(uint256 marketId, address user, uint256 amount) internal {
+        UserInvestment storage inv = userInvestments[marketId][user];
+        inv.totalInvested += amount;
+        inv.lastUpdated = block.timestamp;
+        emit UserInvestmentUpdated(marketId, user, inv.totalInvested, block.timestamp);
+    }
+
+    function _getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) internal pure returns (uint256) {
+        require(amountIn > 0 && reserveIn > 0 && reserveOut > 0);
+        return (amountIn * reserveOut) / (reserveIn + amountIn);
     }
 
     function _transferBNB(address to, uint256 amount) internal {
         (bool success, ) = to.call{value: amount}("");
-        require(success, "transfer failed");
+        require(success);
     }
 
-    function _sqrt(uint256 x) internal pure returns (uint256) {
+    function _sqrt(uint256 x) internal pure returns (uint256 y) {
         if (x == 0) return 0;
         uint256 z = (x + 1) / 2;
-        uint256 y = x;
+        y = x;
         while (z < y) {
             y = z;
             z = (x / z + z) / 2;
         }
-        return y;
     }
 
     function _toString(uint256 value) internal pure returns (string memory) {
@@ -848,12 +656,79 @@ contract PredictionMarketWithMultipliers {
     function _truncate(string memory str, uint256 maxLen) internal pure returns (string memory) {
         bytes memory strBytes = bytes(str);
         if (strBytes.length <= maxLen) return str;
-        
         bytes memory result = new bytes(maxLen);
         for (uint256 i = 0; i < maxLen; i++) {
             result[i] = strBytes[i];
         }
         return string(result);
+    }
+
+    receive() external payable {}
+}
+
+contract TradingBot {
+    IPredictionMarket public predictionMarket;
+    address public owner;
+
+    event AutoTradeExecuted(uint256 indexed marketId, bool isYes, uint256 amount, uint256 tokensReceived);
+    event OrderMonitored(uint256 indexed orderId, bool shouldExecute, uint256 currentPrice);
+
+    constructor(address _predictionMarket) {
+        predictionMarket = IPredictionMarket(_predictionMarket);
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "not owner");
+        _;
+    }
+
+    function autoBuyYes(uint256 marketId, address beneficiary, uint256 minYesOut) external payable onlyOwner {
+        predictionMarket.buyYesWithBNBFor{value: msg.value}(marketId, beneficiary, minYesOut);
+        emit AutoTradeExecuted(marketId, true, msg.value, minYesOut);
+    }
+
+    function autoBuyNo(uint256 marketId, address beneficiary, uint256 minNoOut) external payable onlyOwner {
+        predictionMarket.buyNoWithBNBFor{value: msg.value}(marketId, beneficiary, minNoOut);
+        emit AutoTradeExecuted(marketId, false, msg.value, minNoOut);
+    }
+
+    function getMarketData(uint256 marketId) external view returns (IPredictionMarket.MarketInfo memory) {
+        return predictionMarket.getMarketInfo(marketId);
+    }
+
+    function getMultipliers(uint256 marketId) external view returns (uint256 yesMultiplier, uint256 noMultiplier, uint256 yesPrice, uint256 noPrice) {
+        return predictionMarket.getCurrentMultipliers(marketId);
+    }
+
+    function monitorAndExecuteOrder(uint256 orderId) external {
+        predictionMarket.executeOrder(orderId);
+    }
+
+    function batchMonitorOrders(uint256[] calldata orderIds) external view returns (bool[] memory) {
+        bool[] memory shouldExecute = new bool[](orderIds.length);
+        for (uint256 i = 0; i < orderIds.length; i++) {
+            IPredictionMarket.OrderInfo memory orderInfo = predictionMarket.getOrderInfo(orderIds[i]);
+            if (orderInfo.isActive) {
+                ( , , uint256 yesPrice, uint256 noPrice) = predictionMarket.getCurrentMultipliers(orderInfo.marketId);
+                uint256 currentPrice = orderInfo.isYes ? yesPrice : noPrice;
+                if (orderInfo.stopLossPrice > 0) shouldExecute[i] = currentPrice <= orderInfo.stopLossPrice;
+                else if (orderInfo.takeProfitPrice > 0) shouldExecute[i] = currentPrice >= orderInfo.takeProfitPrice;
+            }
+        }
+        return shouldExecute;
+    }
+
+    function createStopLossForUser(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 stopLossPrice) external onlyOwner returns (uint256) {
+        return predictionMarket.createStopLossOrder(marketId, isYes, tokenAmount, stopLossPrice);
+    }
+
+    function createTakeProfitForUser(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 takeProfitPrice) external onlyOwner returns (uint256) {
+        return predictionMarket.createTakeProfitOrder(marketId, isYes, tokenAmount, takeProfitPrice);
+    }
+
+    function getUserOrders(address user) external view returns (uint256[] memory) {
+        return predictionMarket.getUserOrders(user);
     }
 
     receive() external payable {}
