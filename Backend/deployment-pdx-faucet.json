@@ -1,0 +1,9 @@
+{
+  "network": "BSC Testnet",
+  "chainId": 97,
+  "faucetAddress": "0xD3561841A6dd046943739B704bcc737aAeE4cd77",
+  "pdxTokenAddress": "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8",
+  "claimAmount": "100.0",
+  "cooldownHours": 24,
+  "deploymentDate": "2025-11-13T17:46:30.437Z"
+}

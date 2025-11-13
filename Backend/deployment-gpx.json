@@ -1,0 +1,11 @@
+{
+  "network": "BSC Testnet",
+  "chainId": 97,
+  "contractAddress": "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8",
+  "contractName": "GPXToken",
+  "deployerAddress": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "tokenName": "Predix Token",
+  "tokenSymbol": "PDX",
+  "totalSupply": "1000000000.0",
+  "deploymentDate": "2025-11-13T14:21:30.370Z"
+}
