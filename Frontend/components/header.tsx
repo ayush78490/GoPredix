@@ -1,18 +1,38 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, Bell } from "lucide-react"
 import Link from "next/link"
 import { useWeb3Context } from "@/lib/wallet-context"
-import MyImage from '@/public/logo.png' // or your actual logo import
+import MyImage from '@/public/logo.png'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
+
+// Global function to open RainbowKit modal
+declare global {
+  interface Window {
+    rainbowKitConnect: () => void;
+  }
+}
 
 export default function Header() {
-  const [isOpen, setIsOpen] = useState(false)
-  const { account, connectWallet, disconnectWallet } = useWeb3Context()
+  const { account, disconnectWallet, connectWallet } = useWeb3Context()
+  const [isRainbowKitAvailable, setIsRainbowKitAvailable] = useState(false)
 
-  // const categories = ["All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy"]
+  useEffect(() => {
+    // Check if RainbowKit is available
+    setIsRainbowKitAvailable(typeof window !== 'undefined' && !!(window as any).rainbowKitConnect)
+  }, [])
+
   const displayAddress = account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"
+
+  const handleLegacyConnect = async () => {
+    try {
+      await connectWallet()
+    } catch (error) {
+      console.error('Connection failed:', error)
+    }
+  }
 
   return (
     <header className="w-full py-5">
@@ -27,51 +47,107 @@ export default function Header() {
                   alt="Project Logo"
                   className="w-6 h-6 object-contain scale-[1.5]"
                 />
-
               </div>
             </Link>
             <Link href="/">
-            <nav className="hidden md:flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white mr-8 text-2xl px-0 py-2 rounded-2xl"
-              >
-                GOPREDIX
-              </Button>
-            </nav>
+              <nav className="hidden md:flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white mr-8 text-2xl px-0 py-2 rounded-2xl"
+                >
+                  GOPREDIX
+                </Button>
+              </nav>
             </Link>
           </div>
-          {/* Right: Bell + Portfolio/Wallet */}
+          
+          {/* Right: Portfolio/Wallet */}
           <div className="flex items-center gap-3">
-            {/* <button type="button" className="rounded-full p-2 bg-[#15121d] hover:bg-[#271f40] border border-[#2c2442] flex items-center justify-center">
-              <Bell className="text-[#f5f5fa] w-5 h-5" />
-            </button> */}
             <Link href="/profile">
               <Button
-                size="sm" className="text-white bg-transparent hover:text-black rounded-full px-5">
+                size="sm" 
+                className="text-white bg-transparent hover:text-black rounded-full px-5"
+              >
                 Portfolio
               </Button>
             </Link>
+            
             {account ? (
+              // Connected state - works with both systems
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="rounded-full px-5 bg-[#271f40] text-white border-none cursor-default" disabled>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="rounded-full px-5 bg-[#271f40] text-white border-none cursor-default" 
+                  disabled
+                >
                   {displayAddress}
                 </Button>
-                <Link href="/">
-                  <Button size="sm" variant="secondary" className="rounded-full px-5" onClick={disconnectWallet}>
+                <Button 
+                  size="sm" 
+                  variant="secondary" 
+                  className="rounded-full px-5" 
+                  onClick={disconnectWallet}
+                >
                   Disconnect
                 </Button>
-                </Link>
               </div>
             ) : (
-              <Button
-                size="sm"
-                className="rounded-full px-7 py-2 font-semibold text-black bg-[#ECFEFF]/70 hover:bg-[#ECFEFF] transition"
-                onClick={connectWallet}
-              >
-                Login
-              </Button>
+              // Not connected state - use RainbowKit if available, else fallback
+              <>
+                {isRainbowKitAvailable ? (
+                  <ConnectButton.Custom>
+                    {({
+                      account,
+                      chain,
+                      openAccountModal,
+                      openChainModal,
+                      openConnectModal,
+                      authenticationStatus,
+                      mounted,
+                    }) => {
+                      // Store the connect function globally for legacy system access
+                      if (typeof window !== 'undefined') {
+                        window.rainbowKitConnect = openConnectModal;
+                      }
+
+                      const ready = mounted && authenticationStatus !== 'loading';
+                      
+                      if (!ready) {
+                        return (
+                          <Button
+                            size="sm"
+                            className="rounded-full px-7 py-2 font-semibold text-black bg-[#ECFEFF]/70 hover:bg-[#ECFEFF] transition"
+                            disabled
+                          >
+                            Loading...
+                          </Button>
+                        );
+                      }
+
+                      return (
+                        <Button
+                          size="sm"
+                          className="rounded-full px-7 py-2 font-semibold text-black bg-[#ECFEFF]/70 hover:bg-[#ECFEFF] transition"
+                          onClick={openConnectModal}
+                        >
+                          Login
+                        </Button>
+                      );
+                    }}
+                  </ConnectButton.Custom>
+                ) : (
+                  // Fallback to legacy connection
+                  <Button
+                    size="sm"
+                    className="rounded-full px-7 py-2 font-semibold text-black bg-[#ECFEFF]/70 hover:bg-[#ECFEFF] transition"
+                    onClick={handleLegacyConnect}
+                  >
+                    Login
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>

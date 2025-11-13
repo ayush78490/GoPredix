@@ -1,19 +1,35 @@
 // app/leaderboard/page.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Header from "@/components/header"
 import Footer from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Trophy, Medal, ArrowLeft, Wallet, Loader2, TrendingUp, Users, BarChart3, ExternalLink } from "lucide-react"
-import { useWeb3Context } from "@/lib/wallet-context"
-import { usePredictionMarket } from "@/hooks/use-predection-market"
-import { useAllMarkets } from "@/hooks/getAllMarkets"
 import { useRouter } from "next/navigation"
 import { ethers } from "ethers"
 import LightRays from "@/components/LightRays"
+
+// Import ABIs from JSON files - extract the ABI from artifacts
+import PREDICTION_MARKET_ARTIFACT from "@/contracts/abi.json"
+import HELPER_CONTRACT_ARTIFACT from "@/contracts/helperABI.json"
+
+
+// Helper function to extract ABI
+const extractABI = (artifact: any): ethers.InterfaceAbi => {
+  return ('abi' in artifact ? artifact.abi : artifact) as ethers.InterfaceAbi
+}
+
+// Extract ABI from artifacts
+const PREDICTION_MARKET_ABI = extractABI(PREDICTION_MARKET_ARTIFACT)
+const HELPER_CONTRACT_ABI = extractABI(HELPER_CONTRACT_ARTIFACT)
+
+// Contract addresses and RPC URL
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
+const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
 
 interface UserStats {
   address: string
@@ -41,34 +57,141 @@ interface MarketPosition {
   status: "Active" | "Resolved" | "Cancelled"
   yesPrice: number
   noPrice: number
-  marketStatus: number // Raw status from contract
-  endTime: number // Add endTime for active status calculation
+  marketStatus: number
+  endTime: number
+}
+
+interface Market {
+  id: number
+  creator: string
+  question: string
+  category: string
+  endTime: number
+  status: number
+  outcome: number
+  yesToken: string
+  noToken: string
+  yesPool: string
+  noPool: string
+  lpTotalSupply: string
+  totalBacking: string
+  platformFees: string
+  resolutionRequestedAt: number
+  disputeDeadline: number
+  resolutionReason: string
+  resolutionConfidence: number
 }
 
 export default function Leaderboard() {
   const router = useRouter()
-  const { account, isCorrectNetwork, isInitialized, provider } = useWeb3Context()
-  const { markets, isLoading: marketsLoading, refreshMarkets } = useAllMarkets()
-  const { 
-    getUserPositions, 
-    getMarketInvestment, 
-    getTotalInvestment,
-    getMarket,
-    contract 
-  } = usePredictionMarket()
-
   const [userStats, setUserStats] = useState<UserStats[]>([])
   const [userPositions, setUserPositions] = useState<{ [key: string]: MarketPosition[] }>({})
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [timeframe, setTimeframe] = useState<"all" | "weekly" | "monthly">("all")
   const [uniqueTraders, setUniqueTraders] = useState<string[]>([])
+  const [markets, setMarkets] = useState<Market[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  // Helper function to get market status text - matching your home page logic
+  // Create read-only contract instances
+  const getReadOnlyContracts = useCallback(() => {
+    if (!PREDICTION_MARKET_ADDRESS || !HELPER_CONTRACT_ADDRESS) {
+      throw new Error('Contract addresses not configured in environment variables')
+    }
+
+    try {
+      const provider = new ethers.JsonRpcProvider(RPC_URL)
+      const marketContract = new ethers.Contract(PREDICTION_MARKET_ADDRESS, PREDICTION_MARKET_ABI, provider)
+      const helperContract = new ethers.Contract(HELPER_CONTRACT_ADDRESS, HELPER_CONTRACT_ABI, provider)
+      return { marketContract, helperContract, provider }
+    } catch (error) {
+      console.error('Error creating read-only contracts:', error)
+      throw error
+    }
+  }, [])
+
+  // Fetch all markets
+  const fetchAllMarkets = useCallback(async (): Promise<Market[]> => {
+    if (!PREDICTION_MARKET_ADDRESS) {
+      console.error("Contract address not configured")
+      return []
+    }
+
+    try {
+      console.log("📋 Fetching all markets from contract...")
+      const { marketContract } = getReadOnlyContracts()
+      
+      const nextId = await marketContract.nextMarketId()
+      const marketCount = Number(nextId)
+      console.log(`Found ${marketCount} markets on chain`)
+      
+      if (marketCount === 0) {
+        console.log("No markets found on chain")
+        return []
+      }
+
+      const marketPromises: Promise<Market | null>[] = []
+      for (let i = 0; i < marketCount; i++) {
+        marketPromises.push(getMarket(i))
+      }
+
+      const marketsData = await Promise.all(marketPromises)
+      const validMarkets = marketsData.filter((market): market is Market => 
+        market !== null && market.question !== undefined && market.question !== ''
+      )
+      
+      console.log(`✅ Successfully loaded ${validMarkets.length} valid markets`)
+      return validMarkets
+      
+    } catch (error) {
+      console.error("❌ Error fetching all markets:", error)
+      throw error
+    }
+  }, [getReadOnlyContracts])
+
+  // Get individual market
+  const getMarket = useCallback(async (marketId: number): Promise<Market | null> => {
+    try {
+      const { marketContract } = getReadOnlyContracts()
+      const marketData = await marketContract.markets(marketId)
+      
+      let question = marketData[1] || `Market ${marketId}`
+      if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
+        question = question.slice(1, -1)
+      }
+
+      const market: Market = {
+        id: marketId,
+        creator: marketData[0] || "0x0000000000000000000000000000000000000000",
+        question: question,
+        category: marketData[2] || "General",
+        endTime: Number(marketData[3] || 0),
+        status: Number(marketData[4] || 0),
+        outcome: Number(marketData[5] || 0),
+        yesToken: marketData[6] || "0x0000000000000000000000000000000000000000",
+        noToken: marketData[7] || "0x0000000000000000000000000000000000000000",
+        yesPool: ethers.formatEther(marketData[8] || 0),
+        noPool: ethers.formatEther(marketData[9] || 0),
+        lpTotalSupply: ethers.formatEther(marketData[10] || 0),
+        totalBacking: ethers.formatEther(marketData[11] || 0),
+        platformFees: ethers.formatEther(marketData[12] || 0),
+        resolutionRequestedAt: Number(marketData[13] || 0),
+        disputeDeadline: Number(marketData[17] || 0),
+        resolutionReason: marketData[15] || '',
+        resolutionConfidence: Number(marketData[16] || 0),
+      }
+
+      return market
+    } catch (error) {
+      console.error(`Error fetching market ${marketId}:`, error)
+      return null
+    }
+  }, [getReadOnlyContracts])
+
+  // Helper function to get market status text
   const getMarketStatusText = (status: number, endTime: number): "Active" | "Resolved" | "Cancelled" => {
     const resolutionDate = new Date(endTime * 1000)
     const now = new Date()
     
-    // Use the same logic as your home page: status === 0 AND resolutionDate > now
     if (status === 0 && resolutionDate > now) {
       return "Active"
     } else if (status === 1) {
@@ -76,21 +199,18 @@ export default function Leaderboard() {
     } else if (status === 2) {
       return "Cancelled"
     } else {
-      // If status is 0 but resolution date has passed, consider it Resolved
       return "Resolved"
     }
   }
 
-  // Helper function to check if market is active - matching your home page logic
+  // Helper function to check if market is active
   const isMarketActive = (status: number, endTime: number): boolean => {
     const resolutionDate = new Date(endTime * 1000)
     const now = new Date()
-    
-    // Same logic as your home page: status === 0 AND resolutionDate > now
     return status === 0 && resolutionDate > now
   }
 
-  // Calculate prices from pool data - same as your home page
+  // Calculate prices from pool data
   const calculatePrices = (yesPool: string, noPool: string) => {
     const yes = parseFloat(yesPool) || 0
     const no = parseFloat(noPool) || 0
@@ -104,132 +224,73 @@ export default function Leaderboard() {
     }
   }
 
-    // Fetch traders from available events (BuyWithBNB and Swap)
-    const fetchTradersFromEvents = async (): Promise<string[]> => {
-    if (!contract) return []
-
-    try {
-        const traders = new Set<string>()
-
-        // Get market creators
-        for (let i = 0; i < markets.length; i++) {
-        try {
-            const market = await getMarket(i)
-            traders.add(market.creator.toLowerCase())
-        } catch (error) {
-            console.warn(`⚠️ Error getting market ${i}:`, error)
-        }
-        }
-
-        // Try to get traders from BuyWithBNB events (if any)
-        try {
-        const buyWithBNBFilter = contract.filters.BuyWithBNB()
-        const buyEvents = await contract.queryFilter(buyWithBNBFilter, 0, 'latest')
-        
-        buyEvents.forEach(event => {
-            // Handle both EventLog and Log types
-            if ('args' in event && event.args) {
-            // For EventLog with args
-            const user = event.args[1] // user is the second parameter in BuyWithBNB event
-            if (user && typeof user === 'string') {
-                traders.add(user.toLowerCase())
-            }
-            }
-        })
-
-        } catch (error) {
-        console.warn("⚠️ Could not fetch BuyWithBNB events:", error)
-        }
-
-        // Try to get traders from Swap events (if any)
-        try {
-        const swapFilter = contract.filters.Swap()
-        const swapEvents = await contract.queryFilter(swapFilter, 0, 'latest')
-        
-        swapEvents.forEach(event => {
-            if ('args' in event && event.args) {
-            // For EventLog with args
-            const user = event.args[1] // user is the second parameter in Swap event
-            if (user && typeof user === 'string') {
-                traders.add(user.toLowerCase())
-            }
-            }
-        })
-
-        } catch (error) {
-        console.warn("⚠️ Could not fetch Swap events:", error)
-        }
-
-        // Add current user if they're connected but haven't traded yet
-        if (account && !traders.has(account.toLowerCase())) {
-        traders.add(account.toLowerCase())
-        }
-
-        const traderArray = Array.from(traders)
-
-        return traderArray
-
-    } catch (error) {
-        console.error("❌ Error fetching traders from events:", error)
-        return []
-    }
-    }
-
-  // Enhanced function to get all traders by scanning user investments
-  const fetchAllTradersFromInvestments = async (): Promise<string[]> => {
-    if (!contract) return []
-
+  // Get all traders from markets
+  const fetchAllTraders = useCallback(async (markets: Market[]): Promise<string[]> => {
     try {
       const traders = new Set<string>()
-      const marketCount = markets.length
-
-      // Check each market for users with investments
-      for (let marketId = 0; marketId < marketCount; marketId++) {
-        try {
-          // Get market creator
-          const market = await getMarket(marketId)
+      
+      // Get market creators
+      markets.forEach(market => {
+        if (market && market.creator && market.creator !== "0x0000000000000000000000000000000000000000") {
           traders.add(market.creator.toLowerCase())
+        }
+      })
 
-          // Note: In a production environment, you would:
-          // 1. Use TheGraph for efficient event querying
-          // 2. Or implement an off-chain indexer
-          // 3. Or add a getTraders function to the contract
+      console.log(`👥 Found ${traders.size} traders from market creators`)
+      return Array.from(traders)
 
+    } catch (error) {
+      console.error("❌ Error fetching traders:", error)
+      return []
+    }
+  }, [])
+
+  // Get user positions from helper contract
+  const getUserPositions = useCallback(async (address: string): Promise<any[]> => {
+    try {
+      const { helperContract } = getReadOnlyContracts()
+      const positions = await helperContract.getUserPositions(address)
+      const formattedPositions = []
+
+      for (const pos of positions) {
+        try {
+          const market = await getMarket(Number(pos.marketId))
+          if (market) {
+            formattedPositions.push({
+              market,
+              yesBalance: ethers.formatEther(pos.yesBalance),
+              noBalance: ethers.formatEther(pos.noBalance),
+              bnbInvested: ethers.formatEther(pos.bnbInvested)
+            })
+          }
         } catch (error) {
-          console.warn(`⚠️ Error processing market ${marketId} for traders:`, error)
+          console.warn(`Error processing position for market ${pos.marketId}:`, error)
         }
       }
 
-      // Add simulated traders for demonstration (remove in production)
-      const simulatedTraders = [
-        "0x742d35Cc6634C0532925a3b8Dc9F5a4f2d2b2b2b",
-        "0x8932d35Cc6634C0532925a3b8Dc9F5a4f2d2b2b2b",
-        "0x4563d35Cc6634C0532925a3b8Dc9F5a4f2d2b2b2b",
-        "0x7891d35Cc6634C0532925a3b8Dc9F5a4f2d2b2b2b",
-        "0x1234d35Cc6634C0532925a3b8Dc9F5a4f2d2b2b2b"
-      ]
-
-      simulatedTraders.forEach(trader => traders.add(trader.toLowerCase()))
-      
-      const traderArray = Array.from(traders)
-      
-      return traderArray
-
+      return formattedPositions
     } catch (error) {
-      console.error("❌ Error scanning for traders:", error)
+      console.error(`Error fetching positions for ${address}:`, error)
       return []
     }
-  }
+  }, [getReadOnlyContracts, getMarket])
 
-  // Calculate user statistics from real contract data
-  const calculateUserStats = async (address: string): Promise<UserStats> => {
+  // Get total investment for a user
+  const getTotalInvestment = useCallback(async (address: string): Promise<string> => {
     try {
-      
-      
-      // Get user positions from contract
+      const { helperContract } = getReadOnlyContracts()
+      const totalInvestment = await helperContract.getUserTotalInvestment(address)
+      return ethers.formatEther(totalInvestment)
+    } catch (error) {
+      console.error(`Error fetching total investment for ${address}:`, error)
+      return "0"
+    }
+  }, [getReadOnlyContracts])
+
+  // Calculate user statistics
+  const calculateUserStats = useCallback(async (address: string): Promise<UserStats> => {
+    try {
       const positions = await getUserPositions(address)
-      
-      // Get total investment from contract
       const totalInvestmentBNB = await getTotalInvestment(address)
       
       let totalVolume = 0
@@ -242,8 +303,9 @@ export default function Leaderboard() {
 
       // Calculate metrics from positions
       for (const position of positions) {
-        const yesValue = parseFloat(position.yesBalance) * (position.market.yesPrice || 50) / 100
-        const noValue = parseFloat(position.noBalance) * (position.market.noPrice || 50) / 100
+        const prices = calculatePrices(position.market.yesPool, position.market.noPool)
+        const yesValue = parseFloat(position.yesBalance) * prices.yesPrice / 100
+        const noValue = parseFloat(position.noBalance) * prices.noPrice / 100
         const positionValue = yesValue + noValue
         const invested = parseFloat(position.bnbInvested)
         
@@ -256,7 +318,7 @@ export default function Leaderboard() {
           unrealizedPnl += positionPnl
         }
 
-        // Count active positions using the same logic as home page
+        // Count active positions
         if (isMarketActive(position.market.status, position.market.endTime)) {
           activePositions++
         }
@@ -286,12 +348,10 @@ export default function Leaderboard() {
         totalInvestment: totalInvestmentBNB
       }
 
-      
       return stats
 
     } catch (error) {
-      console.error(`❌ Error calculating stats for ${address}:`, error)
-      // Return default stats if there's an error
+      console.error(`Error calculating stats for ${address}:`, error)
       return {
         address,
         totalMarketsTraded: 0,
@@ -306,15 +366,14 @@ export default function Leaderboard() {
         totalInvestment: "0"
       }
     }
-  }
+  }, [getUserPositions, getTotalInvestment])
 
   // Fetch market positions for a user
-  const fetchUserMarketPositions = async (address: string): Promise<MarketPosition[]> => {
+  const fetchUserMarketPositions = useCallback(async (address: string): Promise<MarketPosition[]> => {
     try {
       const positions = await getUserPositions(address)
       
       return positions.map(position => {
-        // Calculate prices using the same logic as home page
         const prices = calculatePrices(position.market.yesPool, position.market.noPool)
         
         return {
@@ -331,83 +390,104 @@ export default function Leaderboard() {
                        parseFloat(position.bnbInvested),
           status: getMarketStatusText(position.market.status, position.market.endTime),
           marketStatus: position.market.status,
-          endTime: position.market.endTime, // Store endTime for reference
+          endTime: position.market.endTime,
           yesPrice: prices.yesPrice,
           noPrice: prices.noPrice
         }
       })
 
     } catch (error) {
-      console.error(`❌ Error fetching positions for ${address}:`, error)
+      console.error(`Error fetching positions for ${address}:`, error)
       return []
     }
-  }
+  }, [getUserPositions])
 
   // Main data fetching function
-  const fetchLeaderboardData = async () => {
-    if (!contract || !markets.length) {
-      
+  const fetchLeaderboardData = useCallback(async () => {
+    if (!PREDICTION_MARKET_ADDRESS || !HELPER_CONTRACT_ADDRESS) {
+      setError("Contract addresses not configured. Please check environment variables.")
       return
     }
 
     setIsLoading(true)
+    setError(null)
+    
     try {
+      console.log("🚀 Starting to fetch leaderboard data...")
       
-      
-      // 1. Get all unique traders using multiple methods
-      const tradersFromEvents = await fetchTradersFromEvents()
-      const tradersFromInvestments = await fetchAllTradersFromInvestments()
-      
-      // Combine both methods and remove duplicates
-      const allTraders = Array.from(new Set([
-        ...tradersFromEvents,
-        ...tradersFromInvestments
-      ]))
-      
+      // 1. Fetch all markets
+      const allMarkets = await fetchAllMarkets()
+      setMarkets(allMarkets)
+
+      if (allMarkets.length === 0) {
+        setError("No markets found on the blockchain")
+        setUserStats([])
+        setIsLoading(false)
+        return
+      }
+
+      // 2. Get all unique traders
+      const allTraders = await fetchAllTraders(allMarkets)
       setUniqueTraders(allTraders)
 
-      // 2. Calculate stats for each trader (limit to first 20 for performance)
-      const tradersToProcess = allTraders.slice(0, 20)
+      if (allTraders.length === 0) {
+        setError("No traders found on the blockchain")
+        setUserStats([])
+        setIsLoading(false)
+        return
+      }
+
+      // 3. Calculate stats for each trader (limit for performance)
+      const tradersToProcess = allTraders.slice(0, 15)
+      console.log(`📊 Processing ${tradersToProcess.length} traders...`)
+      
       const statsPromises = tradersToProcess.map(trader => calculateUserStats(trader))
       const allStats = await Promise.all(statsPromises)
 
-      // 3. Filter out traders with no activity and sort by total PnL
+      // 4. Filter out traders with no activity and sort by total PnL
       const activeTraders = allStats.filter(stats => 
         stats.totalMarketsTraded > 0 || parseFloat(stats.totalInvestment) > 0
       )
+      
       activeTraders.sort((a, b) => b.totalPnl - a.totalPnl)
+      console.log(`✅ Active traders with positions: ${activeTraders.length}`)
 
       setUserStats(activeTraders)
 
-      // 4. Fetch positions for top traders (limit to avoid too many requests)
-      const topTraders = activeTraders.slice(0, 10)
+      // 5. Fetch positions for top traders
+      const topTraders = activeTraders.slice(0, 8)
       const positionsData: { [key: string]: MarketPosition[] } = {}
 
       for (const trader of topTraders) {
         try {
           const positions = await fetchUserMarketPositions(trader.address)
-          positionsData[trader.address] = positions.slice(0, 3) // Limit to 3 positions per trader
+          positionsData[trader.address] = positions.slice(0, 2)
         } catch (error) {
-          console.warn(`⚠️ Error fetching positions for ${trader.address}:`, error)
+          console.warn(`Error fetching positions for ${trader.address}:`, error)
           positionsData[trader.address] = []
         }
       }
 
       setUserPositions(positionsData)
-      
+      console.log("🎉 Leaderboard data loaded successfully")
 
-    } catch (error) {
-      console.error("❌ Error fetching leaderboard data:", error)
+    } catch (err: any) {
+      console.error("❌ Error fetching leaderboard data:", err)
+      setError(err.message || 'Failed to load leaderboard data from blockchain')
+      setUserStats([])
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [PREDICTION_MARKET_ADDRESS, HELPER_CONTRACT_ADDRESS, fetchAllMarkets, fetchAllTraders, calculateUserStats, fetchUserMarketPositions])
 
+  // Auto-load data on mount
   useEffect(() => {
-    if (contract && markets.length > 0 && isCorrectNetwork) {
-      fetchLeaderboardData()
-    }
-  }, [contract, markets.length, isCorrectNetwork])
+    fetchLeaderboardData()
+  }, [fetchLeaderboardData])
+
+  const refreshData = useCallback(async () => {
+    await fetchLeaderboardData()
+  }, [fetchLeaderboardData])
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
@@ -431,42 +511,10 @@ export default function Leaderboard() {
     }
   }
 
-  const refreshData = () => {
-    refreshMarkets()
-    fetchLeaderboardData()
-  }
-
-  // Count active markets using the same logic as home page
+  // Count active markets
   const activeMarketsCount = markets.filter(market => 
     isMarketActive(market.status, market.endTime)
   ).length
-
-  if (!isInitialized) {
-    return (
-      <main className="min-h-screen bg-background relative overflow-hidden">
-        <div className="fixed inset-0 z-0">
-          <LightRays
-            raysOrigin="top-center"
-            raysColor="#6366f1"
-            raysSpeed={1.5}
-            lightSpread={0.8}
-            rayLength={1.2}
-            followMouse={true}
-            mouseInfluence={0.1}
-            noiseAmount={0.1}
-            distortion={0.05}
-          />
-        </div>
-        <div className="relative z-10">
-          <Header />
-          <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg m-4">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <span className="ml-2 text-muted-foreground">Initializing...</span>
-          </div>
-        </div>
-      </main>
-    )
-  }
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
@@ -503,7 +551,7 @@ export default function Leaderboard() {
               <div>
                 <h1 className="text-3xl md:text-4xl font-bold mb-2">Trading Leaderboard</h1>
                 <p className="text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg inline-block">
-                  Real-time rankings based on actual trading performance
+                  Live rankings from GoPredix - No wallet needed to view
                 </p>
               </div>
             </div>
@@ -535,15 +583,13 @@ export default function Leaderboard() {
             </div>
           </div>
 
-          {/* Network Warning */}
-          {account && !isCorrectNetwork && (
+          {/* Error Display */}
+          {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg backdrop-blur-sm bg-card/80">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-red-800 font-semibold">Wrong Network</h3>
-                  <p className="text-red-700 text-sm mt-1">
-                    Please switch to BSC Testnet to view the leaderboard.
-                  </p>
+                  <h3 className="text-red-800 font-semibold">Error Loading Data</h3>
+                  <p className="text-red-700 text-sm mt-1">{error}</p>
                 </div>
               </div>
             </div>
@@ -564,7 +610,7 @@ export default function Leaderboard() {
             </Card>
             <Card className="backdrop-blur-sm bg-card/80 hover:border-white/50">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium ">Active Markets</CardTitle>
+                <CardTitle className="text-sm font-medium">Active Markets</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center">
@@ -612,17 +658,17 @@ export default function Leaderboard() {
           {isLoading && (
             <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Loading leaderboard data from GoPredix...</span>
+              <span className="ml-2 text-muted-foreground">Loading leaderboard data from Gopredix...</span>
             </div>
           )}
 
           {/* Leaderboard Table */}
-          {!isLoading && userStats.length > 0 && (
+          {!isLoading && !error && userStats.length > 0 && (
             <Card className="backdrop-blur-sm bg-card/80 hover:shadow-blue-500/50">
               <CardHeader>
                 <CardTitle>Top Traders</CardTitle>
                 <CardDescription>
-                  Ranked by total profit & loss across all markets. Data fetched directly from GoPredix.
+                  Ranked by total profit & loss across all markets. Live data from GoPredix contracts.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -630,11 +676,7 @@ export default function Leaderboard() {
                   {userStats.map((user, index) => (
                     <div
                       key={user.address}
-                      className={`p-4 rounded-lg border backdrop-blur-sm ${
-                        account && user.address.toLowerCase() === account.toLowerCase()
-                          ? "bg-primary/5 border-primary"
-                          : "bg-card/60"
-                      }`}
+                      className="p-4 rounded-lg border backdrop-blur-sm bg-card/60"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
@@ -646,9 +688,6 @@ export default function Leaderboard() {
                               <span className="font-semibold">
                                 {formatAddress(user.address)}
                               </span>
-                              {account && user.address.toLowerCase() === account.toLowerCase() && (
-                                <Badge variant="secondary">You</Badge>
-                              )}
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -712,7 +751,7 @@ export default function Leaderboard() {
                                   <div className="text-xs text-muted-foreground">
                                     {position.category} • 
                                     <Badge 
-                                      variant={position.status === "Active" ? "default" : "secondary"} 
+                                      variant={position.status === "Active" ? "secondary" : "secondary"} 
                                       className="ml-1 mr-1 backdrop-blur-sm"
                                     >
                                       {position.status}
@@ -743,14 +782,14 @@ export default function Leaderboard() {
           )}
 
           {/* Empty State */}
-          {!isLoading && userStats.length === 0 && (
+          {!isLoading && !error && userStats.length === 0 && (
             <Card className="backdrop-blur-sm bg-card/80">
               <CardContent className="py-12">
                 <div className="text-center">
                   <Trophy className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-xl font-semibold mb-2">No Trading Activity Yet</h3>
                   <p className="text-muted-foreground mb-6">
-                    Start trading prediction markets to appear on the leaderboard!
+                    Be the first to trade prediction markets and appear on the leaderboard!
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <Button onClick={() => router.push("/")} variant="outline" className="backdrop-blur-sm bg-card/80">
@@ -765,10 +804,10 @@ export default function Leaderboard() {
             </Card>
           )}
 
-          {/* Performance Note */}
-          {!isLoading && (
+          {/* Info Note */}
+          {!isLoading && !error && (
             <div className="mt-4 text-center text-sm text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg">
-              <p>Note: Leaderboard data is fetched directly from GoPredix. Some traders may not appear due to performance limits.</p>
+              <p>Live data from GoPredix contracts</p>
             </div>
           )}
         </div>
