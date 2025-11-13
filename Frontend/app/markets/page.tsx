@@ -5,13 +5,14 @@ import Header from "@/components/header"
 import MarketCard from "@/components/market-card"
 import CreateMarketModal from "@/components/createMarketModal"
 import { Button } from "@/components/ui/button"
-import { Search, Loader2, Plus, Trophy } from "lucide-react"
+import { Search, Loader2, Plus, Trophy, Info, Droplets } from "lucide-react"
 import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarket } from "@/hooks/use-predection-market"
 import { useAllMarkets } from "@/hooks/getAllMarkets"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { useRouter } from "next/navigation"
+
 
 const CATEGORIES = [
   "All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy", "General"
@@ -60,6 +61,7 @@ export default function MarketsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Markets")
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showHowItWorks, setShowHowItWorks] = useState(false)
 
   const router = useRouter()
   const { account, connectWallet, isCorrectNetwork, isInitialized } = useWeb3Context()
@@ -76,6 +78,19 @@ export default function MarketsPage() {
     const matchesSearch = market.question.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesCategory && matchesSearch
   })
+
+  const handleFaucet = () => {
+    // Navigate to the faucet page
+    router.push("/faucetPDX")
+  }
+
+  const handleHowItWorks = () => {
+    // Add your how it works logic here
+    setShowHowItWorks(true)
+    // Example: router.push("/how-it-works")
+    // Or show a modal with instructions
+    console.log("How it Works clicked")
+  }
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
@@ -134,27 +149,6 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* Connection Prompt for Trading */}
-          {/* {!account && isInitialized && (
-            <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-4 mb-6">
-              <div className="flex items-center">
-                <Trophy className="w-5 h-5 text-blue-500 mr-2" />
-                <p className="text-blue-500 font-medium">Connect Wallet to Trade</p>
-              </div>
-              <p className="text-blue-400/80 text-sm mt-1">
-                View all markets freely. Connect your wallet to place trades or create markets.
-              </p>
-              <Button 
-                onClick={connectWallet} 
-                variant="outline" 
-                size="sm" 
-                className="mt-2 border-blue-500 text-blue-500 hover:bg-blue-500/10"
-              >
-                Connect Wallet
-              </Button>
-            </div>
-          )} */}
-
           {/* Network Warning for Connected Users */}
           {account && !isCorrectNetwork && (
             <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-4 mb-6">
@@ -182,21 +176,45 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* Categories */}
-          <div className="flex flex-wrap gap-2 mb-10">
-            {CATEGORIES.map((cat) => (
+          {/* Categories with new buttons */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10">
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((cat) => (
+                <Button
+                  key={cat}
+                  size="sm"
+                  variant={selectedCategory === cat ? "default" : "outline"}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`backdrop-blur-sm bg-card/80 ${
+                    selectedCategory === cat ? "bg-primary text-black" : ""
+                  }`}
+                >
+                  {cat}
+                </Button>
+              ))}
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
               <Button
-                key={cat}
+                onClick={handleFaucet}
                 size="sm"
-                variant={selectedCategory === cat ? "default" : "outline"}
-                onClick={() => setSelectedCategory(cat)}
-                className={`backdrop-blur-sm bg-card/80 ${
-                  selectedCategory === cat ? "bg-primary text-black" : ""
-                }`}
+                variant="outline"
+                className="backdrop-blur-sm bg-card/80"
               >
-                {cat}
+                <Droplets className="w-4 h-4 mr-2" />
+                Faucet PDX
               </Button>
-            ))}
+              
+              <Button
+                onClick={handleHowItWorks}
+                size="sm"
+                variant="outline"
+                className="backdrop-blur-sm bg-card/80"
+              >
+                <Info className="w-4 h-4 mr-2" />
+                How it Works
+              </Button>
+            </div>
           </div>
 
           {/* Loading State */}
