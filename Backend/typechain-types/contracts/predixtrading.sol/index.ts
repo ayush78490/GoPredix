@@ -5,6 +5,4 @@ export type { IPDX } from "./IPDX";
 export type { IPredictionMarket } from "./IPredictionMarket";
 export type { OutcomeToken } from "./OutcomeToken";
 export type { PredictionMarketPDX } from "./PredictionMarketPDX";
-export type { PredictionMarketWithMultipliers } from "./PredictionMarketWithMultipliers";
-export type { TradingBot } from "./TradingBot";
 export type { TradingBotPDX } from "./TradingBotPDX";

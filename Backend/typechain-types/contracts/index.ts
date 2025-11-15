@@ -3,6 +3,8 @@
 /* eslint-disable */
 import type * as bazarSol from "./Bazar.sol";
 export type { bazarSol };
+import type * as dualtokenadapterSol from "./dualtokenadapter.sol";
+export type { dualtokenadapterSol };
 import type * as gpxSol from "./gpx.sol";
 export type { gpxSol };
 import type * as helperContractSol from "./helperContract.sol";

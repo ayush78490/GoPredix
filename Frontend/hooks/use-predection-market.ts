@@ -3,6 +3,8 @@ import { ethers } from 'ethers'
 import { useWeb3Context } from '@/lib/wallet-context'
 import PREDICTION_MARKET_ABI from '../contracts/abi.json'
 import HELPER_CONTRACT_ARTIFACT from '../contracts/helperABI.json'
+import ADAPTER_ABI from '../contracts/adapterABI.json'
+import ERC20_ABI from '../contracts/erc20ABI.json'
 
 // Extract ABI from helper contract artifact
 const HELPER_CONTRACT_ABI = (HELPER_CONTRACT_ARTIFACT as any).abi || HELPER_CONTRACT_ARTIFACT
@@ -10,6 +12,14 @@ const HELPER_CONTRACT_ABI = (HELPER_CONTRACT_ARTIFACT as any).abi || HELPER_CONT
 // Contract addresses
 const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x9d8462A5A9CA9d4398069C67FEb378806fD10fAA'
 const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0x00B4af3a7950CF31DdB1dCC4D8413193713CD2b5'
+const ADAPTER_ADDRESS = process.env.NEXT_PUBLIC_ADAPTER_ADDRESS || '0x458E18bE8AaF9e817F8Dd0f1e02b0e62198F6969'
+const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS || '0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8'
+
+// Payment token type
+export enum PaymentToken {
+  BNB = 'BNB',
+  PDX = 'PDX'
+}
 
 // Updated Types to match new contract
 export enum MarketStatus {
@@ -57,6 +67,7 @@ export interface MarketCreationParams {
   endTime: number
   initialYes: string
   initialNo: string
+  paymentToken?: PaymentToken
 }
 
 export interface MultiplierInfo {
@@ -119,6 +130,8 @@ export function usePredictionMarket() {
   const [isLoading, setIsLoading] = useState(false)
   const [contract, setContract] = useState<ethers.Contract | null>(null)
   const [helperContract, setHelperContract] = useState<ethers.Contract | null>(null)
+  const [adapterContract, setAdapterContract] = useState<ethers.Contract | null>(null)
+  const [pdxTokenContract, setPdxTokenContract] = useState<ethers.Contract | null>(null)
   const [isContractReady, setIsContractReady] = useState(false)
 
   // Initialize contracts
@@ -127,6 +140,8 @@ export function usePredictionMarket() {
       if (!provider) {
         setContract(null)
         setHelperContract(null)
+        setAdapterContract(null)
+        setPdxTokenContract(null)
         setIsContractReady(false)
         return
       }
@@ -139,6 +154,8 @@ export function usePredictionMarket() {
           console.warn("⚠️ Not on BSC Testnet. Current chain:", network.chainId)
           setContract(null)
           setHelperContract(null)
+          setAdapterContract(null)
+          setPdxTokenContract(null)
           setIsContractReady(false)
           return
         }
@@ -156,23 +173,46 @@ export function usePredictionMarket() {
           HELPER_CONTRACT_ABI,
           provider
         )
+
+        // Initialize adapter contract (NEW)
+        const adapterContractInstance = new ethers.Contract(
+          ADAPTER_ADDRESS,
+          ADAPTER_ABI,
+          provider
+        )
+
+        // Initialize PDX token contract (NEW)
+        const pdxTokenInstance = new ethers.Contract(
+          PDX_TOKEN_ADDRESS,
+          ERC20_ABI,
+          provider
+        )
         
         try {
-          // Test both contracts
+          // Test contracts
           const nextId = await (predictionMarketContract as any).nextMarketId()
           console.log('✅ Main contract connected. Next market ID:', nextId.toString())
           
-          // Test helper contract by calling a simple view function
           await (helperContractInstance as any).predictionMarket()
           console.log('✅ Helper contract connected')
           
+          const adapterOwner = await (adapterContractInstance as any).owner()
+          console.log('✅ Adapter contract connected. Owner:', adapterOwner)
+          
+          const pdxBalance = await (pdxTokenInstance as any).balanceOf(ADAPTER_ADDRESS)
+          console.log('✅ PDX token contract connected')
+          
           setContract(predictionMarketContract)
           setHelperContract(helperContractInstance)
+          setAdapterContract(adapterContractInstance)
+          setPdxTokenContract(pdxTokenInstance)
           setIsContractReady(true)
         } catch (testError) {
           console.error('❌ Contract initialization test failed:', testError)
           setContract(null)
           setHelperContract(null)
+          setAdapterContract(null)
+          setPdxTokenContract(null)
           setIsContractReady(false)
         }
         
@@ -180,6 +220,8 @@ export function usePredictionMarket() {
         console.error('❌ Error initializing contracts:', error)
         setContract(null)
         setHelperContract(null)
+        setAdapterContract(null)
+        setPdxTokenContract(null)
         setIsContractReady(false)
       }
     }
@@ -187,15 +229,16 @@ export function usePredictionMarket() {
     initializeContracts()
   }, [provider])
 
-  // ==================== MARKET CREATION ====================
+  // ==================== MARKET CREATION (SUPPORTS BNB & PDX) ====================
 
   const createMarket = useCallback(async (
-    params: MarketCreationParams
+    params: MarketCreationParams,
+    paymentToken: PaymentToken = PaymentToken.BNB
   ): Promise<number> => {
     if (!signer || !account || !isCorrectNetwork) {
       throw new Error('Wallet not connected or wrong network')
     }
-    if (!isContractReady) {
+    if (!isContractReady || !adapterContract) {
       throw new Error('Contract not ready - please ensure you\'re on BSC Testnet')
     }
 
@@ -206,9 +249,9 @@ export function usePredictionMarket() {
         throw new Error(validation.reason || 'Market question did not pass AI validation')
       }
 
-      const contractWithSigner = new ethers.Contract(
-        PREDICTION_MARKET_ADDRESS,
-        PREDICTION_MARKET_ABI,
+      const adapterWithSigner = new ethers.Contract(
+        ADAPTER_ADDRESS,
+        ADAPTER_ABI,
         signer
       )
 
@@ -216,14 +259,42 @@ export function usePredictionMarket() {
       const initialNoWei = ethers.parseEther(params.initialNo)
       const totalValue = initialYesWei + initialNoWei
 
-      const tx = await (contractWithSigner as any).createMarket(
-        params.question,
-        validation.category || 'OTHER',
-        BigInt(params.endTime),
-        initialYesWei,
-        initialNoWei,
-        { value: totalValue }
-      )
+      let tx
+
+      if (paymentToken === PaymentToken.BNB) {
+        // Create market with BNB
+        tx = await (adapterWithSigner as any).createMarketWithBNB(
+          params.question,
+          validation.category || 'OTHER',
+          BigInt(params.endTime),
+          initialYesWei,
+          initialNoWei,
+          { value: totalValue }
+        )
+        console.log('📝 Creating market with BNB...')
+      } else {
+        // Create market with PDX
+        const pdxWithSigner = new ethers.Contract(
+          PDX_TOKEN_ADDRESS,
+          ERC20_ABI,
+          signer
+        )
+
+        // Approve adapter to spend PDX
+        const approveTx = await pdxWithSigner.approve(ADAPTER_ADDRESS, totalValue)
+        await approveTx.wait()
+        console.log('✅ PDX approved')
+
+        tx = await (adapterWithSigner as any).createMarketWithPDX(
+          params.question,
+          validation.category || 'OTHER',
+          BigInt(params.endTime),
+          initialYesWei,
+          initialNoWei,
+          totalValue
+        )
+        console.log('📝 Creating market with PDX...')
+      }
 
       const receipt = await tx.wait()
 
@@ -236,10 +307,17 @@ export function usePredictionMarket() {
         const decodedEvent = iface.parseLog(event)
         marketId = Number(decodedEvent?.args.id)
       } else {
-        const nextId = await (contractWithSigner as any).nextMarketId()
-        marketId = Number(nextId) - 1
+        const nextId = await (adapterWithSigner as any).predictionMarket()
+        const mainContract = new ethers.Contract(
+          PREDICTION_MARKET_ADDRESS,
+          PREDICTION_MARKET_ABI,
+          signer
+        )
+        const nextMarketId = await (mainContract as any).nextMarketId()
+        marketId = Number(nextMarketId) - 1
       }
 
+      console.log(`✅ Market created with ID: ${marketId} using ${paymentToken}`)
       return marketId
 
     } catch (error: any) {
@@ -248,7 +326,7 @@ export function usePredictionMarket() {
     } finally {
       setIsLoading(false)
     }
-  }, [signer, account, isCorrectNetwork, isContractReady])
+  }, [signer, account, isCorrectNetwork, isContractReady, adapterContract])
 
   // ==================== MARKET DATA FETCHING ====================
 
@@ -286,7 +364,6 @@ export function usePredictionMarket() {
         disputeDeadline: Number(marketData[17] || 0),
         resolutionReason: marketData[15] || '',
         resolutionConfidence: Number(marketData[16] || 0),
-        // Use helper contract data for prices and multipliers
         yesPrice: Number(tradingInfo[2]) / 100,
         noPrice: Number(tradingInfo[3]) / 100,
         yesMultiplier: Number(tradingInfo[0]) / 10000,
@@ -301,7 +378,7 @@ export function usePredictionMarket() {
     }
   }, [contract, helperContract])
 
-  // ==================== USER INVESTMENT FUNCTIONS (USING HELPER) ====================
+  // ==================== USER INVESTMENT FUNCTIONS ====================
 
   const getMarketInvestment = useCallback(async (
     userAddress: string, 
@@ -310,7 +387,6 @@ export function usePredictionMarket() {
     if (!helperContract) throw new Error('Helper contract not available')
     
     try {
-      // Use helper contract's getMarketInvestment function
       const investment = await (helperContract as any).getMarketInvestment(BigInt(marketId), userAddress)
       const investmentBNB = ethers.formatEther(investment)
       console.log(`📊 Market ${marketId} investment for ${userAddress}: ${investmentBNB} BNB`)
@@ -326,7 +402,6 @@ export function usePredictionMarket() {
     if (!helperContract) throw new Error('Helper contract not available')
     
     try {
-      // Use helper contract's getUserTotalInvestment function
       const totalInvestment = await (helperContract as any).getUserTotalInvestment(userAddress)
       const totalInvestmentBNB = ethers.formatEther(totalInvestment)
       console.log(`💰 Total investment for ${userAddress}: ${totalInvestmentBNB} BNB`)
@@ -338,7 +413,7 @@ export function usePredictionMarket() {
     }
   }, [helperContract])
 
-  // ==================== USER POSITIONS (USING HELPER) ====================
+  // ==================== USER POSITIONS ====================
 
   const getUserPositions = useCallback(async (userAddress: string): Promise<UserPosition[]> => {
     if (!helperContract) throw new Error('Helper contract not available')
@@ -346,7 +421,6 @@ export function usePredictionMarket() {
     try {
       console.log('🔍 Fetching user positions from helper contract...')
       
-      // Use helper contract's getUserPositions function
       const helperPositions = await (helperContract as any).getUserPositions(userAddress)
       const positions: UserPosition[] = []
       
@@ -385,7 +459,7 @@ export function usePredictionMarket() {
     }
   }, [helperContract, getMarket])
 
-  // ==================== MULTIPLIER & PRICE CALCULATIONS (USING HELPER) ====================
+  // ==================== MULTIPLIER & PRICE CALCULATIONS ====================
 
   const getBuyYesMultiplier = useCallback(async (
     marketId: number, 
@@ -490,7 +564,7 @@ export function usePredictionMarket() {
     }
   }, [helperContract])
 
-  // ==================== PRICE CALCULATIONS (USING HELPER) ====================
+  // ==================== PRICE CALCULATIONS ====================
 
   const getYesPrice = useCallback(async (marketId: number): Promise<number> => {
     if (!helperContract) throw new Error('Helper contract not available')
@@ -516,7 +590,7 @@ export function usePredictionMarket() {
     }
   }, [helperContract])
 
-  // ==================== STATUS CHECKS (USING HELPER) ====================
+  // ==================== STATUS CHECKS ====================
 
   const canRequestResolution = useCallback(async (marketId: number): Promise<boolean> => {
     if (!helperContract) throw new Error('Helper contract not available')
@@ -540,57 +614,139 @@ export function usePredictionMarket() {
     }
   }, [helperContract])
 
-  // ==================== TRADING FUNCTIONS (USING MAIN CONTRACT) ====================
+  // ==================== TRADING FUNCTIONS (BNB & PDX SUPPORT) ====================
 
   const buyYesWithBNB = useCallback(async (
     marketId: number,
     minTokensOut: string,
     amountIn: string
   ) => {
-    if (!signer || !isCorrectNetwork) throw new Error('Wallet not connected or wrong network')
+    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
     
-    const contractWithSigner = new ethers.Contract(
-      PREDICTION_MARKET_ADDRESS,
-      PREDICTION_MARKET_ABI,
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
       signer
     )
     
     const amountInWei = ethers.parseEther(amountIn)
     const minOutWei = ethers.parseEther(minTokensOut)
     
-    const tx = await (contractWithSigner as any).buyYesWithBNB(
+    const tx = await (adapterWithSigner as any).buyYesWithBNB(
       BigInt(marketId),
+      account,
       minOutWei,
       { value: amountInWei }
     )
     
     return await tx.wait()
-  }, [signer, isCorrectNetwork])
+  }, [signer, isCorrectNetwork, adapterContract, account])
+
+  const buyYesWithPDX = useCallback(async (
+    marketId: number,
+    pdxAmount: string,
+    minBNBOut: string,
+    minTokensOut: string
+  ) => {
+    if (!signer || !isCorrectNetwork || !adapterContract || !pdxTokenContract) throw new Error('Wallet not connected or wrong network')
+    
+    const pdxWithSigner = new ethers.Contract(
+      PDX_TOKEN_ADDRESS,
+      ERC20_ABI,
+      signer
+    )
+
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
+      signer
+    )
+    
+    const pdxAmountWei = ethers.parseEther(pdxAmount)
+    const minBNBOutWei = ethers.parseEther(minBNBOut)
+    const minOutWei = ethers.parseEther(minTokensOut)
+    
+    // Approve PDX
+    const approveTx = await pdxWithSigner.approve(ADAPTER_ADDRESS, pdxAmountWei)
+    await approveTx.wait()
+    console.log('✅ PDX approved')
+    
+    const tx = await (adapterWithSigner as any).buyYesWithPDX(
+      BigInt(marketId),
+      account,
+      pdxAmountWei,
+      minBNBOutWei,
+      minOutWei
+    )
+    
+    return await tx.wait()
+  }, [signer, isCorrectNetwork, adapterContract, pdxTokenContract, account])
 
   const buyNoWithBNB = useCallback(async (
     marketId: number,
     minTokensOut: string,
     amountIn: string
   ) => {
-    if (!signer || !isCorrectNetwork) throw new Error('Wallet not connected or wrong network')
+    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
     
-    const contractWithSigner = new ethers.Contract(
-      PREDICTION_MARKET_ADDRESS,
-      PREDICTION_MARKET_ABI,
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
       signer
     )
     
     const amountInWei = ethers.parseEther(amountIn)
     const minOutWei = ethers.parseEther(minTokensOut)
     
-    const tx = await (contractWithSigner as any).buyNoWithBNB(
+    const tx = await (adapterWithSigner as any).buyNoWithBNB(
       BigInt(marketId),
+      account,
       minOutWei,
       { value: amountInWei }
     )
     
     return await tx.wait()
-  }, [signer, isCorrectNetwork])
+  }, [signer, isCorrectNetwork, adapterContract, account])
+
+  const buyNoWithPDX = useCallback(async (
+    marketId: number,
+    pdxAmount: string,
+    minBNBOut: string,
+    minTokensOut: string
+  ) => {
+    if (!signer || !isCorrectNetwork || !adapterContract || !pdxTokenContract) throw new Error('Wallet not connected or wrong network')
+    
+    const pdxWithSigner = new ethers.Contract(
+      PDX_TOKEN_ADDRESS,
+      ERC20_ABI,
+      signer
+    )
+
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
+      signer
+    )
+    
+    const pdxAmountWei = ethers.parseEther(pdxAmount)
+    const minBNBOutWei = ethers.parseEther(minBNBOut)
+    const minOutWei = ethers.parseEther(minTokensOut)
+    
+    // Approve PDX
+    const approveTx = await pdxWithSigner.approve(ADAPTER_ADDRESS, pdxAmountWei)
+    await approveTx.wait()
+    console.log('✅ PDX approved')
+    
+    const tx = await (adapterWithSigner as any).buyNoWithPDX(
+      BigInt(marketId),
+      account,
+      pdxAmountWei,
+      minBNBOutWei,
+      minOutWei
+    )
+    
+    return await tx.wait()
+  }, [signer, isCorrectNetwork, adapterContract, pdxTokenContract, account])
 
   const swapTokens = useCallback(async (
     marketId: number, 
@@ -627,6 +783,112 @@ export function usePredictionMarket() {
     return await tx.wait()
   }, [signer, isCorrectNetwork])
 
+  const sellYesForBNB = useCallback(async (
+    marketId: number,
+    tokenAmount: string,
+    minBNBOut: string
+  ) => {
+    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
+    
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
+      signer
+    )
+    
+    const tokenAmountWei = ethers.parseEther(tokenAmount)
+    const minBNBOutWei = ethers.parseEther(minBNBOut)
+    
+    const tx = await (adapterWithSigner as any).sellYesForBNB(
+      BigInt(marketId),
+      tokenAmountWei,
+      minBNBOutWei
+    )
+    
+    return await tx.wait()
+  }, [signer, isCorrectNetwork, adapterContract])
+
+  const sellYesForPDX = useCallback(async (
+    marketId: number,
+    tokenAmount: string,
+    minBNBOut: string,
+    minPDXOut: string
+  ) => {
+    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
+    
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
+      signer
+    )
+    
+    const tokenAmountWei = ethers.parseEther(tokenAmount)
+    const minBNBOutWei = ethers.parseEther(minBNBOut)
+    const minPDXOutWei = ethers.parseEther(minPDXOut)
+    
+    const tx = await (adapterWithSigner as any).sellYesForPDX(
+      BigInt(marketId),
+      tokenAmountWei,
+      minBNBOutWei,
+      minPDXOutWei
+    )
+    
+    return await tx.wait()
+  }, [signer, isCorrectNetwork, adapterContract])
+
+  const sellNoForBNB = useCallback(async (
+    marketId: number,
+    tokenAmount: string,
+    minBNBOut: string
+  ) => {
+    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
+    
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
+      signer
+    )
+    
+    const tokenAmountWei = ethers.parseEther(tokenAmount)
+    const minBNBOutWei = ethers.parseEther(minBNBOut)
+    
+    const tx = await (adapterWithSigner as any).sellNoForBNB(
+      BigInt(marketId),
+      tokenAmountWei,
+      minBNBOutWei
+    )
+    
+    return await tx.wait()
+  }, [signer, isCorrectNetwork, adapterContract])
+
+  const sellNoForPDX = useCallback(async (
+    marketId: number,
+    tokenAmount: string,
+    minBNBOut: string,
+    minPDXOut: string
+  ) => {
+    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
+    
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
+      signer
+    )
+    
+    const tokenAmountWei = ethers.parseEther(tokenAmount)
+    const minBNBOutWei = ethers.parseEther(minBNBOut)
+    const minPDXOutWei = ethers.parseEther(minPDXOut)
+    
+    const tx = await (adapterWithSigner as any).sellNoForPDX(
+      BigInt(marketId),
+      tokenAmountWei,
+      minBNBOutWei,
+      minPDXOutWei
+    )
+    
+    return await tx.wait()
+  }, [signer, isCorrectNetwork, adapterContract])
+
   // ==================== AI RESOLUTION SYSTEM ====================
 
   const requestResolution = useCallback(async (marketId: number, reason: string = '') => {
@@ -658,13 +920,13 @@ export function usePredictionMarket() {
   const redeem = useCallback(async (marketId: number) => {
     if (!signer || !isCorrectNetwork) throw new Error('Wallet not connected or wrong network')
     
-    const contractWithSigner = new ethers.Contract(
-      PREDICTION_MARKET_ADDRESS,
-      PREDICTION_MARKET_ABI,
+    const adapterWithSigner = new ethers.Contract(
+      ADAPTER_ADDRESS,
+      ADAPTER_ABI,
       signer
     )
     
-    const tx = await (contractWithSigner as any).claimRedemption(BigInt(marketId))
+    const tx = await (adapterWithSigner as any).claimRedemption(BigInt(marketId))
     return await tx.wait()
   }, [signer, isCorrectNetwork])
 
@@ -686,12 +948,18 @@ export function usePredictionMarket() {
     getYesPrice,
     getNoPrice,
     
-    // Trading functions (main contract)
+    // Trading functions (BNB & PDX support via adapter)
     buyYesWithBNB,
+    buyYesWithPDX,
     buyNoWithBNB,
+    buyNoWithPDX,
+    sellYesForBNB,
+    sellYesForPDX,
+    sellNoForBNB,
+    sellNoForPDX,
     swapTokens,
     
-    // AI Resolution system (main contract)
+    // AI Resolution system
     requestResolution,
     initiateDispute,
     redeem,
@@ -707,12 +975,17 @@ export function usePredictionMarket() {
     isLoading,
     contract,
     helperContract,
+    adapterContract,
+    pdxTokenContract,
     contractAddress: PREDICTION_MARKET_ADDRESS,
     helperContractAddress: HELPER_CONTRACT_ADDRESS,
+    adapterAddress: ADAPTER_ADDRESS,
+    pdxTokenAddress: PDX_TOKEN_ADDRESS,
     isContractReady,
     
     // Constants
     MarketStatus,
     Outcome,
+    PaymentToken,
   }
 }

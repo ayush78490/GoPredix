@@ -1,9 +1,9 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { TrendingUp, Volume2, Clock, User, AlertCircle } from "lucide-react"
+import { TrendingUp, Volume2, Clock, User, AlertCircle, Coins } from "lucide-react"
 import Link from "next/link"
-import { MarketStatus, Outcome } from "@/hooks/use-predection-market"
+import { MarketStatus, Outcome, PaymentToken } from "@/hooks/use-predection-market"
 import { useState } from "react"
 import CustomAlertDialog from "@/components/customAlert"
 
@@ -38,6 +38,7 @@ interface FrontendMarket {
   noOdds?: number
   volume?: number
   liquidity?: number
+  paymentToken?: PaymentToken // NEW: Track which token was used
 }
 
 interface MarketCardProps {
@@ -53,6 +54,7 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
   const marketCategory = market.category || "General"
   const marketCreator = market.creator || "0x0000000000000000000000000000000000000000"
   const marketEndTime = market.endTime || Math.floor(Date.now() / 1000) + 86400
+  const paymentToken = market.paymentToken || PaymentToken.BNB // NEW: Default to BNB
 
   const yesOdds = market.yesOdds !== undefined ? market.yesOdds : market.yesPrice || 50
   const noOdds = market.noOdds !== undefined ? market.noOdds : market.noPrice || 50
@@ -107,6 +109,30 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
     )
   }
 
+  // NEW: Get payment token badge
+  const getPaymentTokenBadge = (token: PaymentToken) => {
+    const tokenConfig = {
+      [PaymentToken.BNB]: { 
+        label: "BNB", 
+        color: "bg-yellow-500/20 border-yellow-600/50 text-yellow-400",
+        icon: "🔶"
+      },
+      [PaymentToken.PDX]: { 
+        label: "PDX", 
+        color: "bg-purple-500/20 border-purple-600/50 text-purple-400",
+        icon: "💜"
+      }
+    }
+
+    const config = tokenConfig[token]
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${config.color}`}>
+        <span>{config.icon}</span>
+        {config.label}
+      </span>
+    )
+  }
+
   const getOutcomeText = (outcome: Outcome) => {
     switch (outcome) {
       case Outcome.Yes:
@@ -145,6 +171,9 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
     }
   }
 
+  // Format pool amount based on token type
+  const tokenSymbol = paymentToken === PaymentToken.PDX ? "PDX" : "BNB"
+
   return (
     <div className="relative">
       <Link
@@ -158,11 +187,13 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
           } ${disabled ? "" : ""}`}
         >
           <div className="p-4">
-            {/* Header - Category and Status */}
-            <div className="flex items-center justify-between mb-3">
+            {/* Header - Category, Token, and Status */}
+            <div className="flex items-center justify-between mb-3 gap-2">
               <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
                 {marketCategory}
               </div>
+              {/* NEW: Payment Token Badge */}
+              {getPaymentTokenBadge(paymentToken)}
               {getStatusBadge(market.status, isMarketActive)}
             </div>
 
@@ -240,8 +271,9 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
                 >
                   {yesMultiplier}x return
                 </div>
+                {/* NEW: Show token symbol */}
                 <div className="text-xs text-muted-foreground mt-1">
-                  Pool: {yesPool.toFixed(2)} BNB
+                  Pool: {yesPool.toFixed(2)} {tokenSymbol}
                 </div>
               </div>
 
@@ -268,8 +300,9 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
                 >
                   {noMultiplier}x return
                 </div>
+                {/* NEW: Show token symbol */}
                 <div className="text-xs text-muted-foreground mt-1">
-                  Pool: {noPool.toFixed(2)} BNB
+                  Pool: {noPool.toFixed(2)} {tokenSymbol}
                 </div>
               </div>
             </div>
@@ -305,7 +338,8 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
             <div className="mt-2 text-xs text-muted-foreground">
               <div className="flex items-center justify-between">
                 <span>Total Liquidity:</span>
-                <span className="font-semibold">{totalBacking.toFixed(2)} BNB</span>
+                {/* NEW: Show token symbol */}
+                <span className="font-semibold">{totalBacking.toFixed(2)} {tokenSymbol}</span>
               </div>
             </div>
 
@@ -355,12 +389,6 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
         title="Connect Wallet Required"
         description="Please connect your wallet to trade on this market."
       />
-
-      {/* {disabled && (
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-lg z-10">
-          <p className="text-white text-sm font-semibold">Connect wallet to trade</p>
-        </div>
-      )} */}
     </div>
   )
 }

@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Header from "@/components/header"
 import MarketCard from "@/components/market-card"
 import CreateMarketModal from "@/components/createMarketModal"
 import { Button } from "@/components/ui/button"
-import { Search, Loader2, Plus, Trophy } from "lucide-react"
+import { Search, Loader2, Plus, Trophy, Info, Droplets, Coins } from "lucide-react"
 import { useWeb3Context } from "@/lib/wallet-context"
-import { usePredictionMarket } from "@/hooks/use-predection-market"
+import { usePredictionMarket, PaymentToken } from "@/hooks/use-predection-market"
 import { useAllMarkets } from "@/hooks/getAllMarkets"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
@@ -15,6 +15,13 @@ import { useRouter } from "next/navigation"
 
 const CATEGORIES = [
   "All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy", "General"
+]
+
+// NEW: Payment token filter options
+const PAYMENT_TOKEN_FILTERS = [
+  { label: "All Tokens", value: null },
+  { label: "🔶 BNB Only", value: PaymentToken.BNB },
+  { label: "💜 PDX Only", value: PaymentToken.PDX }
 ]
 
 // --- Helper functions ---
@@ -51,7 +58,9 @@ const convertToFrontendMarket = (market: any) => {
     noPrice: prices.noPrice,
     yesMultiplier: prices.yesPrice > 0 ? 100 / prices.yesPrice : 0,
     noMultiplier: prices.noPrice > 0 ? 100 / prices.noPrice : 0,
-    isActive: market.status === 0 && endTime > now
+    isActive: market.status === 0 && endTime > now,
+    // NEW: Ensure paymentToken is included
+    paymentToken: market.paymentToken || PaymentToken.BNB
   }
 }
 
@@ -60,6 +69,8 @@ export default function MarketsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Markets")
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showHowItWorks, setShowHowItWorks] = useState(false)
+  const [selectedPaymentToken, setSelectedPaymentToken] = useState<PaymentToken | null>(null) // NEW
 
   const router = useRouter()
   const { account, connectWallet, isCorrectNetwork, isInitialized } = useWeb3Context()
@@ -68,14 +79,34 @@ export default function MarketsPage() {
 
   const formattedMarkets = markets.map(m => convertToFrontendMarket(m))
 
-  // Filter logic
+  // Filter logic - NOW includes payment token filter
   const filteredMarkets = formattedMarkets.filter((market) => {
     const cat = (market.category || "general").toLowerCase()
     const matchesCategory =
       selectedCategory.toLowerCase() === "all markets" || cat === selectedCategory.toLowerCase()
     const matchesSearch = market.question.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesCategory && matchesSearch
+    
+    // NEW: Filter by payment token
+    const matchesPaymentToken = selectedPaymentToken === null || market.paymentToken === selectedPaymentToken
+    
+    return matchesCategory && matchesSearch && matchesPaymentToken
   })
+
+  // NEW: Statistics
+  const bnbMarkets = formattedMarkets.filter(m => m.paymentToken === PaymentToken.BNB).length
+  const pdxMarkets = formattedMarkets.filter(m => m.paymentToken === PaymentToken.PDX).length
+  const totalMarkets = formattedMarkets.length
+
+  const handleFaucet = () => {
+    // Navigate to the faucet page
+    router.push("/faucetPDX")
+  }
+
+  const handleHowItWorks = () => {
+    // Add your how it works logic here
+    setShowHowItWorks(true)
+    console.log("How it Works clicked")
+  }
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
@@ -100,9 +131,17 @@ export default function MarketsPage() {
         <div className="max-w-7xl mx-auto px-4 py-8">
           {/* Top section */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10">
-            <h1 className="text-4xl font-bold mb-4 md:mb-0 text-white">All Markets</h1>
+            <div>
+              <h1 className="text-4xl font-bold mb-2 text-white">All Markets</h1>
+              {/* NEW: Market statistics */}
+              <div className="text-sm text-muted-foreground space-x-4">
+                <span>Total: {totalMarkets}</span>
+                <span>🔶 BNB: {bnbMarkets}</span>
+                <span>💜 PDX: {pdxMarkets}</span>
+              </div>
+            </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 mt-4 md:mt-0">
               <Button
                 onClick={refreshMarkets}
                 variant="outline"
@@ -127,33 +166,12 @@ export default function MarketsPage() {
                   }
                 }}
                 className="bg-black text-white hover:bg-black/90"
-                disabled={!account} // Disable if not connected
+                disabled={!account}
               >
                 <Plus className="w-5 h-5 mr-2" /> Create Market
               </Button>
             </div>
           </div>
-
-          {/* Connection Prompt for Trading */}
-          {/* {!account && isInitialized && (
-            <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-4 mb-6">
-              <div className="flex items-center">
-                <Trophy className="w-5 h-5 text-blue-500 mr-2" />
-                <p className="text-blue-500 font-medium">Connect Wallet to Trade</p>
-              </div>
-              <p className="text-blue-400/80 text-sm mt-1">
-                View all markets freely. Connect your wallet to place trades or create markets.
-              </p>
-              <Button 
-                onClick={connectWallet} 
-                variant="outline" 
-                size="sm" 
-                className="mt-2 border-blue-500 text-blue-500 hover:bg-blue-500/10"
-              >
-                Connect Wallet
-              </Button>
-            </div>
-          )} */}
 
           {/* Network Warning for Connected Users */}
           {account && !isCorrectNetwork && (
@@ -182,21 +200,68 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* Categories */}
-          <div className="flex flex-wrap gap-2 mb-10">
-            {CATEGORIES.map((cat) => (
+          {/* NEW: Payment Token Filter */}
+          <div className="mb-6">
+            <div className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <Coins className="w-4 h-4" />
+              Payment Token
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {PAYMENT_TOKEN_FILTERS.map((filter) => (
+                <Button
+                  key={filter.label}
+                  size="sm"
+                  variant={selectedPaymentToken === filter.value ? "default" : "outline"}
+                  onClick={() => setSelectedPaymentToken(filter.value)}
+                  className={`backdrop-blur-sm bg-card/80 ${
+                    selectedPaymentToken === filter.value ? "bg-primary text-black" : ""
+                  }`}
+                >
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Categories with action buttons */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10">
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((cat) => (
+                <Button
+                  key={cat}
+                  size="sm"
+                  variant={selectedCategory === cat ? "default" : "outline"}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`backdrop-blur-sm bg-card/80 ${
+                    selectedCategory === cat ? "bg-primary text-black" : ""
+                  }`}
+                >
+                  {cat}
+                </Button>
+              ))}
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
               <Button
-                key={cat}
+                onClick={handleFaucet}
                 size="sm"
-                variant={selectedCategory === cat ? "default" : "outline"}
-                onClick={() => setSelectedCategory(cat)}
-                className={`backdrop-blur-sm bg-card/80 ${
-                  selectedCategory === cat ? "bg-primary text-black" : ""
-                }`}
+                variant="outline"
+                className="backdrop-blur-sm bg-card/80"
               >
-                {cat}
+                <Droplets className="w-4 h-4 mr-2" />
+                Faucet PDX
               </Button>
-            ))}
+              
+              <Button
+                onClick={handleHowItWorks}
+                size="sm"
+                variant="outline"
+                className="backdrop-blur-sm bg-card/80"
+              >
+                <Info className="w-4 h-4 mr-2" />
+                How it Works
+              </Button>
+            </div>
           </div>
 
           {/* Loading State */}
@@ -218,7 +283,7 @@ export default function MarketsPage() {
             </div>
           )}
 
-          {/* Market Grid - ALWAYS show markets when available, regardless of connection */}
+          {/* Market Grid */}
           {!isLoading && !error && (
             <>
               {filteredMarkets.length > 0 ? (
@@ -227,15 +292,15 @@ export default function MarketsPage() {
                     <MarketCard
                       key={market.id}
                       market={market}
-                      // Only disable trading actions, not viewing
-                      // Remove the disabled prop entirely or set it based on specific conditions
                       disabled={!account || !isCorrectNetwork}
                     />
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
-                  No markets found. {account && "Be the first to create one!"}
+                  {totalMarkets === 0 
+                    ? "No markets found. Be the first to create one!" 
+                    : "No markets match your filters."}
                 </div>
               )}
             </>
