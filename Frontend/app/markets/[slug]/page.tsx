@@ -7,9 +7,9 @@ import PriceChart from "@/components/price-chart"
 import TradeModal from "@/components/trade-modal"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { ArrowLeft, Volume2, TrendingUp, Loader2, Calendar, User } from "lucide-react"
+import { ArrowLeft, Volume2, TrendingUp, Loader2, Calendar, User, Coins } from "lucide-react"
 import Link from "next/link"
-import { usePredictionMarket, MarketStatus } from "@/hooks/use-predection-market"
+import { usePredictionMarket, MarketStatus, PaymentToken } from "@/hooks/use-predection-market"
 import { useAllMarkets } from "@/hooks/getAllMarkets" 
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
@@ -18,11 +18,11 @@ import LightRays from "@/components/LightRays"
 export const generateSlug = (question: string, id: number): string => {
   const baseSlug = question
     .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
-    .replace(/\s+/g, '-') // Replace spaces with hyphens
-    .replace(/-+/g, '-') // Replace multiple hyphens with single
-    .substring(0, 60) // Limit length
-    .replace(/-$/, '') // Remove trailing hyphen
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .substring(0, 60)
+    .replace(/-$/, '')
   
   return `${baseSlug}-${id}` || `market-${id}`
 }
@@ -31,12 +31,10 @@ export const generateSlug = (question: string, id: number): string => {
 export const extractIdFromSlug = (slug: string): number | null => {
   if (!slug) return null
   
-  // If it's just a number (like "1"), use it directly
   if (/^\d+$/.test(slug)) {
     return parseInt(slug)
   }
   
-  // If it's a slug with ID at the end (like "some-question-1"), extract the ID
   const idMatch = slug.match(/-(\d+)$/)
   if (idMatch) {
     return parseInt(idMatch[1])
@@ -74,7 +72,6 @@ const convertToFrontendMarket = (m: any, id: number) => {
   const question = m?.question ?? m?.title ?? `Market ${id}`
   const category = m?.category ? m.category.toUpperCase() : extractCategory(question)
   const endTime = Number(m?.endTime ?? m?.end_time ?? Math.floor(Date.now() / 1000))
-  console.log("The market creating time is here", endTime)
   const resolutionDate = new Date(endTime * 1000)
   const now = new Date()
   const isActive = resolutionDate > now
@@ -88,6 +85,9 @@ const convertToFrontendMarket = (m: any, id: number) => {
   const noOdds = totalPool > 0 ? (noPool / totalPool) * 100 : 50
 
   const slug = generateSlug(question, id)
+
+  // NEW: Extract payment token
+  const paymentToken = m?.paymentToken || PaymentToken.BNB
 
   return {
     id: id.toString(),
@@ -104,7 +104,8 @@ const convertToFrontendMarket = (m: any, id: number) => {
     isActive,
     daysLeft: Math.max(0, Math.ceil((resolutionDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))),
     creator: m?.creator || "Unknown",
-    totalLiquidity: totalPool
+    totalLiquidity: totalPool,
+    paymentToken // NEW
   }
 }
 
@@ -113,7 +114,7 @@ const generatePriceHistory = (market: any, days: number = 7) => {
   const history = []
   const now = Date.now()
   const basePrice = market.yesOdds || 50
-  const volatility = 5 // Price volatility
+  const volatility = 5
   
   for (let i = days - 1; i >= 0; i--) {
     const time = now - (i * 24 * 60 * 60 * 1000)
@@ -129,6 +130,30 @@ const generatePriceHistory = (market: any, days: number = 7) => {
   return history
 }
 
+// NEW: Get payment token badge
+const getPaymentTokenBadge = (token: PaymentToken) => {
+  const tokenConfig = {
+    [PaymentToken.BNB]: { 
+      label: "BNB", 
+      color: "bg-yellow-500/20 border-yellow-600/50 text-yellow-400",
+      icon: "🔶"
+    },
+    [PaymentToken.PDX]: { 
+      label: "PDX", 
+      color: "bg-purple-500/20 border-purple-600/50 text-purple-400",
+      icon: "💜"
+    }
+  }
+
+  const config = tokenConfig[token]
+  return (
+    <div className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${config.color} backdrop-blur-sm`}>
+      <span>{config.icon}</span>
+      {config.label}
+    </div>
+  )
+}
+
 export default function MarketPage() {
   const params = useParams()
   const marketSlug = params?.slug as string
@@ -141,7 +166,6 @@ export default function MarketPage() {
   const [chartData, setChartData] = useState<any[]>([])
   const [isChartLoading, setIsChartLoading] = useState(true)
 
-  // Use the correct hook for getAllMarkets
   const { getAllMarkets, markets: allMarkets, isLoading: marketsLoading } = useAllMarkets()
   const { isContractReady } = usePredictionMarket()
 
@@ -159,10 +183,8 @@ export default function MarketPage() {
       setError(null)
 
       try {
-        // Use the markets from useAllMarkets hook
         let marketsToSearch = allMarkets
         
-        // If no markets are loaded yet, fetch them
         if (allMarkets.length === 0 && !marketsLoading) {
           console.log("No markets loaded, fetching...")
           marketsToSearch = await getAllMarkets()
@@ -173,15 +195,12 @@ export default function MarketPage() {
         let foundMarket: any = null
         let foundId: number = -1
 
-        // Extract ID from the slug (supports both "1" and "some-question-1" formats)
         const extractedId = extractIdFromSlug(marketSlug)
 
         if (extractedId !== null && extractedId >= 0 && extractedId < marketsToSearch.length) {
-          // Found by ID - use the extracted ID
           foundMarket = convertToFrontendMarket(marketsToSearch[extractedId], extractedId)
           foundId = extractedId
         } else {
-          // If not found by ID, try to find by exact slug match
           for (let i = 0; i < marketsToSearch.length; i++) {
             const marketData = marketsToSearch[i]
             const formatted = convertToFrontendMarket(marketData, i)
@@ -197,7 +216,6 @@ export default function MarketPage() {
           setMarket(foundMarket)
           setError(null)
           
-          // Generate chart data
           const priceHistory = generatePriceHistory(foundMarket)
           setChartData(priceHistory)
           setIsChartLoading(false)
@@ -266,7 +284,7 @@ export default function MarketPage() {
         <div className="fixed inset-0 z-0">
           <LightRays
             raysOrigin="top-center"
-            raysColor="#6366f1" // Using your primary color
+            raysColor="#6366f1"
             raysSpeed={1.5}
             lightSpread={0.8}
             rayLength={1.2}
@@ -296,7 +314,7 @@ export default function MarketPage() {
         <div className="fixed inset-0 z-0">
           <LightRays
             raysOrigin="top-center"
-            raysColor="#6366f1" // Using your primary color
+            raysColor="#6366f1"
             raysSpeed={1.5}
             lightSpread={0.8}
             rayLength={1.2}
@@ -325,7 +343,7 @@ export default function MarketPage() {
         <div className="fixed inset-0 z-0">
           <LightRays
             raysOrigin="top-center"
-            raysColor="#6366f1" // Using your primary color
+            raysColor="#6366f1"
             raysSpeed={1.5}
             lightSpread={0.8}
             rayLength={1.2}
@@ -348,7 +366,6 @@ export default function MarketPage() {
             <div className="bg-destructive/10 border border-destructive rounded-lg p-6 text-center backdrop-blur-sm bg-card/80">
               <p className="text-destructive font-medium">❌ Error loading market</p>
               <p className="text-destructive/80 text-sm mt-1">{error}</p>
-              {/* <p className="text-muted-foreground text-xs mt-2">Slug: {marketSlug}</p> */}
               <Button onClick={() => window.location.reload()} variant="outline" className="mt-4 backdrop-blur-sm bg-card/80">
                 Try Again
               </Button>
@@ -365,7 +382,7 @@ export default function MarketPage() {
         <div className="fixed inset-0 z-0">
           <LightRays
             raysOrigin="top-center"
-            raysColor="#6366f1" // Using your primary color
+            raysColor="#6366f1"
             raysSpeed={1.5}
             lightSpread={0.8}
             rayLength={1.2}
@@ -402,13 +419,17 @@ export default function MarketPage() {
     )
   }
 
+  // NEW: Get token symbol and format liquidity
+  const tokenSymbol = market.paymentToken === PaymentToken.PDX ? "PDX" : "BNB"
+  const formattedLiquidity = market.totalLiquidity ? `${parseFloat(market.totalLiquidity).toFixed(2)} ${tokenSymbol}` : 'N/A'
+
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
       {/* Light Rays Background */}
       <div className="fixed inset-0 z-0">
         <LightRays
           raysOrigin="top-center"
-          raysColor="#6366f1" // Using your primary color
+          raysColor="#6366f1"
           raysSpeed={1.5}
           lightSpread={0.8}
           rayLength={1.2}
@@ -441,6 +462,8 @@ export default function MarketPage() {
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/30 backdrop-blur-sm">
                 <TrendingUp className="w-4 h-4" /> {market.daysLeft}d left
               </span>
+              {/* NEW: Payment token badge */}
+              {getPaymentTokenBadge(market.paymentToken)}
             </div>
           </div>
 
@@ -462,7 +485,6 @@ export default function MarketPage() {
                     {market.category}
                   </div>
                   <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-balance">{market.title}</h1>
-                  {/* <p className="text-sm text-muted-foreground mt-1">Slug: {market.slug}</p> */}
                 </div>
 
                 <div className="sm:text-right text-sm text-muted-foreground">
@@ -491,7 +513,7 @@ export default function MarketPage() {
                 </div>
               </div>
 
-              {/* Chart - responsive container */}
+              {/* Chart */}
               <div className="w-full bg-card rounded-lg p-4 backdrop-blur-sm">
                 <PriceChart data={chartData} isLoading={isChartLoading} />
               </div>
@@ -514,28 +536,31 @@ export default function MarketPage() {
                   <p className="text-2xl font-bold">{market.daysLeft}d</p>
                 </Card>
 
+                {/* NEW: Updated liquidity display with token symbol */}
                 <Card className="p-4 backdrop-blur-sm bg-card/80">
-                  <div className="text-sm text-muted-foreground mb-1">
+                  <div className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
+                    <Coins className="w-4 h-4" />
                     Total Liquidity
                   </div>
-                  <p className="text-2xl font-bold">{market.totalLiquidity ? `$${parseFloat(market.totalLiquidity).toFixed(2)}` : 'N/A'}</p>
+                  <p className="text-2xl font-bold">{formattedLiquidity}</p>
                 </Card>
               </div>
-
-              {/* <details className="mt-6 text-sm backdrop-blur-sm bg-card/80 p-4 rounded-lg">
-                <summary className="cursor-pointer text-muted-foreground">On-Chain Data (Debug)</summary>
-                <pre className="mt-2 p-3 bg-muted rounded-lg overflow-auto text-xs">
-                  {JSON.stringify(market.onChainData, (k, v) => (typeof v === "bigint" ? v.toString() : v), 2)}
-                </pre>
-              </details> */}
             </div>
 
             {/* Sidebar / trade panel */}
             <div className="lg:col-span-1">
               <Card className="p-6 sticky top-6 space-y-6 backdrop-blur-sm bg-card/80">
-                <h2 className="text-lg font-semibold">Current Odds</h2>
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-lg font-semibold">Current Odds</h2>
+                    {/* NEW: Show token indicator */}
+                    <div className="text-xs">
+                      {getPaymentTokenBadge(market.paymentToken)}
+                    </div>
+                  </div>
+                </div>
 
-                {/* Responsive odds: two columns on small+, stacked on xs */}
+                {/* Responsive odds */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     onClick={() => handleOpenModal("YES")}

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useWeb3Context } from "@/lib/wallet-context"
-import { usePredictionMarket } from "@/hooks/use-predection-market"
+import { usePredictionMarket, PaymentToken } from "@/hooks/use-predection-market"
 
 interface CreateMarketModalProps {
   onClose: () => void
@@ -27,6 +27,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   const [endTime, setEndTime] = useState("")
   const [initialYes, setInitialYes] = useState("0.1")
   const [initialNo, setInitialNo] = useState("0.1")
+  const [paymentToken, setPaymentToken] = useState<PaymentToken>(PaymentToken.BNB)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -87,7 +88,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     setValidationResult(null)
 
     try {
-      
       const response = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
         method: 'POST',
         headers: {
@@ -282,17 +282,19 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
     try {
       const endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
-    
 
-      const marketId = await createMarket({
-        question,
-        category: validationResult?.category || "GENERAL", // Use validated category
-        endTime: endTimeUnix,
-        initialYes,
-        initialNo
-      })
+      const marketId = await createMarket(
+        {
+          question,
+          category: validationResult?.category || "GENERAL",
+          endTime: endTimeUnix,
+          initialYes,
+          initialNo,
+          paymentToken
+        },
+        paymentToken
+      )
 
-      
       if (onSuccess) {
         onSuccess(marketId)
       }
@@ -335,6 +337,50 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         <h2 className="text-2xl font-bold mb-6">Create Prediction Market</h2>
 
         <div className="space-y-6">
+          {/* Payment Token Selection */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Payment Token <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => {
+                  setPaymentToken(PaymentToken.BNB)
+                  setValidationResult(null)
+                }}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  paymentToken === PaymentToken.BNB
+                    ? 'border-blue-500 bg-blue-500/10'
+                    : 'border-muted hover:border-muted-foreground/50'
+                }`}
+                disabled={isProcessing}
+              >
+                <div className="font-semibold">BNB</div>
+                <div className="text-xs text-muted-foreground">Native Token</div>
+              </button>
+              <button
+                onClick={() => {
+                  setPaymentToken(PaymentToken.PDX)
+                  setValidationResult(null)
+                }}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  paymentToken === PaymentToken.PDX
+                    ? 'border-purple-500 bg-purple-500/10'
+                    : 'border-muted hover:border-muted-foreground/50'
+                }`}
+                disabled={isProcessing}
+              >
+                <div className="font-semibold">PDX</div>
+                <div className="text-xs text-muted-foreground">ERC-20 Token</div>
+              </button>
+            </div>
+            {paymentToken === PaymentToken.PDX && (
+              <div className="mt-2 p-3 bg-purple-950/20 border border-purple-500 rounded-lg text-sm text-purple-300">
+                ℹ️ You'll need to approve PDX before creating the market
+              </div>
+            )}
+          </div>
+
           {/* Question Section */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -409,7 +455,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 value={endDate}
                 onChange={(e) => {
                   setEndDate(e.target.value)
-                  setValidationResult(null) // Clear validation when date changes
+                  setValidationResult(null)
                 }}
                 min={minDateString}
                 disabled={isProcessing}
@@ -424,7 +470,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 value={endTime}
                 onChange={(e) => {
                   setEndTime(e.target.value)
-                  setValidationResult(null) // Clear validation when time changes
+                  setValidationResult(null)
                 }}
                 disabled={isProcessing}
               />
@@ -433,7 +479,9 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
           {/* Initial Liquidity Section */}
           <div>
-            <label className="text-sm font-medium mb-2 block">Initial Liquidity (BNB)</label>
+            <label className="text-sm font-medium mb-2 block">
+              Initial Liquidity ({paymentToken})
+            </label>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">YES Pool</label>
@@ -443,7 +491,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                   value={initialYes}
                   onChange={(e) => {
                     setInitialYes(e.target.value)
-                    setValidationResult(null) // Clear validation when liquidity changes
+                    setValidationResult(null)
                   }}
                   step="0.01"
                   min="0.001"
@@ -458,7 +506,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                   value={initialNo}
                   onChange={(e) => {
                     setInitialNo(e.target.value)
-                    setValidationResult(null) // Clear validation when liquidity changes
+                    setValidationResult(null)
                   }}
                   step="0.01"
                   min="0.001"
@@ -472,7 +520,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <div className="mt-4 p-4 bg-muted rounded-lg space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total Liquidity:</span>
-                  <span className="font-semibold">{totalLiquidity.toFixed(4)} BNB</span>
+                  <span className="font-semibold">{totalLiquidity.toFixed(4)} {paymentToken}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Initial YES Price:</span>
@@ -502,6 +550,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           <div className="p-4 bg-blue-950/20 border border-blue-500 rounded-lg">
             <h3 className="font-semibold text-blue-400 mb-2">How it works:</h3>
             <ul className="text-sm text-blue-300 space-y-1 list-disc list-inside">
+              <li>Choose to pay with BNB or PDX token</li>
               <li>Questions are validated by AI to ensure quality and clarity</li>
               <li>You'll provide initial liquidity to start the market</li>
               <li>The ratio of YES/NO liquidity sets the initial odds and multipliers</li>
