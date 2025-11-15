@@ -5,13 +5,14 @@ import Header from "@/components/header"
 import MarketCard from "@/components/market-card"
 import CreateMarketModal from "@/components/createMarketModal"
 import { Button } from "@/components/ui/button"
-import { Search, Loader2, Plus, Trophy, Info, Droplets, Coins } from "lucide-react"
+import { Search, Loader2, Plus, Trophy } from "lucide-react"
 import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarket, PaymentToken } from "@/hooks/use-predection-market"
 import { useAllMarkets } from "@/hooks/getAllMarkets"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { useRouter } from "next/navigation"
+
 
 const CATEGORIES = [
   "All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy", "General"
@@ -69,8 +70,6 @@ export default function MarketsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Markets")
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showHowItWorks, setShowHowItWorks] = useState(false)
-  const [selectedPaymentToken, setSelectedPaymentToken] = useState<PaymentToken | null>(null) // NEW
 
   const router = useRouter()
   const { account, connectWallet, isCorrectNetwork, isInitialized } = useWeb3Context()
@@ -91,22 +90,6 @@ export default function MarketsPage() {
     
     return matchesCategory && matchesSearch && matchesPaymentToken
   })
-
-  // NEW: Statistics
-  const bnbMarkets = formattedMarkets.filter(m => m.paymentToken === PaymentToken.BNB).length
-  const pdxMarkets = formattedMarkets.filter(m => m.paymentToken === PaymentToken.PDX).length
-  const totalMarkets = formattedMarkets.length
-
-  const handleFaucet = () => {
-    // Navigate to the faucet page
-    router.push("/faucetPDX")
-  }
-
-  const handleHowItWorks = () => {
-    // Add your how it works logic here
-    setShowHowItWorks(true)
-    console.log("How it Works clicked")
-  }
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
@@ -200,68 +183,21 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* NEW: Payment Token Filter */}
-          <div className="mb-6">
-            <div className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-              <Coins className="w-4 h-4" />
-              Payment Token
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {PAYMENT_TOKEN_FILTERS.map((filter) => (
-                <Button
-                  key={filter.label}
-                  size="sm"
-                  variant={selectedPaymentToken === filter.value ? "default" : "outline"}
-                  onClick={() => setSelectedPaymentToken(filter.value)}
-                  className={`backdrop-blur-sm bg-card/80 ${
-                    selectedPaymentToken === filter.value ? "bg-primary text-black" : ""
-                  }`}
-                >
-                  {filter.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* Categories with action buttons */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10">
-            <div className="flex flex-wrap gap-2">
-              {CATEGORIES.map((cat) => (
-                <Button
-                  key={cat}
-                  size="sm"
-                  variant={selectedCategory === cat ? "default" : "outline"}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`backdrop-blur-sm bg-card/80 ${
-                    selectedCategory === cat ? "bg-primary text-black" : ""
-                  }`}
-                >
-                  {cat}
-                </Button>
-              ))}
-            </div>
-            
-            <div className="flex flex-wrap gap-2">
+          {/* Categories */}
+          <div className="flex flex-wrap gap-2 mb-10">
+            {CATEGORIES.map((cat) => (
               <Button
-                onClick={handleFaucet}
+                key={cat}
                 size="sm"
-                variant="outline"
-                className="backdrop-blur-sm bg-card/80"
+                variant={selectedCategory === cat ? "default" : "outline"}
+                onClick={() => setSelectedCategory(cat)}
+                className={`backdrop-blur-sm bg-card/80 ${
+                  selectedCategory === cat ? "bg-primary text-black" : ""
+                }`}
               >
-                <Droplets className="w-4 h-4 mr-2" />
-                Faucet PDX
+                {cat}
               </Button>
-              
-              <Button
-                onClick={handleHowItWorks}
-                size="sm"
-                variant="outline"
-                className="backdrop-blur-sm bg-card/80"
-              >
-                <Info className="w-4 h-4 mr-2" />
-                How it Works
-              </Button>
-            </div>
+            ))}
           </div>
 
           {/* Loading State */}

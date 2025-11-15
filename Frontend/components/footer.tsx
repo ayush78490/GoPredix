@@ -1,6 +1,7 @@
 // components/footer.tsx
 import Link from "next/link"
 import { ExternalLink, Twitter, Github, Mail, ArrowUpRight } from "lucide-react"
+import { SiDiscord } from "react-icons/si"
 import { Button } from "@/components/ui/button"
 
 export default function Footer() {
@@ -20,17 +21,17 @@ export default function Footer() {
             </div>
             <div className="flex space-x-3">
               <Button variant="outline" size="icon" asChild>
-                <a href="https://twitter.com" target="_blank" rel="noopener noreferrer">
+                <a href="https://x.com/gopredix" target="_blank" rel="noopener noreferrer">
                   <Twitter className="w-4 h-4" />
                 </a>
               </Button>
               <Button variant="outline" size="icon" asChild>
-                <a href="https://github.com" target="_blank" rel="noopener noreferrer">
-                  <Github className="w-4 h-4" />
+                <a href="https://discord.gg/predix" target="_blank" rel="noopener noreferrer">
+                  <SiDiscord className="w-4 h-4" />
                 </a>
               </Button>
               <Button variant="outline" size="icon" asChild>
-                <a href="mailto:contact@predictionmarkets.com">
+                <a href="mailto:support@gopredix.xyz">
                   <Mail className="w-4 h-4" />
                 </a>
               </Button>
@@ -47,12 +48,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/create" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Create Market
-                </Link>
-              </li>
-              <li>
-                <Link href="/portfolio" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/p" className="text-muted-foreground hover:text-foreground transition-colors">
                   My Portfolio
                 </Link>
               </li>
@@ -69,22 +65,22 @@ export default function Footer() {
             <h4 className="font-semibold mb-4">Resources</h4>
             <ul className="space-y-3 text-sm">
               <li>
-                <a 
-                  href="/docs" 
+                <Link
+                  href="https://docs.gopredix.xyz/user/Predix" 
                   className="text-muted-foreground hover:text-foreground transition-colors flex items-center"
                 >
                   Documentation
                   <ArrowUpRight className="w-3 h-3 ml-1" />
-                </a>
+                </Link>
               </li>
               <li>
-                <a 
-                  href="/guides" 
+                <Link 
+                  href="/howitworks" 
                   className="text-muted-foreground hover:text-foreground transition-colors flex items-center"
                 >
                   How It Works
                   <ArrowUpRight className="w-3 h-3 ml-1" />
-                </a>
+                </Link>
               </li>
               <li>
                 <a 
@@ -97,7 +93,7 @@ export default function Footer() {
               </li>
               <li>
                 <a 
-                  href="/tutorial" 
+                  href="/how-to-trade" 
                   className="text-muted-foreground hover:text-foreground transition-colors flex items-center"
                 >
                   Trading Tutorial
@@ -142,16 +138,16 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center">
           <div className="text-sm text-muted-foreground mb-4 md:mb-0">
-            © {currentYear} Prediction Markets. All rights reserved.
+            © {currentYear} Gopredix. All rights reserved.
           </div>
           
           <div className="flex items-center space-x-6 text-sm text-muted-foreground">
-            <div className="flex items-center space-x-2">
+            {/* <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               <span>Network: BSC Testnet</span>
-            </div>
+            </div> */}
             <a 
-              href="https://bscscan.com" 
+              href="https://testnet.bscscan.com" 
               target="_blank" 
               rel="noopener noreferrer"
               className="hover:text-foreground transition-colors flex items-center"

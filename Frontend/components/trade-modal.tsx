@@ -35,7 +35,14 @@ export default function TradeModal({
   const [isEstimating, setIsEstimating] = useState(false)
 
   // wallet and contract hooks
-  const { account, connectWallet, isCorrectNetwork, switchNetwork, signer } = useWeb3Context()
+  const { 
+    account, 
+    connectWallet, 
+    isCorrectNetwork, 
+    switchNetwork, 
+    signer 
+  } = useWeb3Context()
+  
   const { contract, getCurrentMultipliers } = usePredictionMarket()
 
   const numAmount = parseFloat(amount) || 0
@@ -248,7 +255,7 @@ Solutions:
 • Use a smaller trade amount
 • Wait and try again`)
       } else if (err?.code === "INSUFFICIENT_FUNDS" || err?.message?.includes("insufficient funds")) {
-        setError("Insufficient BNB balance (including gas fees)")
+        setError("Insufficient BNB balance (including gas fees) or Switch your network to BNB testnet")
       } else if (
         err?.message?.includes("insufficient liquidity") ||
         err?.message?.includes("insufficient YES liquidity") ||
@@ -322,10 +329,39 @@ Try:
             </Button>
           </div>
 
+          {/* Alert for wallet connection and network */}
+          {!account ? (
+            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 rounded-md text-yellow-800 font-semibold text-center">
+              Please connect your wallet to continue.
+              <Button 
+                variant="outline"
+                size="sm"
+                className="ml-2"
+                onClick={connectWallet}
+                disabled={isProcessing}
+              >
+                Connect Wallet
+              </Button>
+            </div>
+          ) : !isCorrectNetwork ? (
+            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 rounded-md text-yellow-800 font-semibold text-center">
+              ⚠️ Please switch your wallet network to BNB Testnet (chainId: 97) to trade.
+              <Button 
+                variant="outline"
+                size="sm"
+                className="ml-2"
+                onClick={switchNetwork}
+                disabled={isProcessing}
+              >
+                Switch to BNB Testnet
+              </Button>
+            </div>
+          ) : null}
+
           <div className="space-y-4">
             {/* Outcome Selection */}
             <div className="flex gap-2">
-              <Button 
+              <Button
                 className="flex-1"
                 variant={outcome === "YES" ? "outline" : "outline"}
                 onClick={() => onOutcomeChange("YES")}
@@ -360,9 +396,7 @@ Try:
 
             {/* Amount Input */}
             <div>
-              <label className="block text-sm font-medium mb-2">
-                Amount (BNB)
-              </label>
+              <label className="block text-sm font-medium mb-2">Amount (BNB)</label>
               <Input
                 type="number"
                 min="0.001"
@@ -373,9 +407,7 @@ Try:
                 className="text-lg"
                 disabled={isProcessing}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Minimum: 0.001 BNB
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Minimum: 0.001 BNB</p>
             </div>
 
             {/* Market Data & Trade Preview */}

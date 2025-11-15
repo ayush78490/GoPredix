@@ -11,8 +11,12 @@ export default function Header() {
   const [isOpen, setIsOpen] = useState(false)
   const { account, connectWallet, disconnectWallet } = useWeb3Context()
 
-  // const categories = ["All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy"]
   const displayAddress = account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"
+
+  const handleDisconnect = () => {
+    disconnectWallet()
+    // Simply disconnects - user will need to click "Login" again to choose a wallet
+  }
 
   return (
     <header className="w-full py-5">
@@ -27,42 +31,49 @@ export default function Header() {
                   alt="Project Logo"
                   className="w-6 h-6 object-contain scale-[1.5]"
                 />
-
               </div>
             </Link>
             <Link href="/">
-            <nav className="hidden md:flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white mr-8 text-2xl px-0 py-2 rounded-2xl"
-              >
-                GOPREDIX
-              </Button>
-            </nav>
+              <nav className="hidden md:flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white mr-8 text-2xl px-0 py-2 rounded-2xl"
+                >
+                  GOPREDIX
+                </Button>
+              </nav>
             </Link>
           </div>
+          
           {/* Right: Bell + Portfolio/Wallet */}
           <div className="flex items-center gap-3">
-            {/* <button type="button" className="rounded-full p-2 bg-[#15121d] hover:bg-[#271f40] border border-[#2c2442] flex items-center justify-center">
-              <Bell className="text-[#f5f5fa] w-5 h-5" />
-            </button> */}
             <Link href="/profile">
               <Button
-                size="sm" className="text-white bg-transparent hover:text-black rounded-full px-5">
+                size="sm" 
+                className="text-white bg-transparent hover:text-black rounded-full px-5"
+              >
                 Portfolio
               </Button>
             </Link>
             {account ? (
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="rounded-full px-5 bg-[#271f40] text-white border-none cursor-default" disabled>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="rounded-full px-5 bg-[#271f40] text-white border-none cursor-default" 
+                  disabled
+                >
                   {displayAddress}
                 </Button>
-                <Link href="/">
-                  <Button size="sm" variant="secondary" className="rounded-full px-5" onClick={disconnectWallet}>
+                <Button 
+                  size="sm" 
+                  variant="secondary" 
+                  className="rounded-full px-5" 
+                  onClick={handleDisconnect}
+                >
                   Disconnect
                 </Button>
-                </Link>
               </div>
             ) : (
               <Button
