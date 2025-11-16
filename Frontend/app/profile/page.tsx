@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useWeb3Context } from "@/lib/wallet-context"
-import { usePredictionMarket, MarketStatus, Outcome } from "@/hooks/use-predection-market"
+import { usePredictionMarketBNB, MarketStatus, Outcome } from "@/hooks/use-predection-market"
 import { useStopLossTakeProfit } from "@/hooks/useStoploss"
 import { useSellTokens, useSellEstimate } from "@/hooks/useSellToken"
 import Header from "@/components/header"
@@ -18,7 +18,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 export default function ProfilePage() {
   const { account, connectWallet, provider } = useWeb3Context()
-  const { getUserPositions, contractAddress, getMarketInvestment, getCurrentMultipliers, redeem } = usePredictionMarket()
+  const { getUserPositions, contractAddress, getMarketInvestment, getCurrentMultipliers, redeem } = usePredictionMarketBNB()
   const { 
     createStopLossOrder, 
     createTakeProfitOrder, 

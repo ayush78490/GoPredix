@@ -62,6 +62,34 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.TradingBot__factory>;
     getContractFactory(
+      name: "IOutcomeToken",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IOutcomeToken__factory>;
+    getContractFactory(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPDX__factory>;
+    getContractFactory(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPredictionMarket__factory>;
+    getContractFactory(
+      name: "OutcomeToken",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.OutcomeToken__factory>;
+    getContractFactory(
+      name: "TestnetDualTokenAdapter_MAIN",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.TestnetDualTokenAdapter_MAIN__factory>;
+    getContractFactory(
+      name: "TestnetDualTokenAdapter",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.TestnetDualTokenAdapter__factory>;
+    getContractFactory(
+      name: "TestnetDualTokenAdapterViews",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.TestnetDualTokenAdapterViews__factory>;
+    getContractFactory(
       name: "GPXToken",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.GPXToken__factory>;
@@ -82,33 +110,21 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.PDXFaucet__factory>;
     getContractFactory(
+      name: "IMainAdapter",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IMainAdapter__factory>;
+    getContractFactory(
+      name: "IOutcomeToken",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IOutcomeToken__factory>;
+    getContractFactory(
       name: "IPDX",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IPDX__factory>;
     getContractFactory(
-      name: "IPredictionMarket",
+      name: "TestnetDualTokenAdapterResolution",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.IPredictionMarket__factory>;
-    getContractFactory(
-      name: "OutcomeToken",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.OutcomeToken__factory>;
-    getContractFactory(
-      name: "PredictionMarketPDX",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.PredictionMarketPDX__factory>;
-    getContractFactory(
-      name: "PredictionMarketWithMultipliers",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.PredictionMarketWithMultipliers__factory>;
-    getContractFactory(
-      name: "TradingBot",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.TradingBot__factory>;
-    getContractFactory(
-      name: "TradingBotPDX",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.TradingBotPDX__factory>;
+    ): Promise<Contracts.TestnetDualTokenAdapterResolution__factory>;
 
     getContractAt(
       name: "Ownable",
@@ -171,6 +187,41 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.TradingBot>;
     getContractAt(
+      name: "IOutcomeToken",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IOutcomeToken>;
+    getContractAt(
+      name: "IPDX",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPDX>;
+    getContractAt(
+      name: "IPredictionMarket",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPredictionMarket>;
+    getContractAt(
+      name: "OutcomeToken",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.OutcomeToken>;
+    getContractAt(
+      name: "TestnetDualTokenAdapter_MAIN",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.TestnetDualTokenAdapter_MAIN>;
+    getContractAt(
+      name: "TestnetDualTokenAdapter",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.TestnetDualTokenAdapter>;
+    getContractAt(
+      name: "TestnetDualTokenAdapterViews",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.TestnetDualTokenAdapterViews>;
+    getContractAt(
       name: "GPXToken",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -196,40 +247,25 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.PDXFaucet>;
     getContractAt(
+      name: "IMainAdapter",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IMainAdapter>;
+    getContractAt(
+      name: "IOutcomeToken",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IOutcomeToken>;
+    getContractAt(
       name: "IPDX",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IPDX>;
     getContractAt(
-      name: "IPredictionMarket",
+      name: "TestnetDualTokenAdapterResolution",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.IPredictionMarket>;
-    getContractAt(
-      name: "OutcomeToken",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.OutcomeToken>;
-    getContractAt(
-      name: "PredictionMarketPDX",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.PredictionMarketPDX>;
-    getContractAt(
-      name: "PredictionMarketWithMultipliers",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.PredictionMarketWithMultipliers>;
-    getContractAt(
-      name: "TradingBot",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.TradingBot>;
-    getContractAt(
-      name: "TradingBotPDX",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.TradingBotPDX>;
+    ): Promise<Contracts.TestnetDualTokenAdapterResolution>;
 
     deployContract(
       name: "Ownable",
@@ -280,6 +316,34 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.TradingBot>;
     deployContract(
+      name: "IOutcomeToken",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IOutcomeToken>;
+    deployContract(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
+      name: "OutcomeToken",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.OutcomeToken>;
+    deployContract(
+      name: "TestnetDualTokenAdapter_MAIN",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.TestnetDualTokenAdapter_MAIN>;
+    deployContract(
+      name: "TestnetDualTokenAdapter",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.TestnetDualTokenAdapter>;
+    deployContract(
+      name: "TestnetDualTokenAdapterViews",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.TestnetDualTokenAdapterViews>;
+    deployContract(
       name: "GPXToken",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.GPXToken>;
@@ -300,33 +364,21 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PDXFaucet>;
     deployContract(
+      name: "IMainAdapter",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IMainAdapter>;
+    deployContract(
+      name: "IOutcomeToken",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IOutcomeToken>;
+    deployContract(
       name: "IPDX",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IPDX>;
     deployContract(
-      name: "IPredictionMarket",
+      name: "TestnetDualTokenAdapterResolution",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IPredictionMarket>;
-    deployContract(
-      name: "OutcomeToken",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.OutcomeToken>;
-    deployContract(
-      name: "PredictionMarketPDX",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.PredictionMarketPDX>;
-    deployContract(
-      name: "PredictionMarketWithMultipliers",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.PredictionMarketWithMultipliers>;
-    deployContract(
-      name: "TradingBot",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.TradingBot>;
-    deployContract(
-      name: "TradingBotPDX",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.TradingBotPDX>;
+    ): Promise<Contracts.TestnetDualTokenAdapterResolution>;
 
     deployContract(
       name: "Ownable",
@@ -389,6 +441,41 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.TradingBot>;
     deployContract(
+      name: "IOutcomeToken",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IOutcomeToken>;
+    deployContract(
+      name: "IPDX",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPredictionMarket",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
+      name: "OutcomeToken",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.OutcomeToken>;
+    deployContract(
+      name: "TestnetDualTokenAdapter_MAIN",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.TestnetDualTokenAdapter_MAIN>;
+    deployContract(
+      name: "TestnetDualTokenAdapter",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.TestnetDualTokenAdapter>;
+    deployContract(
+      name: "TestnetDualTokenAdapterViews",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.TestnetDualTokenAdapterViews>;
+    deployContract(
       name: "GPXToken",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -414,40 +501,25 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PDXFaucet>;
     deployContract(
+      name: "IMainAdapter",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IMainAdapter>;
+    deployContract(
+      name: "IOutcomeToken",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IOutcomeToken>;
+    deployContract(
       name: "IPDX",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IPDX>;
     deployContract(
-      name: "IPredictionMarket",
+      name: "TestnetDualTokenAdapterResolution",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IPredictionMarket>;
-    deployContract(
-      name: "OutcomeToken",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.OutcomeToken>;
-    deployContract(
-      name: "PredictionMarketPDX",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.PredictionMarketPDX>;
-    deployContract(
-      name: "PredictionMarketWithMultipliers",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.PredictionMarketWithMultipliers>;
-    deployContract(
-      name: "TradingBot",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.TradingBot>;
-    deployContract(
-      name: "TradingBotPDX",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.TradingBotPDX>;
+    ): Promise<Contracts.TestnetDualTokenAdapterResolution>;
 
     // default types
     getContractFactory(

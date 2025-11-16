@@ -2,7 +2,9 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as bazarSol from "./Bazar.sol";
+export * as dualtokenadapterSol from "./dualtokenadapter.sol";
+export * as dualtokenadapterviewSol from "./dualtokenadapterview.sol";
 export * as gpxSol from "./gpx.sol";
 export * as helperContractSol from "./helperContract.sol";
 export * as pdxfaucetSol from "./pdxfaucet.sol";
-export * as predixtradingSol from "./predixtrading.sol";
+export * as resolutionpdxSol from "./resolutionpdx.sol";

@@ -7,7 +7,8 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useWeb3Context } from "@/lib/wallet-context"
-import { usePredictionMarket } from "@/hooks/use-predection-market"
+import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
+import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 
 interface CreateMarketModalProps {
   onClose: () => void
@@ -15,11 +16,13 @@ interface CreateMarketModalProps {
 }
 
 interface ValidationResult {
-  valid: boolean;
-  reason?: string;
-  category?: string;
-  error?: string;
+  valid: boolean
+  reason?: string
+  category?: string
+  error?: string
 }
+
+type PaymentToken = "BNB" | "PDX"
 
 export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketModalProps) {
   const [question, setQuestion] = useState("")
@@ -27,15 +30,23 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   const [endTime, setEndTime] = useState("")
   const [initialYes, setInitialYes] = useState("0.1")
   const [initialNo, setInitialNo] = useState("0.1")
+  const [paymentToken, setPaymentToken] = useState<PaymentToken>("BNB")
   const [isProcessing, setIsProcessing] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
 
-  // Get unified Web3 context
+  // Get Web3 context
   const { account, connectWallet, isConnecting, isCorrectNetwork, switchNetwork } = useWeb3Context()
-  const { createMarket, isLoading, isContractReady } = usePredictionMarket()
+  
+  // Get both hooks
+  const bnbHook = usePredictionMarketBNB()
+  const pdxHook = usePredictionMarketPDX()
+
+  // Use appropriate hook based on payment token
+  const currentHook = paymentToken === "BNB" ? bnbHook : pdxHook
+  const { isLoading, isContractReady } = currentHook
 
   // Calculate liquidity preview
   const totalLiquidity = parseFloat(initialYes || "0") + parseFloat(initialNo || "0")
@@ -78,7 +89,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       return false
     }
     if (totalLiquidity < 0.01) {
-      setError("Total liquidity must be at least 0.01 BNB")
+      setError(`Total liquidity must be at least 0.01 ${paymentToken}`)
       return false
     }
 
@@ -87,7 +98,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     setValidationResult(null)
 
     try {
-      
       const response = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
         method: 'POST',
         headers: {
@@ -107,7 +117,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       }
 
       const validation = await response.json()
-      
       setValidationResult(validation)
       return validation.valid
 
@@ -132,10 +141,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
   // Basic validation fallback
   const performBasicValidation = (question: string, endTime: number, initialYes: string, initialNo: string): ValidationResult => {
-    
-    const lowerQuestion = question.toLowerCase()
-    
-    // Basic question validation
     if (!question.includes('?')) {
       return {
         valid: false,
@@ -160,7 +165,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       }
     }
     
-    // Check for ambiguous language
     const invalidPatterns = [
       /\b(opinion|think|believe|feel|probably|maybe)\b/i,
       /\b(subjective|arbitrary|pointless)\b/i,
@@ -178,7 +182,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       }
     }
     
-    // Determine category based on keywords
     const category = determineCategory(question)
     
     return {
@@ -193,7 +196,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     const lowerQuestion = question.toLowerCase()
     
     const categoryKeywords = {
-      CRYPTO: ['bitcoin', 'ethereum', 'crypto', 'blockchain', 'btc', 'eth', 'defi', 'nft', 'token'],
+      CRYPTO: ['bitcoin', 'ethereum', 'crypto', 'blockchain', 'btc', 'eth', 'defi', 'nft', 'token', 'pdx'],
       POLITICS: ['election', 'president', 'government', 'policy', 'senate', 'congress', 'vote'],
       SPORTS: ['game', 'match', 'tournament', 'championship', 'olympics', 'team', 'player'],
       TECHNOLOGY: ['launch', 'release', 'update', 'software', 'hardware', 'ai', 'artificial intelligence'],
@@ -271,7 +274,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     }
 
     if (totalLiquidity < 0.01) {
-      setError("Total liquidity must be at least 0.01 BNB")
+      setError(`Total liquidity must be at least 0.01 ${paymentToken}`)
       return
     }
 
@@ -282,17 +285,27 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
     try {
       const endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
-    
 
-      const marketId = await createMarket({
-        question,
-        category: validationResult?.category || "GENERAL", // Use validated category
-        endTime: endTimeUnix,
-        initialYes,
-        initialNo
-      })
+      let marketId: number
 
-      
+      if (paymentToken === "BNB") {
+        marketId = await bnbHook.createMarket({
+          question,
+          category: validationResult?.category || "GENERAL",
+          endTime: endTimeUnix,
+          initialYes,
+          initialNo,
+        })
+      } else {
+        marketId = await pdxHook.createMarketWithPDX({
+          question,
+          category: validationResult?.category || "GENERAL",
+          endTime: endTimeUnix,
+          initialYes,
+          initialNo,
+        })
+      }
+
       if (onSuccess) {
         onSuccess(marketId)
       }
@@ -321,6 +334,13 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     setError(null)
   }
 
+  // Handle token switch
+  const handleTokenSwitch = (token: PaymentToken) => {
+    setPaymentToken(token)
+    setValidationResult(null)
+    setError(null)
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
       <Card className="w-full max-w-2xl p-6 relative my-8">
@@ -335,6 +355,49 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         <h2 className="text-2xl font-bold mb-6">Create Prediction Market</h2>
 
         <div className="space-y-6">
+          {/* Payment Token Selection */}
+          <div>
+            <label className="text-sm font-medium mb-3 block">
+              Payment Token <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => handleTokenSwitch("BNB")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  paymentToken === "BNB"
+                    ? 'border-yellow-500 bg-yellow-500/10'
+                    : 'border-muted hover:border-muted-foreground/50'
+                }`}
+                disabled={isProcessing}
+              >
+                <div className="font-semibold">🔶 BNB</div>
+                <div className="text-xs text-muted-foreground">Native Token</div>
+              </button>
+              <button
+                onClick={() => handleTokenSwitch("PDX")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  paymentToken === "PDX"
+                    ? 'border-purple-500 bg-purple-500/10'
+                    : 'border-muted hover:border-muted-foreground/50'
+                }`}
+                disabled={isProcessing}
+              >
+                <div className="font-semibold">💜 PDX</div>
+                <div className="text-xs text-muted-foreground">ERC-20 Token</div>
+              </button>
+            </div>
+            {paymentToken === "PDX" && (
+              <div className="mt-3 p-3 bg-purple-950/20 border border-purple-600/50 rounded-lg text-sm text-purple-300">
+                ℹ️ You'll need to approve PDX transfer before creating the market
+              </div>
+            )}
+            {paymentToken === "BNB" && (
+              <div className="mt-3 p-3 bg-yellow-950/20 border border-yellow-600/50 rounded-lg text-sm text-yellow-300">
+                ℹ️ Market will be funded with BNB from your wallet
+              </div>
+            )}
+          </div>
+
           {/* Question Section */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -409,7 +472,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 value={endDate}
                 onChange={(e) => {
                   setEndDate(e.target.value)
-                  setValidationResult(null) // Clear validation when date changes
+                  setValidationResult(null)
                 }}
                 min={minDateString}
                 disabled={isProcessing}
@@ -424,7 +487,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 value={endTime}
                 onChange={(e) => {
                   setEndTime(e.target.value)
-                  setValidationResult(null) // Clear validation when time changes
+                  setValidationResult(null)
                 }}
                 disabled={isProcessing}
               />
@@ -433,7 +496,9 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
           {/* Initial Liquidity Section */}
           <div>
-            <label className="text-sm font-medium mb-2 block">Initial Liquidity (BNB)</label>
+            <label className="text-sm font-medium mb-2 block">
+              Initial Liquidity ({paymentToken})
+            </label>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">YES Pool</label>
@@ -443,7 +508,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                   value={initialYes}
                   onChange={(e) => {
                     setInitialYes(e.target.value)
-                    setValidationResult(null) // Clear validation when liquidity changes
+                    setValidationResult(null)
                   }}
                   step="0.01"
                   min="0.001"
@@ -458,7 +523,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                   value={initialNo}
                   onChange={(e) => {
                     setInitialNo(e.target.value)
-                    setValidationResult(null) // Clear validation when liquidity changes
+                    setValidationResult(null)
                   }}
                   step="0.01"
                   min="0.001"
@@ -472,7 +537,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <div className="mt-4 p-4 bg-muted rounded-lg space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total Liquidity:</span>
-                  <span className="font-semibold">{totalLiquidity.toFixed(4)} BNB</span>
+                  <span className="font-semibold">{totalLiquidity.toFixed(4)} {paymentToken}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Initial YES Price:</span>
@@ -502,6 +567,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           <div className="p-4 bg-blue-950/20 border border-blue-500 rounded-lg">
             <h3 className="font-semibold text-blue-400 mb-2">How it works:</h3>
             <ul className="text-sm text-blue-300 space-y-1 list-disc list-inside">
+              <li>Choose to pay with BNB or PDX token</li>
               <li>Questions are validated by AI to ensure quality and clarity</li>
               <li>You'll provide initial liquidity to start the market</li>
               <li>The ratio of YES/NO liquidity sets the initial odds and multipliers</li>
@@ -584,7 +650,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 ) : (
                   <>
                     <Plus className="w-4 h-4 mr-2" />
-                    Create Market
+                    Create {paymentToken} Market
                   </>
                 )}
               </Button>

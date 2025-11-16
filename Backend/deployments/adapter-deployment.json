@@ -1,0 +1,15 @@
+{
+  "network": "bscTestnet",
+  "timestamp": "2025-11-15T12:23:17.207Z",
+  "deployer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "adapter": {
+    "address": "0x458E18bE8AaF9e817F8Dd0f1e02b0e62198F6969",
+    "name": "TestnetDualTokenAdapter"
+  },
+  "config": {
+    "PDX_TOKEN_ADDRESS": "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8",
+    "BAZAR_CONTRACT_ADDRESS": "0x651790f7A07d818D5a2152572C46e2e3C6E226E5",
+    "PANCAKESWAP_ROUTER_TESTNET": "0xd99d1c33f9fc3444f8101754abc46c52416f2d4a",
+    "TBNB_ADDRESS": "0xae13d989dac2f0deff460ac112a837c12d6e4cab"
+  }
+}
