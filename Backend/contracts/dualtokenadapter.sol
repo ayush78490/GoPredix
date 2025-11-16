@@ -10,582 +10,605 @@ interface IPDX {
     function approve(address spender, uint256 amount) external returns (bool);
 }
 
-interface IPredictionMarketCore {
-    function createMarket(
-        string calldata question,
-        string calldata category,
-        uint256 endTime,
-        uint256 initialYes,
-        uint256 initialNo
-    ) external payable returns (uint256);
-    
-    function buyYesWithBNBFor(uint256 id, address beneficiary, uint256 minYesOut) external payable;
-    function buyNoWithBNBFor(uint256 id, address beneficiary, uint256 minNoOut) external payable;
-    
-    function sellYesForBNB(uint256 id, uint256 tokenAmount, uint256 minBNBOut) external;
-    function sellNoForBNB(uint256 id, uint256 tokenAmount, uint256 minBNBOut) external;
-    
-    function addLiquidity(uint256 id, uint256 yesAmount, uint256 noAmount) external;
-    function removeLiquidity(uint256 id, uint256 lpAmount) external;
-    
-    function claimRedemption(uint256 id) external;
-    
-    function createStopLossOrder(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 stopLossPrice) external returns (uint256);
-    function createTakeProfitOrder(uint256 marketId, bool isYes, uint256 tokenAmount, uint256 takeProfitPrice) external returns (uint256);
-    
-    function executeOrder(uint256 orderId) external;
-    function cancelOrder(uint256 orderId) external;
+interface IOutcomeToken {
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function mint(address to, uint256 amount) external;
+    function burn(address from, uint256 amount) external;
 }
 
-interface IUniswapV2Router {
-    function swapExactTokensForETH(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-    
-    function getAmountsOut(
-        uint amountIn,
-        address[] calldata path
-    ) external view returns (uint[] memory amounts);
+interface IPredictionMarket {
+    function buyYesWithBNBFor(uint256 id, address beneficiary, uint256 minYesOut) external payable;
+    function buyNoWithBNBFor(uint256 id, address beneficiary, uint256 minNoOut) external payable;
+    function sellYesForBNBFor(uint256 id, address beneficiary, uint256 yesAmount, uint256 minBnbOut) external;
+    function sellNoForBNBFor(uint256 id, address beneficiary, uint256 noAmount, uint256 minBnbOut) external;
+    function markets(uint256 id) external view returns (
+        address creator, uint256 endTime, uint8 status, uint8 outcome,
+        address yesToken, address noToken, uint256 yesPool, uint256 noPool, uint256 totalBacking
+    );
 }
 
 // ==================== MAIN ADAPTER CONTRACT ====================
 
-/**
- * @title TestnetDualTokenAdapter
- * @dev BSC Testnet adapter for dual-token support (BNB + PDX)
- */
 contract TestnetDualTokenAdapter {
-    
-    // ==================== STATE VARIABLES ====================
-    
-    IPDX public pdxToken;
-    IPredictionMarketCore public predictionMarket;
-    IUniswapV2Router public dexRouter;
-    
+    address public pdxToken;
+    address public predictionMarket;
+    address public resolutionServer;
     address public owner;
-    
-    uint256 public slippageTolerance = 5; // 5% for testnet
-    address public TBNB; // TBNB address on BSC testnet
-    
-    // Tracking
-    enum PaymentToken { BNB, PDX }
-    mapping(uint256 => PaymentToken) public marketPaymentToken;
-    
-    // ==================== EVENTS ====================
-    
-    event MarketCreatedWithPDX(uint256 indexed marketId, address indexed creator, uint256 pdxAmount);
-    event MarketCreatedWithBNB(uint256 indexed marketId, address indexed creator, uint256 bnbAmount);
-    
-    event BuyWithPDX(
-        uint256 indexed marketId,
-        address indexed user,
-        bool isYes,
-        uint256 pdxAmount,
-        uint256 bnbConverted
-    );
-    
-    event BuyWithBNB(uint256 indexed marketId, address indexed user, bool isYes, uint256 bnbAmount);
-    
-    event SellForPDX(
-        uint256 indexed marketId,
-        address indexed user,
-        bool isYes,
-        uint256 tokenAmount,
-        uint256 pdxReceived
-    );
-    
-    event SellForBNB(uint256 indexed marketId, address indexed user, bool isYes, uint256 tokenAmount, uint256 bnbReceived);
-    
-    event PDXSwappedToBNB(uint256 pdxIn, uint256 bnbOut);
-    event BNBSwappedToPDX(uint256 bnbIn, uint256 pdxOut);
-    event SlippageToleranceUpdated(uint256 newSlippage);
-    
-    // ==================== MODIFIERS ====================
-    
+    address public resolutionContract;
+    address public viewsAdapter;
+
+    uint256 public feeBps = 50;
+    uint256 public lpShareBps = 3000;
+    uint256 public nextPDXMarketId;
+
+    struct PDXMarket {
+        address creator;
+        string question;
+        string category;
+        uint256 endTime;
+        address yesToken;
+        address noToken;
+        uint256 yesPool;
+        uint256 noPool;
+        uint256 totalBacking;
+        uint8 status;
+        uint8 outcome;
+    }
+
+    struct UserInvestment {
+        uint256 totalInvested;
+        uint256 yesBalance;
+        uint256 noBalance;
+    }
+
+    struct Order {
+        uint256 marketId;
+        address user;
+        uint256 triggerPrice;
+        uint256 amount;
+        uint8 orderType;
+        bool isActive;
+    }
+
+    mapping(uint256 => PDXMarket) public pdxMarkets;
+    mapping(uint256 => mapping(address => UserInvestment)) public pdxUserInvestments;
+    mapping(uint256 => Order) public orders;
+    mapping(address => uint256[]) public userOrders;
+    mapping(uint256 => uint256) public platformFeeCollected;
+
+    event MarketCreated(uint256 indexed marketId, address indexed creator, string question);
+    event BuyYes(uint256 indexed marketId, address indexed user, uint256 yesAmount, uint256 pdxUsed);
+    event BuyNo(uint256 indexed marketId, address indexed user, uint256 noAmount, uint256 pdxUsed);
+    event SellYes(uint256 indexed marketId, address indexed user, uint256 yesAmount, uint256 pdxReceived);
+    event SellNo(uint256 indexed marketId, address indexed user, uint256 noAmount, uint256 pdxReceived);
+    event LiquidityAdded(uint256 indexed marketId, uint256 yesAmount, uint256 noAmount, uint256 liquidity);
+    event LiquidityRemoved(uint256 indexed marketId, uint256 yesAmount, uint256 noAmount, uint256 liquidity);
+    event OrderCreated(uint256 indexed orderId, uint256 indexed marketId, address indexed user, uint8 orderType);
+    event OrderExecuted(uint256 indexed orderId);
+    event OrderCancelled(uint256 indexed orderId);
+    event FeeUpdated(uint256 newFeeBps, uint256 newLpShareBps);
+
+    constructor(address _pdxToken, address _predictionMarket, address _resolutionServer) {
+        require(_pdxToken != address(0), "Invalid PDX token");
+        require(_predictionMarket != address(0), "Invalid prediction market");
+        require(_resolutionServer != address(0), "Invalid resolution server");
+
+        pdxToken = _pdxToken;
+        predictionMarket = _predictionMarket;
+        resolutionServer = _resolutionServer;
+        owner = msg.sender;
+        nextPDXMarketId = 0;
+    }
+
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
+        require(msg.sender == owner, "Only owner can call this");
         _;
     }
-    
-    // ==================== CONSTRUCTOR ====================
-    
-    /**
-     * @dev Initialize adapter for BSC Testnet
-     * @param _pdxToken Your PDX token address
-     * @param _predictionMarket Your PredictionMarketWithMultipliers address
-     * @param _dexRouter PancakeSwap Router Testnet (0xD99D1c33F9fC3444f8101754ABC46c52416F2D4a)
-     * @param _tbnb TBNB address (0xae13d989daC2f0dEFF460aC112a837C12d6E4cAB)
-     */
-    constructor(
-        address _pdxToken,
-        address _predictionMarket,
-        address _dexRouter,
-        address _tbnb
-    ) {
-        require(_pdxToken != address(0), "Invalid PDX");
-        require(_predictionMarket != address(0), "Invalid market");
-        require(_dexRouter != address(0), "Invalid router");
-        require(_tbnb != address(0), "Invalid TBNB");
-        
-        pdxToken = IPDX(_pdxToken);
-        predictionMarket = IPredictionMarketCore(_predictionMarket);
-        dexRouter = IUniswapV2Router(_dexRouter);
-        TBNB = _tbnb;
-        owner = msg.sender;
+
+    modifier marketExists(uint256 marketId) {
+        require(marketId < nextPDXMarketId, "Market does not exist");
+        _;
     }
-    
+
+    modifier validAmount(uint256 amount) {
+        require(amount > 0, "Amount must be greater than zero");
+        _;
+    }
+
+    modifier marketOpen(uint256 marketId) {
+        require(pdxMarkets[marketId].status == 0, "Market is not open");
+        require(block.timestamp < pdxMarkets[marketId].endTime, "Market has ended");
+        _;
+    }
+
     // ==================== MARKET CREATION ====================
-    
-    /**
-     * @dev Create market with native BNB (pass-through)
-     */
-    function createMarketWithBNB(
-        string calldata question,
-        string calldata category,
-        uint256 endTime,
-        uint256 initialYes,
-        uint256 initialNo
-    ) external payable returns (uint256) {
-        require(msg.value > 0, "Zero BNB");
-        
-        uint256 marketId = predictionMarket.createMarket{value: msg.value}(
-            question,
-            category,
-            endTime,
-            initialYes,
-            initialNo
-        );
-        
-        marketPaymentToken[marketId] = PaymentToken.BNB;
-        
-        emit MarketCreatedWithBNB(marketId, msg.sender, msg.value);
-        return marketId;
-    }
-    
-    /**
-     * @dev Create market with PDX (converts to BNB via swap)
-     */
+
     function createMarketWithPDX(
-        string calldata question,
-        string calldata category,
-        uint256 endTime,
-        uint256 initialYes,
-        uint256 initialNo,
-        uint256 pdxAmount
-    ) external returns (uint256) {
-        require(pdxAmount > 0, "Zero PDX");
-        
-        // 1. Receive PDX from user
-        require(
-            pdxToken.transferFrom(msg.sender, address(this), pdxAmount),
-            "PDX transfer failed"
-        );
-        
-        // 2. Convert PDX to BNB
-        uint256 bnbAmount = _swapPDXToBNB(pdxAmount);
-        require(bnbAmount > 0, "Swap failed");
-        
-        // 3. Create market with BNB
-        uint256 marketId = predictionMarket.createMarket{value: bnbAmount}(
-            question,
-            category,
-            endTime,
-            initialYes,
-            initialNo
-        );
-        
-        marketPaymentToken[marketId] = PaymentToken.PDX;
-        
-        emit MarketCreatedWithPDX(marketId, msg.sender, pdxAmount);
+        string memory _question,
+        string memory _category,
+        uint256 _endTime,
+        uint256 _initialYes,
+        uint256 _initialNo
+    ) external validAmount(_initialYes) validAmount(_initialNo) returns (uint256) {
+        require(_endTime > block.timestamp + 1 hours, "Invalid end time");
+        require(bytes(_question).length > 0, "Question cannot be empty");
+
+        uint256 marketId = nextPDXMarketId++;
+        uint256 totalInitial = _initialYes + _initialNo;
+
+        IOutcomeToken yesToken = IOutcomeToken(address(new OutcomeToken("YES", "YES", address(this))));
+        IOutcomeToken noToken = IOutcomeToken(address(new OutcomeToken("NO", "NO", address(this))));
+
+        pdxMarkets[marketId] = PDXMarket({
+            creator: msg.sender,
+            question: _question,
+            category: _category,
+            endTime: _endTime,
+            yesToken: address(yesToken),
+            noToken: address(noToken),
+            yesPool: _initialYes,
+            noPool: _initialNo,
+            totalBacking: totalInitial,
+            status: 0,
+            outcome: 255
+        });
+
+        IPDX(pdxToken).transferFrom(msg.sender, address(this), totalInitial);
+        _updateUserInvestment(marketId, msg.sender, totalInitial);
+
+        emit MarketCreated(marketId, msg.sender, _question);
         return marketId;
     }
-    
-    // ==================== BUYING FUNCTIONS ====================
-    
-    /**
-     * @dev Buy YES with native BNB (pass-through)
-     */
-    function buyYesWithBNB(
-        uint256 marketId,
-        address beneficiary,
-        uint256 minYesOut
-    ) external payable {
-        require(msg.value > 0, "Zero BNB");
-        predictionMarket.buyYesWithBNBFor{value: msg.value}(marketId, beneficiary, minYesOut);
-        emit BuyWithBNB(marketId, msg.sender, true, msg.value);
-    }
-    
-    /**
-     * @dev Buy NO with native BNB (pass-through)
-     */
-    function buyNoWithBNB(
-        uint256 marketId,
-        address beneficiary,
-        uint256 minNoOut
-    ) external payable {
-        require(msg.value > 0, "Zero BNB");
-        predictionMarket.buyNoWithBNBFor{value: msg.value}(marketId, beneficiary, minNoOut);
-        emit BuyWithBNB(marketId, msg.sender, false, msg.value);
-    }
-    
-    /**
-     * @dev Buy YES with PDX (converts PDX to BNB, then buys)
-     */
+
+    // ==================== PDX TRADING ====================
+
     function buyYesWithPDX(
         uint256 marketId,
         address beneficiary,
-        uint256 pdxAmount,
-        uint256 minBNBOut,
-        uint256 minYesOut
-    ) external {
-        require(pdxAmount > 0, "Zero PDX");
+        uint256 minYesOut,
+        uint256 pdxAmount
+    ) external marketExists(marketId) marketOpen(marketId) validAmount(pdxAmount) {
         require(beneficiary != address(0), "Invalid beneficiary");
-        
-        // 1. Receive PDX from user
-        require(
-            pdxToken.transferFrom(msg.sender, address(this), pdxAmount),
-            "PDX transfer failed"
-        );
-        
-        // 2. Convert PDX to BNB
-        uint256 bnbAmount = _swapPDXToBNB(pdxAmount);
-        require(bnbAmount >= minBNBOut, "Slippage exceeded");
-        
-        // 3. Buy YES with BNB
-        predictionMarket.buyYesWithBNBFor{value: bnbAmount}(marketId, beneficiary, minYesOut);
-        
-        emit BuyWithPDX(marketId, msg.sender, true, pdxAmount, bnbAmount);
+        IPDX(pdxToken).transferFrom(msg.sender, address(this), pdxAmount);
+        _buyWithPDX(marketId, beneficiary, minYesOut, true, pdxAmount);
     }
-    
-    /**
-     * @dev Buy NO with PDX
-     */
+
     function buyNoWithPDX(
         uint256 marketId,
         address beneficiary,
-        uint256 pdxAmount,
-        uint256 minBNBOut,
-        uint256 minNoOut
-    ) external {
-        require(pdxAmount > 0, "Zero PDX");
+        uint256 minNoOut,
+        uint256 pdxAmount
+    ) external marketExists(marketId) marketOpen(marketId) validAmount(pdxAmount) {
         require(beneficiary != address(0), "Invalid beneficiary");
-        
-        // 1. Receive PDX from user
-        require(
-            pdxToken.transferFrom(msg.sender, address(this), pdxAmount),
-            "PDX transfer failed"
-        );
-        
-        // 2. Convert PDX to BNB
-        uint256 bnbAmount = _swapPDXToBNB(pdxAmount);
-        require(bnbAmount >= minBNBOut, "Slippage exceeded");
-        
-        // 3. Buy NO with BNB
-        predictionMarket.buyNoWithBNBFor{value: bnbAmount}(marketId, beneficiary, minNoOut);
-        
-        emit BuyWithPDX(marketId, msg.sender, false, pdxAmount, bnbAmount);
+        IPDX(pdxToken).transferFrom(msg.sender, address(this), pdxAmount);
+        _buyWithPDX(marketId, beneficiary, minNoOut, false, pdxAmount);
     }
-    
-    // ==================== SELLING FUNCTIONS ====================
-    
-    /**
-     * @dev Sell YES for BNB (pass-through)
-     */
+
+    function buyYesWithBNBFor(
+        uint256 marketId,
+        address beneficiary,
+        uint256 minYesOut
+    ) external payable marketExists(marketId) marketOpen(marketId) {
+        require(msg.value > 0, "Must send BNB");
+        require(beneficiary != address(0), "Invalid beneficiary");
+        IPredictionMarket(predictionMarket).buyYesWithBNBFor{value: msg.value}(marketId, beneficiary, minYesOut);
+    }
+
+    function buyNoWithBNBFor(
+        uint256 marketId,
+        address beneficiary,
+        uint256 minNoOut
+    ) external payable marketExists(marketId) marketOpen(marketId) {
+        require(msg.value > 0, "Must send BNB");
+        require(beneficiary != address(0), "Invalid beneficiary");
+        IPredictionMarket(predictionMarket).buyNoWithBNBFor{value: msg.value}(marketId, beneficiary, minNoOut);
+    }
+
+    function sellYesForPDX(
+        uint256 marketId,
+        uint256 tokenAmount,
+        uint256 minPDXOut
+    ) external marketExists(marketId) validAmount(tokenAmount) {
+        PDXMarket storage market = pdxMarkets[marketId];
+        require(market.status == 0, "Market is not open for trading");
+
+        IOutcomeToken(market.yesToken).transferFrom(msg.sender, address(this), tokenAmount);
+        _sellForPDX(marketId, tokenAmount, minPDXOut, true);
+    }
+
+    function sellNoForPDX(
+        uint256 marketId,
+        uint256 tokenAmount,
+        uint256 minPDXOut
+    ) external marketExists(marketId) validAmount(tokenAmount) {
+        PDXMarket storage market = pdxMarkets[marketId];
+        require(market.status == 0, "Market is not open for trading");
+
+        IOutcomeToken(market.noToken).transferFrom(msg.sender, address(this), tokenAmount);
+        _sellForPDX(marketId, tokenAmount, minPDXOut, false);
+    }
+
     function sellYesForBNB(
         uint256 marketId,
         uint256 tokenAmount,
         uint256 minBNBOut
-    ) external {
-        require(tokenAmount > 0, "Zero amount");
-        predictionMarket.sellYesForBNB(marketId, tokenAmount, minBNBOut);
-        
-        // Transfer BNB to user
-        uint256 bnbBalance = address(this).balance;
-        if (bnbBalance > 0) {
-            (bool success, ) = msg.sender.call{value: bnbBalance}("");
-            require(success, "BNB transfer failed");
-        }
-        
-        emit SellForBNB(marketId, msg.sender, true, tokenAmount, minBNBOut);
+    ) external marketExists(marketId) validAmount(tokenAmount) {
+        IPredictionMarket(predictionMarket).sellYesForBNBFor(marketId, msg.sender, tokenAmount, minBNBOut);
     }
-    
-    /**
-     * @dev Sell NO for BNB (pass-through)
-     */
+
     function sellNoForBNB(
         uint256 marketId,
         uint256 tokenAmount,
         uint256 minBNBOut
-    ) external {
-        require(tokenAmount > 0, "Zero amount");
-        predictionMarket.sellNoForBNB(marketId, tokenAmount, minBNBOut);
-        
-        // Transfer BNB to user
-        uint256 bnbBalance = address(this).balance;
-        if (bnbBalance > 0) {
-            (bool success, ) = msg.sender.call{value: bnbBalance}("");
-            require(success, "BNB transfer failed");
-        }
-        
-        emit SellForBNB(marketId, msg.sender, false, tokenAmount, minBNBOut);
+    ) external marketExists(marketId) validAmount(tokenAmount) {
+        IPredictionMarket(predictionMarket).sellNoForBNBFor(marketId, msg.sender, tokenAmount, minBNBOut);
     }
-    
-    /**
-     * @dev Sell YES for PDX (sells for BNB, converts to PDX)
-     */
-    function sellYesForPDX(
-        uint256 marketId,
-        uint256 tokenAmount,
-        uint256 minBNBOut,
-        uint256 minPDXOut
-    ) external {
-        require(tokenAmount > 0, "Zero amount");
-        
-        // 1. Sell YES for BNB
-        predictionMarket.sellYesForBNB(marketId, tokenAmount, minBNBOut);
-        
-        // 2. Get received BNB
-        uint256 bnbBalance = address(this).balance;
-        require(bnbBalance >= minBNBOut, "Insufficient BNB received");
-        
-        // 3. Convert BNB to PDX
-        uint256 pdxAmount = _swapBNBToPDX(bnbBalance);
-        require(pdxAmount >= minPDXOut, "Slippage exceeded");
-        
-        // 4. Transfer PDX to user
-        require(pdxToken.transfer(msg.sender, pdxAmount), "PDX transfer failed");
-        
-        emit SellForPDX(marketId, msg.sender, true, tokenAmount, pdxAmount);
-    }
-    
-    /**
-     * @dev Sell NO for PDX
-     */
-    function sellNoForPDX(
-        uint256 marketId,
-        uint256 tokenAmount,
-        uint256 minBNBOut,
-        uint256 minPDXOut
-    ) external {
-        require(tokenAmount > 0, "Zero amount");
-        
-        // 1. Sell NO for BNB
-        predictionMarket.sellNoForBNB(marketId, tokenAmount, minBNBOut);
-        
-        // 2. Get received BNB
-        uint256 bnbBalance = address(this).balance;
-        require(bnbBalance >= minBNBOut, "Insufficient BNB received");
-        
-        // 3. Convert BNB to PDX
-        uint256 pdxAmount = _swapBNBToPDX(bnbBalance);
-        require(pdxAmount >= minPDXOut, "Slippage exceeded");
-        
-        // 4. Transfer PDX to user
-        require(pdxToken.transfer(msg.sender, pdxAmount), "PDX transfer failed");
-        
-        emit SellForPDX(marketId, msg.sender, false, tokenAmount, pdxAmount);
-    }
-    
-    // ==================== LIQUIDITY FUNCTIONS ====================
-    
-    /**
-     * @dev Add liquidity with outcome tokens
-     */
-    function addLiquidity(
+
+    // ==================== LIQUIDITY ====================
+
+    function addPDXLiquidity(
         uint256 marketId,
         uint256 yesAmount,
         uint256 noAmount
-    ) external {
-        require(yesAmount > 0 && noAmount > 0, "Zero amount");
-        predictionMarket.addLiquidity(marketId, yesAmount, noAmount);
+    ) external marketExists(marketId) validAmount(yesAmount) validAmount(noAmount) {
+        PDXMarket storage market = pdxMarkets[marketId];
+        uint256 totalAmount = yesAmount + noAmount;
+
+        IPDX(pdxToken).transferFrom(msg.sender, address(this), totalAmount);
+
+        uint256 liquidity = _sqrt(yesAmount * noAmount);
+        market.yesPool += yesAmount;
+        market.noPool += noAmount;
+        market.totalBacking += totalAmount;
+
+        _updateUserInvestment(marketId, msg.sender, totalAmount);
+
+        emit LiquidityAdded(marketId, yesAmount, noAmount, liquidity);
     }
-    
-    /**
-     * @dev Remove liquidity
-     */
-    function removeLiquidity(uint256 marketId, uint256 lpAmount) external {
-        require(lpAmount > 0, "Zero amount");
-        predictionMarket.removeLiquidity(marketId, lpAmount);
+
+    function removePDXLiquidity(
+        uint256 marketId,
+        uint256 lpAmount
+    ) external marketExists(marketId) validAmount(lpAmount) {
+        PDXMarket storage market = pdxMarkets[marketId];
+        require(market.totalBacking >= lpAmount, "Insufficient liquidity");
+
+        uint256 yesShare = (market.yesPool * lpAmount) / market.totalBacking;
+        uint256 noShare = (market.noPool * lpAmount) / market.totalBacking;
+
+        market.yesPool -= yesShare;
+        market.noPool -= noShare;
+        market.totalBacking -= lpAmount;
+
+        IPDX(pdxToken).transfer(msg.sender, lpAmount);
+
+        emit LiquidityRemoved(marketId, yesShare, noShare, lpAmount);
     }
-    
-    // ==================== ORDER FUNCTIONS ====================
-    
-    /**
-     * @dev Create stop-loss order
-     */
+
+    // ==================== ORDER MANAGEMENT ====================
+
     function createStopLossOrder(
         uint256 marketId,
-        bool isYes,
-        uint256 tokenAmount,
-        uint256 stopLossPrice
-    ) external returns (uint256) {
-        return predictionMarket.createStopLossOrder(marketId, isYes, tokenAmount, stopLossPrice);
+        uint256 triggerPrice,
+        uint256 amount
+    ) external marketExists(marketId) validAmount(amount) {
+        require(triggerPrice > 0, "Invalid trigger price");
+        uint256 orderId = uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp, marketId)));
+
+        orders[orderId] = Order({
+            marketId: marketId,
+            user: msg.sender,
+            triggerPrice: triggerPrice,
+            amount: amount,
+            orderType: 0,
+            isActive: true
+        });
+
+        userOrders[msg.sender].push(orderId);
+        emit OrderCreated(orderId, marketId, msg.sender, 0);
     }
-    
-    /**
-     * @dev Create take-profit order
-     */
+
     function createTakeProfitOrder(
         uint256 marketId,
-        bool isYes,
-        uint256 tokenAmount,
-        uint256 takeProfitPrice
-    ) external returns (uint256) {
-        return predictionMarket.createTakeProfitOrder(marketId, isYes, tokenAmount, takeProfitPrice);
+        uint256 triggerPrice,
+        uint256 amount
+    ) external marketExists(marketId) validAmount(amount) {
+        require(triggerPrice > 0, "Invalid trigger price");
+        uint256 orderId = uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp, marketId)));
+
+        orders[orderId] = Order({
+            marketId: marketId,
+            user: msg.sender,
+            triggerPrice: triggerPrice,
+            amount: amount,
+            orderType: 1,
+            isActive: true
+        });
+
+        userOrders[msg.sender].push(orderId);
+        emit OrderCreated(orderId, marketId, msg.sender, 1);
     }
-    
-    /**
-     * @dev Execute order
-     */
-    function executeOrder(uint256 orderId) external {
-        predictionMarket.executeOrder(orderId);
+
+    function executeOrder(uint256 orderId) external onlyOwner {
+        Order storage order = orders[orderId];
+        require(order.isActive, "Order is not active");
+        order.isActive = false;
+        emit OrderExecuted(orderId);
     }
-    
-    /**
-     * @dev Cancel order
-     */
+
     function cancelOrder(uint256 orderId) external {
-        predictionMarket.cancelOrder(orderId);
+        Order storage order = orders[orderId];
+        require(order.user == msg.sender || msg.sender == owner, "Not authorized");
+        require(order.isActive, "Order is not active");
+        order.isActive = false;
+        emit OrderCancelled(orderId);
     }
-    
-    // ==================== REDEMPTION ====================
-    
-    /**
-     * @dev Claim redemption
-     */
-    function claimRedemption(uint256 marketId) external {
-        predictionMarket.claimRedemption(marketId);
+
+    function checkOrderTrigger(uint256 orderId) external view returns (bool) {
+        return orders[orderId].isActive;
     }
-    
-    // ==================== INTERNAL SWAP FUNCTIONS ====================
-    
-    /**
-     * @dev Swap PDX to BNB via PancakeSwap
-     */
-    function _swapPDXToBNB(uint256 pdxAmount) internal returns (uint256) {
-        // Approve DEX
-        require(pdxToken.approve(address(dexRouter), pdxAmount), "Approval failed");
-        
-        address[] memory path = new address[](2);
-        path[0] = address(pdxToken);
-        path[1] = TBNB;
-        
-        // Get minimum output with slippage
-        uint[] memory amounts = dexRouter.getAmountsOut(pdxAmount, path);
-        uint256 minBNB = (amounts[1] * (100 - slippageTolerance)) / 100;
-        
-        // Execute swap
-        uint[] memory swapAmounts = dexRouter.swapExactTokensForETH(
-            pdxAmount,
-            minBNB,
-            path,
-            address(this),
-            block.timestamp + 300
-        );
-        
-        emit PDXSwappedToBNB(pdxAmount, swapAmounts[1]);
-        return swapAmounts[1];
+
+    function getUserOrders(address user) external view returns (uint256[] memory) {
+        return userOrders[user];
     }
-    
-    /**
-     * @dev Swap BNB to PDX via PancakeSwap
-     */
-    function _swapBNBToPDX(uint256 bnbAmount) internal returns (uint256) {
-        address[] memory path = new address[](2);
-        path[0] = TBNB;
-        path[1] = address(pdxToken);
-        
-        uint[] memory amounts = dexRouter.getAmountsOut(bnbAmount, path);
-        uint256 minPDX = (amounts[1] * (100 - slippageTolerance)) / 100;
-        
-        uint[] memory swapAmounts = dexRouter.swapExactTokensForETH(
-            bnbAmount,
-            minPDX,
-            path,
-            address(this),
-            block.timestamp + 300
-        );
-        
-        emit BNBSwappedToPDX(bnbAmount, swapAmounts[1]);
-        return swapAmounts[1];
+
+    // ==================== ADMIN ====================
+
+    function setFees(uint256 _feeBps, uint256 _lpShareBps) external onlyOwner {
+        require(_feeBps <= 500, "Fee too high");
+        require(_lpShareBps <= 10000, "Invalid LP share");
+        feeBps = _feeBps;
+        lpShareBps = _lpShareBps;
+        emit FeeUpdated(_feeBps, _lpShareBps);
     }
-    
-    // ==================== VIEW FUNCTIONS ====================
-    
-    /**
-     * @dev Get market creation token type
-     */
-    function getMarketPaymentToken(uint256 marketId) external view returns (string memory) {
-        return marketPaymentToken[marketId] == PaymentToken.BNB ? "BNB" : "PDX";
+
+    function setResolutionServer(address _server) external onlyOwner {
+        require(_server != address(0), "Invalid server");
+        resolutionServer = _server;
     }
-    
-    /**
-     * @dev Get minimum BNB output for PDX swap
-     */
-    function getMinBNBForPDX(uint256 pdxAmount) external view returns (uint256) {
-        address[] memory path = new address[](2);
-        path[0] = address(pdxToken);
-        path[1] = TBNB;
-        
-        uint[] memory amounts = dexRouter.getAmountsOut(pdxAmount, path);
-        return (amounts[1] * (100 - slippageTolerance)) / 100;
+
+    function setResolutionContract(address _contract) external onlyOwner {
+        require(_contract != address(0), "Invalid contract");
+        resolutionContract = _contract;
     }
-    
-    /**
-     * @dev Get minimum PDX output for BNB swap
-     */
-    function getMinPDXForBNB(uint256 bnbAmount) external view returns (uint256) {
-        address[] memory path = new address[](2);
-        path[0] = TBNB;
-        path[1] = address(pdxToken);
-        
-        uint[] memory amounts = dexRouter.getAmountsOut(bnbAmount, path);
-        return (amounts[1] * (100 - slippageTolerance)) / 100;
+
+    function setViewsAdapter(address _views) external onlyOwner {
+        require(_views != address(0), "Invalid views");
+        viewsAdapter = _views;
     }
-    
-    // ==================== ADMIN FUNCTIONS ====================
-    
-    /**
-     * @dev Update slippage tolerance
-     */
-    function setSlippageTolerance(uint256 _slippage) external onlyOwner {
-        require(_slippage < 100, "Invalid slippage");
-        slippageTolerance = _slippage;
-        emit SlippageToleranceUpdated(_slippage);
+
+    function transferOwnership(address _newOwner) external onlyOwner {
+        require(_newOwner != address(0), "Invalid owner");
+        owner = _newOwner;
     }
-    
-    /**
-     * @dev Withdraw stuck PDX tokens
-     */
-    function withdrawPDX() external onlyOwner {
-        uint256 balance = pdxToken.balanceOf(address(this));
-        require(balance > 0, "Zero balance");
-        require(pdxToken.transfer(owner, balance), "Transfer failed");
+
+    function withdrawPlatformFees(uint256 amount) external onlyOwner {
+        require(amount > 0, "Invalid amount");
+        IPDX(pdxToken).transfer(owner, amount);
     }
-    
-    /**
-     * @dev Withdraw stuck BNB
-     */
-    function withdrawBNB() external onlyOwner {
-        uint256 balance = address(this).balance;
-        require(balance > 0, "Zero balance");
-        (bool success, ) = owner.call{value: balance}("");
-        require(success, "Transfer failed");
+
+    function withdrawPDX(uint256 amount) external onlyOwner {
+        require(amount > 0, "Invalid amount");
+        IPDX(pdxToken).transfer(owner, amount);
     }
-    
-    /**
-     * @dev Transfer ownership
-     */
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "Invalid address");
-        owner = newOwner;
+
+    function withdrawBNB(uint256 amount) external onlyOwner {
+        require(amount > 0 && amount <= address(this).balance, "Invalid amount");
+        (bool success, ) = owner.call{value: amount}("");
+        require(success, "Withdrawal failed");
     }
-    
-    // ==================== FALLBACK ====================
-    
+
+    // ==================== INTERNAL TRADING FUNCTIONS ====================
+
+    function _buyWithPDX(
+        uint256 marketId,
+        address beneficiary,
+        uint256 minOut,
+        bool isYes,
+        uint256 pdxAmount
+    ) internal {
+        PDXMarket storage market = pdxMarkets[marketId];
+        require(market.status == 0, "Market not open");
+
+        uint256 platformFee = (pdxAmount * feeBps) / 10000;
+        uint256 amountAfterFee = pdxAmount - platformFee;
+        platformFeeCollected[marketId] += platformFee;
+
+        uint256 tokenOut;
+        if (isYes) {
+            tokenOut = _getAmountOut(amountAfterFee, market.noPool, market.yesPool);
+            require(tokenOut >= minOut, "Slippage exceeded");
+            market.yesPool += amountAfterFee;
+            market.noPool -= tokenOut;
+            IOutcomeToken(market.yesToken).mint(beneficiary, tokenOut);
+            emit BuyYes(marketId, beneficiary, tokenOut, pdxAmount);
+        } else {
+            tokenOut = _getAmountOut(amountAfterFee, market.yesPool, market.noPool);
+            require(tokenOut >= minOut, "Slippage exceeded");
+            market.noPool += amountAfterFee;
+            market.yesPool -= tokenOut;
+            IOutcomeToken(market.noToken).mint(beneficiary, tokenOut);
+            emit BuyNo(marketId, beneficiary, tokenOut, pdxAmount);
+        }
+
+        _updateUserInvestment(marketId, beneficiary, pdxAmount);
+    }
+
+    function _sellForPDX(
+        uint256 marketId,
+        uint256 tokenAmount,
+        uint256 minPDXOut,
+        bool isYes
+    ) internal {
+        PDXMarket storage market = pdxMarkets[marketId];
+
+        uint256 pdxOut;
+        if (isYes) {
+            pdxOut = _getAmountOut(tokenAmount, market.yesPool, market.noPool);
+            require(pdxOut >= minPDXOut, "Slippage exceeded");
+            market.yesPool -= tokenAmount;
+            market.noPool += pdxOut;
+            IOutcomeToken(market.yesToken).burn(address(this), tokenAmount);
+            emit SellYes(marketId, msg.sender, tokenAmount, pdxOut);
+        } else {
+            pdxOut = _getAmountOut(tokenAmount, market.noPool, market.yesPool);
+            require(pdxOut >= minPDXOut, "Slippage exceeded");
+            market.noPool -= tokenAmount;
+            market.yesPool += pdxOut;
+            IOutcomeToken(market.noToken).burn(address(this), tokenAmount);
+            emit SellNo(marketId, msg.sender, tokenAmount, pdxOut);
+        }
+
+        IPDX(pdxToken).transfer(msg.sender, pdxOut);
+    }
+
+    function _getAmountOut(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) internal pure returns (uint256 amountOut) {
+        require(amountIn > 0, "Invalid input");
+        require(reserveIn > 0 && reserveOut > 0, "Insufficient liquidity");
+
+        uint256 amountInWithFee = amountIn * 997;
+        uint256 numerator = amountInWithFee * reserveOut;
+        uint256 denominator = (reserveIn * 1000) + amountInWithFee;
+        amountOut = numerator / denominator;
+    }
+
+    function _sqrt(uint256 x) internal pure returns (uint256 y) {
+        if (x == 0) return 0;
+        uint256 z = (x + 1) / 2;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+    }
+
+    function _toString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) return "0";
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+
+    function _truncate(string memory str, uint256 maxLen) internal pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        if (strBytes.length <= maxLen) return str;
+        bytes memory result = new bytes(maxLen);
+        for (uint256 i = 0; i < maxLen; i++) {
+            result[i] = strBytes[i];
+        }
+        return string(result);
+    }
+
+    function _updateUserInvestment(uint256 marketId, address user, uint256 amount) internal {
+        pdxUserInvestments[marketId][user].totalInvested += amount;
+    }
+
+    // ==================== REQUEST RESOLUTION ====================
+
+    function requestResolution(uint256 marketId, uint8 outcome) external onlyOwner marketExists(marketId) {
+        require(outcome <= 1, "Invalid outcome");
+        require(pdxMarkets[marketId].status == 0, "Already resolved");
+        pdxMarkets[marketId].status = 1;
+        pdxMarkets[marketId].outcome = outcome;
+    }
+
+    // ==================== RESOLUTION CALLBACKS ====================
+
+    function resolveMarket(uint256 marketId) external marketExists(marketId) {
+        require(msg.sender == resolutionServer || msg.sender == owner, "Not authorized");
+        require(pdxMarkets[marketId].status == 1, "Not requested");
+        pdxMarkets[marketId].status = 2;
+    }
+
+    function claimPDXRedemption(uint256 marketId, uint256 amount) external marketExists(marketId) validAmount(amount) {
+        require(pdxMarkets[marketId].status == 2, "Market not resolved");
+        pdxUserInvestments[marketId][msg.sender].totalInvested -= amount;
+    }
+
     receive() external payable {}
+}
+
+// ==================== OUTCOME TOKEN ====================
+
+contract OutcomeToken {
+    string public name;
+    string public symbol;
+    uint8 public constant decimals = 18;
+    uint256 public totalSupply;
+    address public immutable market;
+
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    constructor(string memory _name, string memory _symbol, address _market) {
+        name = _name;
+        symbol = _symbol;
+        market = _market;
+    }
+
+    modifier onlyMarket() {
+        require(msg.sender == market, "Only market");
+        _;
+    }
+
+    function transfer(address to, uint256 value) external returns (bool) {
+        require(to != address(0), "Zero address");
+        require(balanceOf[msg.sender] >= value, "Insufficient balance");
+        balanceOf[msg.sender] -= value;
+        balanceOf[to] += value;
+        emit Transfer(msg.sender, to, value);
+        return true;
+    }
+
+    function approve(address spender, uint256 value) external returns (bool) {
+        allowance[msg.sender][spender] = value;
+        emit Approval(msg.sender, spender, value);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 value) external returns (bool) {
+        require(to != address(0), "Zero address");
+        require(balanceOf[from] >= value, "Insufficient balance");
+        require(allowance[from][msg.sender] >= value, "Insufficient allowance");
+        
+        allowance[from][msg.sender] -= value;
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
+        
+        emit Transfer(from, to, value);
+        return true;
+    }
+
+    function mint(address to, uint256 value) external onlyMarket {
+        require(to != address(0), "Zero address");
+        totalSupply += value;
+        balanceOf[to] += value;
+        emit Transfer(address(0), to, value);
+    }
+
+    function burn(address from, uint256 value) external onlyMarket {
+        require(balanceOf[from] >= value, "Insufficient balance");
+        balanceOf[from] -= value;
+        totalSupply -= value;
+        emit Transfer(from, address(0), value);
+    }
 }

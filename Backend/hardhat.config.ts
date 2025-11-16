@@ -1,14 +1,18 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "hardhat-contract-sizer";
 import * as dotenv from "dotenv";
 
 dotenv.config();
 
 const { PRIVATE_KEY, RPC_URL, BSCSCAN_API_KEY } = process.env;
 
-// Loosen the networks typing to avoid strict union mismatch with Hardhat's types
+// Network configuration
 const networks: Record<string, any> = {
-  hardhat: {},
+  hardhat: {
+    // Allow unlimited contract size for local testing only
+    allowUnlimitedContractSize: true,
+  },
   bnbTestnet: {
     url: RPC_URL || "https://data-seed-prebsc-1-b.binance.org:8545",
     accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
@@ -30,15 +34,25 @@ const config: HardhatUserConfig = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
+        runs: 1,  // ✓ OPTIMIZED: Set to 1 for minimum bytecode size
       },
-      viaIR: true,
+      viaIR: true, // enable IR pipeline per request
     },
   },
+  
+  // ✓ Contract sizer plugin to track size during compilation
+  contractSizer: {
+    alphaSort: true,
+    runOnCompile: true,
+    disambiguatePaths: false,
+  },
+
   networks,
+  
   etherscan: {
     apiKey: BSCSCAN_API_KEY || "",
   },
+  
   paths: {
     sources: "./contracts",
     tests: "./test",

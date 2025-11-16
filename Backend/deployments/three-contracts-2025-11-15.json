@@ -1,0 +1,34 @@
+{
+  "mainAdapter": {
+    "address": "0xb356a469387EE9DE6d6BeceDa975Af7Df69b7e06",
+    "name": "TestnetDualTokenAdapter",
+    "deploymentHash": "0x8ec1a321762fffa65f6e518ab2acecee6527c4874b4bf81100efe764840f6c09",
+    "blockNumber": 72967113,
+    "gasUsed": "3513872"
+  },
+  "resolutionContract": {
+    "address": "0xF3943cA8bEa0E5c147C5E626d0a3A3164c5B889f",
+    "name": "TestnetDualTokenAdapterResolution",
+    "deploymentHash": "0x667c210a5028634a87f7259984e2e5b08ebc5becf5af1d79116b60fba9b8cfa8",
+    "blockNumber": 72967132,
+    "gasUsed": "1364899",
+    "linkedTo": "0xb356a469387EE9DE6d6BeceDa975Af7Df69b7e06"
+  },
+  "viewsAdapter": {
+    "address": "0xfACd4d853d1CC37A624F5aB20De5C553371b1Da1",
+    "name": "TestnetDualTokenAdapterViews",
+    "deploymentHash": "0x73ec637292635914fe35624128e7ef34fe062913822ba44f6d5b69ac4261855f",
+    "blockNumber": 72967151,
+    "gasUsed": "897314",
+    "linkedTo": "0xb356a469387EE9DE6d6BeceDa975Af7Df69b7e06"
+  },
+  "network": "bscTestnet",
+  "chainId": 97,
+  "timestamp": "2025-11-15T21:25:56.585Z",
+  "deployer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "config": {
+    "PDX_TOKEN_ADDRESS": "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8",
+    "BAZAR_CONTRACT_ADDRESS": "0x651790f7A07d818D5a2152572C46e2e3C6E226E5",
+    "RESOLUTION_SERVER_ADDRESS": "0xd84fda5439152a51fbc11c2a5838f3aff57ce02e"
+  }
+}
