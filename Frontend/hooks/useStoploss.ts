@@ -1,355 +1,257 @@
-import { useState, useCallback, useEffect } from 'react';
-import { ethers, BrowserProvider, Contract, formatEther, parseEther } from 'ethers';
-import contractABI from '@/contracts/abi.json';
+import { useState, useCallback, useEffect } from 'react'
+import { ethers } from 'ethers'
+import { useWeb3Context } from '@/lib/wallet-context'
+import { usePredictionMarketBNB } from './use-predection-market'
+import { usePredictionMarketPDX } from './use-prediction-market-pdx'
 
 // Types
 interface OrderInfo {
-  orderId: string;
-  user: string;
-  marketId: string;
-  isYes: boolean;
-  tokenAmount: string;
-  stopLossPrice: string;
-  takeProfitPrice: string;
-  isActive: boolean;
-  orderType: 'StopLoss' | 'TakeProfit';
+  orderId: string
+  user: string
+  marketId: string
+  isYes: boolean
+  tokenAmount: string
+  stopLossPrice: string
+  takeProfitPrice: string
+  isActive: boolean
+  orderType: 'StopLoss' | 'TakeProfit'
 }
 
 interface OrderTriggerStatus {
-  shouldExecute: boolean;
-  currentPrice: string;
-  triggerPrice: string;
+  shouldExecute: boolean
+  currentPrice: string
+  triggerPrice: string
 }
 
 interface CreateOrderParams {
-  marketId: string;
-  isYes: boolean;
-  tokenAmount: string;
-  triggerPrice: string;
-}
-
-interface MarketPrices {
-  yesMultiplier: string;
-  noMultiplier: string;
-  yesPrice: string;
-  noPrice: string;
+  marketId: number
+  isYes: boolean
+  tokenAmount: string
+  triggerPrice: number
 }
 
 interface UseStopLossTakeProfitReturn {
   // State
-  loading: boolean;
-  error: string | null;
-  userOrders: OrderInfo[];
-  activeOrders: OrderInfo[];
+  loading: boolean
+  error: string | null
+  userOrders: OrderInfo[]
+  activeOrders: OrderInfo[]
   
   // Actions
-  createStopLossOrder: (params: CreateOrderParams) => Promise<{ success: boolean; orderId?: string; txHash?: string; error?: string }>;
-  createTakeProfitOrder: (params: CreateOrderParams) => Promise<{ success: boolean; orderId?: string; txHash?: string; error?: string }>;
-  executeOrder: (orderId: string) => Promise<{ success: boolean; txHash?: string; error?: string }>;
-  cancelOrder: (orderId: string) => Promise<{ success: boolean; txHash?: string; error?: string }>;
+  createStopLossOrder: (params: CreateOrderParams) => Promise<{ success: boolean; orderId?: string; txHash?: string; error?: string }>
+  createTakeProfitOrder: (params: CreateOrderParams) => Promise<{ success: boolean; orderId?: string; txHash?: string; error?: string }>
+  executeOrder: (orderId: string) => Promise<{ success: boolean; txHash?: string; error?: string }>
+  cancelOrder: (orderId: string) => Promise<{ success: boolean; txHash?: string; error?: string }>
   
   // Queries
-  getOrderInfo: (orderId: string) => Promise<OrderInfo | null>;
-  checkOrderTrigger: (orderId: string) => Promise<OrderTriggerStatus | null>;
-  getUserOrders: (userAddress: string) => Promise<OrderInfo[]>;
-  getActiveOrders: (userAddress: string) => Promise<OrderInfo[]>;
-  getMarketPrices: (marketId: string) => Promise<MarketPrices | null>;
+  getOrderInfo: (orderId: string) => Promise<OrderInfo | null>
+  checkOrderTrigger: (orderId: string) => Promise<OrderTriggerStatus | null>
+  getUserOrders: (userAddress: string) => Promise<OrderInfo[]>
+  getActiveOrders: (userAddress: string) => Promise<OrderInfo[]>
   
   // Utilities
-  refreshOrders: () => Promise<void>;
-  clearError: () => void;
+  refreshOrders: () => Promise<void>
+  clearError: () => void
 }
 
-export const useStopLossTakeProfit = (
-  provider?: BrowserProvider,
-  userAddress?: string
-): UseStopLossTakeProfitReturn => {
-  const [loading, setLoading] = useState(false);
-  const [userOrders, setUserOrders] = useState<OrderInfo[]>([]);
-  const [activeOrders, setActiveOrders] = useState<OrderInfo[]>([]);
-  const [error, setError] = useState<string | null>(null);
+// ==================== BNB STOP LOSS / TAKE PROFIT ====================
 
-  const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+export const useStopLossTakeProfitBNB = (userAddress?: string): UseStopLossTakeProfitReturn => {
+  const [loading, setLoading] = useState(false)
+  const [userOrders, setUserOrders] = useState<OrderInfo[]>([])
+  const [activeOrders, setActiveOrders] = useState<OrderInfo[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  // Get contract instance
-  const getContract = useCallback(async (needsSigner = false) => {
-    if (!contractAddress) throw new Error('Contract address not configured');
-    if (!provider) throw new Error('Provider not available');
-    
-    if (needsSigner) {
-      const signer = await provider.getSigner();
-      return new Contract(contractAddress, contractABI, signer);
-    }
-    
-    return new Contract(contractAddress, contractABI, provider);
-  }, [contractAddress, provider]);
+  const bnbHook = usePredictionMarketBNB()
 
   // Clear error
   const clearError = useCallback(() => {
-    setError(null);
-  }, []);
+    setError(null)
+  }, [])
 
   // Create Stop Loss Order
   const createStopLossOrder = useCallback(async (params: CreateOrderParams) => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      const contract = await getContract(true);
-      
-      // Convert values to proper format
-      const tokenAmount = parseEther(params.tokenAmount);
-      const stopLossPrice = BigInt(params.triggerPrice);
-
-      const tx = await contract.createStopLossOrder(
+      const receipt = await bnbHook.createStopLossOrder(
         params.marketId,
         params.isYes,
-        tokenAmount,
-        stopLossPrice
-      );
+        params.tokenAmount,
+        params.triggerPrice
+      )
 
-      const receipt = await tx.wait();
-      
-      // Extract orderId from event
-      const event = receipt.logs?.find((log: any) => {
-        try {
-          const parsedLog = contract.interface.parseLog(log);
-          return parsedLog?.name === 'OrderCreated';
-        } catch {
-          return false;
-        }
-      });
-
-      let orderId: string | undefined;
-      if (event) {
-        const parsedLog = contract.interface.parseLog(event);
-        orderId = parsedLog?.args?.orderId?.toString();
-      }
-
-      setLoading(false);
-      return { success: true, orderId, txHash: receipt.hash };
+      setLoading(false)
+      return { success: true, txHash: receipt?.transactionHash || 'success' }
     } catch (err: any) {
-      const errorMessage = err.reason || err.message || 'Failed to create stop loss order';
-      setError(errorMessage);
-      setLoading(false);
-      return { success: false, error: errorMessage };
+      const errorMessage = err?.reason || err?.message || 'Failed to create stop loss order'
+      setError(errorMessage)
+      setLoading(false)
+      return { success: false, error: errorMessage }
     }
-  }, [getContract]);
+  }, [bnbHook])
 
   // Create Take Profit Order
   const createTakeProfitOrder = useCallback(async (params: CreateOrderParams) => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      const contract = await getContract(true);
-      
-      const tokenAmount = parseEther(params.tokenAmount);
-      const takeProfitPrice = BigInt(params.triggerPrice);
-
-      const tx = await contract.createTakeProfitOrder(
+      const receipt = await bnbHook.createTakeProfitOrder(
         params.marketId,
         params.isYes,
-        tokenAmount,
-        takeProfitPrice
-      );
+        params.tokenAmount,
+        params.triggerPrice
+      )
 
-      const receipt = await tx.wait();
-      
-      // Extract orderId from event
-      const event = receipt.logs?.find((log: any) => {
-        try {
-          const parsedLog = contract.interface.parseLog(log);
-          return parsedLog?.name === 'OrderCreated';
-        } catch {
-          return false;
-        }
-      });
-
-      let orderId: string | undefined;
-      if (event) {
-        const parsedLog = contract.interface.parseLog(event);
-        orderId = parsedLog?.args?.orderId?.toString();
-      }
-
-      setLoading(false);
-      return { success: true, orderId, txHash: receipt.hash };
+      setLoading(false)
+      return { success: true, txHash: receipt?.transactionHash || 'success' }
     } catch (err: any) {
-      const errorMessage = err.reason || err.message || 'Failed to create take profit order';
-      setError(errorMessage);
-      setLoading(false);
-      return { success: false, error: errorMessage };
+      const errorMessage = err?.reason || err?.message || 'Failed to create take profit order'
+      setError(errorMessage)
+      setLoading(false)
+      return { success: false, error: errorMessage }
     }
-  }, [getContract]);
+  }, [bnbHook])
 
   // Execute Order
   const executeOrder = useCallback(async (orderId: string) => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      const contract = await getContract(true);
-      const tx = await contract.executeOrder(orderId);
-      const receipt = await tx.wait();
+      const orderId_num = parseInt(orderId)
+      const receipt = await bnbHook.executeOrder(orderId_num)
 
-      setLoading(false);
-      return { success: true, txHash: receipt.hash };
+      setLoading(false)
+      return { success: true, txHash: receipt?.transactionHash || 'success' }
     } catch (err: any) {
-      const errorMessage = err.reason || err.message || 'Failed to execute order';
-      setError(errorMessage);
-      setLoading(false);
-      return { success: false, error: errorMessage };
+      const errorMessage = err?.reason || err?.message || 'Failed to execute order'
+      setError(errorMessage)
+      setLoading(false)
+      return { success: false, error: errorMessage }
     }
-  }, [getContract]);
+  }, [bnbHook])
 
   // Cancel Order
   const cancelOrder = useCallback(async (orderId: string) => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      const contract = await getContract(true);
-      const tx = await contract.cancelOrder(orderId);
-      const receipt = await tx.wait();
+      const orderId_num = parseInt(orderId)
+      const receipt = await bnbHook.cancelOrder(orderId_num)
 
-      setLoading(false);
-      return { success: true, txHash: receipt.hash };
+      setLoading(false)
+      return { success: true, txHash: receipt?.transactionHash || 'success' }
     } catch (err: any) {
-      const errorMessage = err.reason || err.message || 'Failed to cancel order';
-      setError(errorMessage);
-      setLoading(false);
-      return { success: false, error: errorMessage };
+      const errorMessage = err?.reason || err?.message || 'Failed to cancel order'
+      setError(errorMessage)
+      setLoading(false)
+      return { success: false, error: errorMessage }
     }
-  }, [getContract]);
+  }, [bnbHook])
 
   // Get Order Info
   const getOrderInfo = useCallback(async (orderId: string): Promise<OrderInfo | null> => {
     try {
-      const contract = await getContract(false);
-      const info = await contract.getOrderInfo(orderId);
+      const orderId_num = parseInt(orderId)
+      const info = await bnbHook.getOrderInfo(orderId_num)
 
-      const orderType = BigInt(info.stopLossPrice) > BigInt(0) ? 'StopLoss' : 'TakeProfit';
+      const orderType = info.stopLossPrice && parseFloat(info.stopLossPrice.toString()) > 0 ? 'StopLoss' : 'TakeProfit'
 
       return {
         orderId,
         user: info.user,
         marketId: info.marketId.toString(),
         isYes: info.isYes,
-        tokenAmount: formatEther(info.tokenAmount),
+        tokenAmount: info.tokenAmount,
         stopLossPrice: info.stopLossPrice.toString(),
         takeProfitPrice: info.takeProfitPrice.toString(),
         isActive: info.isActive,
         orderType
-      };
+      }
     } catch (err: any) {
-      console.error('Error getting order info:', err);
-      return null;
+      console.error('Error getting BNB order info:', err)
+      return null
     }
-  }, [getContract]);
+  }, [bnbHook])
 
   // Check Order Trigger
   const checkOrderTrigger = useCallback(async (orderId: string): Promise<OrderTriggerStatus | null> => {
     try {
-      const contract = await getContract(false);
-      const result = await contract.checkOrderTrigger(orderId);
+      const orderId_num = parseInt(orderId)
+      const result = await bnbHook.checkOrderTrigger(orderId_num)
 
       return {
-        shouldExecute: result.shouldExecute,
+        shouldExecute: result.triggered,
         currentPrice: result.currentPrice.toString(),
         triggerPrice: result.triggerPrice.toString()
-      };
+      }
     } catch (err: any) {
-      console.error('Error checking order trigger:', err);
-      return null;
+      console.error('Error checking BNB order trigger:', err)
+      return null
     }
-  }, [getContract]);
+  }, [bnbHook])
 
   // Get User Orders
   const getUserOrders = useCallback(async (userAddress: string): Promise<OrderInfo[]> => {
     try {
-      const contract = await getContract(false);
-      const orderIds = await contract.getUserOrders(userAddress);
+      const orderIds = await bnbHook.getUserOrders(userAddress)
       
-      const orders: OrderInfo[] = [];
+      const orders: OrderInfo[] = []
       for (const orderId of orderIds) {
-        const orderInfo = await getOrderInfo(orderId.toString());
+        const orderInfo = await getOrderInfo(orderId.toString())
         if (orderInfo) {
-          orders.push(orderInfo);
+          orders.push(orderInfo)
         }
       }
 
-      return orders;
+      return orders
     } catch (err: any) {
-      console.error('Error getting user orders:', err);
-      return [];
+      console.error('Error getting BNB user orders:', err)
+      return []
     }
-  }, [getContract, getOrderInfo]);
+  }, [bnbHook, getOrderInfo])
 
   // Get Active Orders
   const getActiveOrders = useCallback(async (userAddress: string): Promise<OrderInfo[]> => {
     try {
-      const contract = await getContract(false);
-      const orderIds = await contract.getActiveOrders(userAddress);
-      
-      const orders: OrderInfo[] = [];
-      for (const orderId of orderIds) {
-        const orderInfo = await getOrderInfo(orderId.toString());
-        if (orderInfo) {
-          orders.push(orderInfo);
-        }
-      }
-
-      return orders;
+      const allOrders = await getUserOrders(userAddress)
+      return allOrders.filter(order => order.isActive)
     } catch (err: any) {
-      console.error('Error getting active orders:', err);
-      return [];
+      console.error('Error getting BNB active orders:', err)
+      return []
     }
-  }, [getContract, getOrderInfo]);
-
-  // Get Market Prices
-  const getMarketPrices = useCallback(async (marketId: string): Promise<MarketPrices | null> => {
-    try {
-      const contract = await getContract(false);
-      const result = await contract.getCurrentMultipliers(marketId);
-
-      return {
-        yesMultiplier: result[0].toString(),
-        noMultiplier: result[1].toString(),
-        yesPrice: result[2].toString(),
-        noPrice: result[3].toString()
-      };
-    } catch (err: any) {
-      console.error('Error getting market prices:', err);
-      return null;
-    }
-  }, [getContract]);
+  }, [getUserOrders])
 
   // Refresh Orders
   const refreshOrders = useCallback(async () => {
-    if (!userAddress) return;
+    if (!userAddress) return
 
     try {
-      setLoading(true);
+      setLoading(true)
       const [allOrders, active] = await Promise.all([
         getUserOrders(userAddress),
         getActiveOrders(userAddress)
-      ]);
+      ])
 
-      setUserOrders(allOrders);
-      setActiveOrders(active);
-      setLoading(false);
+      setUserOrders(allOrders)
+      setActiveOrders(active)
+      setLoading(false)
     } catch (err: any) {
-      console.error('Error refreshing orders:', err);
-      setLoading(false);
+      console.error('Error refreshing BNB orders:', err)
+      setLoading(false)
     }
-  }, [userAddress, getUserOrders, getActiveOrders]);
+  }, [userAddress, getUserOrders, getActiveOrders])
 
   // Auto-refresh orders when user address changes
   useEffect(() => {
-    if (userAddress && provider) {
-      refreshOrders();
+    if (userAddress) {
+      refreshOrders()
     }
-  }, [userAddress, provider, refreshOrders]);
+  }, [userAddress, refreshOrders])
 
   return {
     // State
@@ -369,38 +271,257 @@ export const useStopLossTakeProfit = (
     checkOrderTrigger,
     getUserOrders,
     getActiveOrders,
-    getMarketPrices,
     
     // Utilities
     refreshOrders,
     clearError
-  };
-};
+  }
+}
 
-// Utility functions for formatting
+// ==================== PDX STOP LOSS / TAKE PROFIT ====================
+
+export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeProfitReturn => {
+  const [loading, setLoading] = useState(false)
+  const [userOrders, setUserOrders] = useState<OrderInfo[]>([])
+  const [activeOrders, setActiveOrders] = useState<OrderInfo[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  const pdxHook = usePredictionMarketPDX()
+
+  // Clear error
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
+
+  // Create Stop Loss Order
+  const createStopLossOrder = useCallback(async (params: CreateOrderParams) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const receipt = await pdxHook.createStopLossOrder(
+        params.marketId,
+        params.triggerPrice,
+        params.tokenAmount
+      )
+
+      setLoading(false)
+      return { success: true, txHash: receipt?.transactionHash || 'success' }
+    } catch (err: any) {
+      const errorMessage = err?.reason || err?.message || 'Failed to create PDX stop loss order'
+      setError(errorMessage)
+      setLoading(false)
+      return { success: false, error: errorMessage }
+    }
+  }, [pdxHook])
+
+  // Create Take Profit Order
+  const createTakeProfitOrder = useCallback(async (params: CreateOrderParams) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const receipt = await pdxHook.createTakeProfitOrder(
+        params.marketId,
+        params.triggerPrice,
+        params.tokenAmount
+      )
+
+      setLoading(false)
+      return { success: true, txHash: receipt?.transactionHash || 'success' }
+    } catch (err: any) {
+      const errorMessage = err?.reason || err?.message || 'Failed to create PDX take profit order'
+      setError(errorMessage)
+      setLoading(false)
+      return { success: false, error: errorMessage }
+    }
+  }, [pdxHook])
+
+  // Execute Order
+  const executeOrder = useCallback(async (orderId: string) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const orderId_num = parseInt(orderId)
+      const receipt = await pdxHook.executeOrder(orderId_num)
+
+      setLoading(false)
+      return { success: true, txHash: receipt?.transactionHash || 'success' }
+    } catch (err: any) {
+      const errorMessage = err?.reason || err?.message || 'Failed to execute PDX order'
+      setError(errorMessage)
+      setLoading(false)
+      return { success: false, error: errorMessage }
+    }
+  }, [pdxHook])
+
+  // Cancel Order
+  const cancelOrder = useCallback(async (orderId: string) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const orderId_num = parseInt(orderId)
+      const receipt = await pdxHook.cancelOrder(orderId_num)
+
+      setLoading(false)
+      return { success: true, txHash: receipt?.transactionHash || 'success' }
+    } catch (err: any) {
+      const errorMessage = err?.reason || err?.message || 'Failed to cancel PDX order'
+      setError(errorMessage)
+      setLoading(false)
+      return { success: false, error: errorMessage }
+    }
+  }, [pdxHook])
+
+  // Get Order Info
+  const getOrderInfo = useCallback(async (orderId: string): Promise<OrderInfo | null> => {
+    try {
+      const orderId_num = parseInt(orderId)
+      // PDX hook might not have getOrderInfo, so we'll return a placeholder
+      console.warn('PDX getOrderInfo not yet implemented')
+      return null
+    } catch (err: any) {
+      console.error('Error getting PDX order info:', err)
+      return null
+    }
+  }, [pdxHook])
+
+  // Check Order Trigger
+  const checkOrderTrigger = useCallback(async (orderId: string): Promise<OrderTriggerStatus | null> => {
+    try {
+      const orderId_num = parseInt(orderId)
+      const triggered = await pdxHook.checkOrderTrigger(orderId_num)
+
+      return {
+        shouldExecute: triggered,
+        currentPrice: '0',
+        triggerPrice: '0'
+      }
+    } catch (err: any) {
+      console.error('Error checking PDX order trigger:', err)
+      return null
+    }
+  }, [pdxHook])
+
+  // Get User Orders
+  const getUserOrders = useCallback(async (userAddress: string): Promise<OrderInfo[]> => {
+    try {
+      const orderIds = await pdxHook.getUserOrders(userAddress)
+      
+      const orders: OrderInfo[] = []
+      for (const orderId of orderIds) {
+        const orderInfo = await getOrderInfo(orderId.toString())
+        if (orderInfo) {
+          orders.push(orderInfo)
+        }
+      }
+
+      return orders
+    } catch (err: any) {
+      console.error('Error getting PDX user orders:', err)
+      return []
+    }
+  }, [pdxHook, getOrderInfo])
+
+  // Get Active Orders
+  const getActiveOrders = useCallback(async (userAddress: string): Promise<OrderInfo[]> => {
+    try {
+      const allOrders = await getUserOrders(userAddress)
+      return allOrders.filter(order => order.isActive)
+    } catch (err: any) {
+      console.error('Error getting PDX active orders:', err)
+      return []
+    }
+  }, [getUserOrders])
+
+  // Refresh Orders
+  const refreshOrders = useCallback(async () => {
+    if (!userAddress) return
+
+    try {
+      setLoading(true)
+      const [allOrders, active] = await Promise.all([
+        getUserOrders(userAddress),
+        getActiveOrders(userAddress)
+      ])
+
+      setUserOrders(allOrders)
+      setActiveOrders(active)
+      setLoading(false)
+    } catch (err: any) {
+      console.error('Error refreshing PDX orders:', err)
+      setLoading(false)
+    }
+  }, [userAddress, getUserOrders, getActiveOrders])
+
+  // Auto-refresh orders when user address changes
+  useEffect(() => {
+    if (userAddress) {
+      refreshOrders()
+    }
+  }, [userAddress, refreshOrders])
+
+  return {
+    // State
+    loading,
+    error,
+    userOrders,
+    activeOrders,
+    
+    // Actions
+    createStopLossOrder,
+    createTakeProfitOrder,
+    executeOrder,
+    cancelOrder,
+    
+    // Queries
+    getOrderInfo,
+    checkOrderTrigger,
+    getUserOrders,
+    getActiveOrders,
+    
+    // Utilities
+    refreshOrders,
+    clearError
+  }
+}
+
+// ==================== UNIFIED HOOK (AUTO-DETECT TOKEN) ====================
+
+export const useStopLossTakeProfit = (paymentToken: "BNB" | "PDX", userAddress?: string): UseStopLossTakeProfitReturn => {
+  const bnbHook = useStopLossTakeProfitBNB(userAddress)
+  const pdxHook = useStopLossTakeProfitPDX(userAddress)
+
+  return paymentToken === "BNB" ? bnbHook : pdxHook
+}
+
+// ==================== UTILITY FUNCTIONS ====================
+
 export const formatPrice = (price: string): string => {
-  const priceNum = Number(price);
-  return (priceNum / 100).toFixed(2) + '%';
-};
+  const priceNum = Number(price)
+  return (priceNum / 100).toFixed(2) + '%'
+}
 
 export const formatMultiplier = (multiplier: string): string => {
-  const multNum = Number(multiplier);
-  if (multNum >= 1000000) return '100x+';
+  const multNum = Number(multiplier)
+  if (multNum >= 1000000) return '100x+'
   
-  const integerPart = Math.floor(multNum / 10000);
-  const fractionalPart = Math.floor((multNum % 10000) / 1000);
+  const integerPart = Math.floor(multNum / 10000)
+  const fractionalPart = Math.floor((multNum % 10000) / 1000)
   
   if (fractionalPart === 0) {
-    return `${integerPart}x`;
+    return `${integerPart}x`
   } else {
-    return `${integerPart}.${fractionalPart}x`;
+    return `${integerPart}.${fractionalPart}x`
   }
-};
+}
 
 export const formatTokenAmount = (amount: string): string => {
-  const amountNum = parseFloat(amount);
+  const amountNum = parseFloat(amount)
   if (amountNum >= 1000) {
-    return (amountNum / 1000).toFixed(2) + 'K';
+    return (amountNum / 1000).toFixed(2) + 'K'
   }
-  return amountNum.toFixed(4);
-};
+  return amountNum.toFixed(4)
+}

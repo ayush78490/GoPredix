@@ -26,146 +26,167 @@ import type {
 export interface TestnetDualTokenAdapterInterface extends Interface {
   getFunction(
     nameOrSignature:
-      | "TBNB"
-      | "addLiquidity"
-      | "buyNoWithBNB"
+      | "addPDXLiquidity"
+      | "buyNoWithBNBFor"
       | "buyNoWithPDX"
-      | "buyYesWithBNB"
+      | "buyYesWithBNBFor"
       | "buyYesWithPDX"
       | "cancelOrder"
-      | "claimRedemption"
-      | "createMarketWithBNB"
+      | "checkOrderTrigger"
+      | "claimPDXRedemption"
       | "createMarketWithPDX"
       | "createStopLossOrder"
       | "createTakeProfitOrder"
-      | "dexRouter"
       | "executeOrder"
-      | "getMarketPaymentToken"
-      | "getMinBNBForPDX"
-      | "getMinPDXForBNB"
-      | "marketPaymentToken"
+      | "feeBps"
+      | "getUserOrders"
+      | "lpShareBps"
+      | "nextPDXMarketId"
+      | "orders"
       | "owner"
+      | "pdxMarkets"
       | "pdxToken"
+      | "pdxUserInvestments"
+      | "platformFeeCollected"
       | "predictionMarket"
-      | "removeLiquidity"
+      | "removePDXLiquidity"
+      | "requestResolution"
+      | "resolutionContract"
+      | "resolutionServer"
+      | "resolveMarket"
       | "sellNoForBNB"
       | "sellNoForPDX"
       | "sellYesForBNB"
       | "sellYesForPDX"
-      | "setSlippageTolerance"
-      | "slippageTolerance"
+      | "setFees"
+      | "setResolutionContract"
+      | "setResolutionServer"
+      | "setViewsAdapter"
       | "transferOwnership"
+      | "userOrders"
+      | "viewsAdapter"
       | "withdrawBNB"
       | "withdrawPDX"
+      | "withdrawPlatformFees"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
-      | "BNBSwappedToPDX"
-      | "BuyWithBNB"
-      | "BuyWithPDX"
-      | "MarketCreatedWithBNB"
-      | "MarketCreatedWithPDX"
-      | "PDXSwappedToBNB"
-      | "SellForBNB"
-      | "SellForPDX"
-      | "SlippageToleranceUpdated"
+      | "BuyNo"
+      | "BuyYes"
+      | "FeeUpdated"
+      | "LiquidityAdded"
+      | "LiquidityRemoved"
+      | "MarketCreated"
+      | "OrderCancelled"
+      | "OrderCreated"
+      | "OrderExecuted"
+      | "SellNo"
+      | "SellYes"
   ): EventFragment;
 
-  encodeFunctionData(functionFragment: "TBNB", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "addLiquidity",
+    functionFragment: "addPDXLiquidity",
     values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "buyNoWithBNB",
+    functionFragment: "buyNoWithBNBFor",
     values: [BigNumberish, AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "buyNoWithPDX",
-    values: [
-      BigNumberish,
-      AddressLike,
-      BigNumberish,
-      BigNumberish,
-      BigNumberish
-    ]
+    values: [BigNumberish, AddressLike, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "buyYesWithBNB",
+    functionFragment: "buyYesWithBNBFor",
     values: [BigNumberish, AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "buyYesWithPDX",
-    values: [
-      BigNumberish,
-      AddressLike,
-      BigNumberish,
-      BigNumberish,
-      BigNumberish
-    ]
+    values: [BigNumberish, AddressLike, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "cancelOrder",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "claimRedemption",
+    functionFragment: "checkOrderTrigger",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "createMarketWithBNB",
-    values: [string, string, BigNumberish, BigNumberish, BigNumberish]
+    functionFragment: "claimPDXRedemption",
+    values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "createMarketWithPDX",
-    values: [
-      string,
-      string,
-      BigNumberish,
-      BigNumberish,
-      BigNumberish,
-      BigNumberish
-    ]
+    values: [string, string, BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "createStopLossOrder",
-    values: [BigNumberish, boolean, BigNumberish, BigNumberish]
+    values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "createTakeProfitOrder",
-    values: [BigNumberish, boolean, BigNumberish, BigNumberish]
+    values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
-  encodeFunctionData(functionFragment: "dexRouter", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "executeOrder",
     values: [BigNumberish]
   ): string;
+  encodeFunctionData(functionFragment: "feeBps", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "getMarketPaymentToken",
-    values: [BigNumberish]
+    functionFragment: "getUserOrders",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "getMinBNBForPDX",
-    values: [BigNumberish]
+    functionFragment: "lpShareBps",
+    values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "getMinPDXForBNB",
-    values: [BigNumberish]
+    functionFragment: "nextPDXMarketId",
+    values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "marketPaymentToken",
+    functionFragment: "orders",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "pdxMarkets",
+    values: [BigNumberish]
+  ): string;
   encodeFunctionData(functionFragment: "pdxToken", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "pdxUserInvestments",
+    values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "platformFeeCollected",
+    values: [BigNumberish]
+  ): string;
   encodeFunctionData(
     functionFragment: "predictionMarket",
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "removeLiquidity",
+    functionFragment: "removePDXLiquidity",
     values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "requestResolution",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "resolutionContract",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "resolutionServer",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "resolveMarket",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "sellNoForBNB",
@@ -173,7 +194,7 @@ export interface TestnetDualTokenAdapterInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "sellNoForPDX",
-    values: [BigNumberish, BigNumberish, BigNumberish, BigNumberish]
+    values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "sellYesForBNB",
@@ -181,36 +202,55 @@ export interface TestnetDualTokenAdapterInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "sellYesForPDX",
-    values: [BigNumberish, BigNumberish, BigNumberish, BigNumberish]
+    values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "setSlippageTolerance",
-    values: [BigNumberish]
+    functionFragment: "setFees",
+    values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "slippageTolerance",
-    values?: undefined
+    functionFragment: "setResolutionContract",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setResolutionServer",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setViewsAdapter",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "transferOwnership",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "withdrawBNB",
+    functionFragment: "userOrders",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "viewsAdapter",
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "withdrawBNB",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "withdrawPDX",
-    values?: undefined
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "withdrawPlatformFees",
+    values: [BigNumberish]
   ): string;
 
-  decodeFunctionResult(functionFragment: "TBNB", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "addLiquidity",
+    functionFragment: "addPDXLiquidity",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "buyNoWithBNB",
+    functionFragment: "buyNoWithBNBFor",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -218,7 +258,7 @@ export interface TestnetDualTokenAdapterInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "buyYesWithBNB",
+    functionFragment: "buyYesWithBNBFor",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -230,11 +270,11 @@ export interface TestnetDualTokenAdapterInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "claimRedemption",
+    functionFragment: "checkOrderTrigger",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "createMarketWithBNB",
+    functionFragment: "claimPDXRedemption",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -249,35 +289,54 @@ export interface TestnetDualTokenAdapterInterface extends Interface {
     functionFragment: "createTakeProfitOrder",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "dexRouter", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "executeOrder",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "feeBps", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "getMarketPaymentToken",
+    functionFragment: "getUserOrders",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "lpShareBps", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "getMinBNBForPDX",
+    functionFragment: "nextPDXMarketId",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "getMinPDXForBNB",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "marketPaymentToken",
-    data: BytesLike
-  ): Result;
+  decodeFunctionResult(functionFragment: "orders", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "pdxMarkets", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "pdxToken", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "pdxUserInvestments",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "platformFeeCollected",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "predictionMarket",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "removeLiquidity",
+    functionFragment: "removePDXLiquidity",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "requestResolution",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "resolutionContract",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "resolutionServer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "resolveMarket",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -296,16 +355,26 @@ export interface TestnetDualTokenAdapterInterface extends Interface {
     functionFragment: "sellYesForPDX",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "setFees", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "setSlippageTolerance",
+    functionFragment: "setResolutionContract",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "slippageTolerance",
+    functionFragment: "setResolutionServer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setViewsAdapter",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "transferOwnership",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "userOrders", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "viewsAdapter",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -316,39 +385,30 @@ export interface TestnetDualTokenAdapterInterface extends Interface {
     functionFragment: "withdrawPDX",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "withdrawPlatformFees",
+    data: BytesLike
+  ): Result;
 }
 
-export namespace BNBSwappedToPDXEvent {
-  export type InputTuple = [bnbIn: BigNumberish, pdxOut: BigNumberish];
-  export type OutputTuple = [bnbIn: bigint, pdxOut: bigint];
-  export interface OutputObject {
-    bnbIn: bigint;
-    pdxOut: bigint;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace BuyWithBNBEvent {
+export namespace BuyNoEvent {
   export type InputTuple = [
     marketId: BigNumberish,
     user: AddressLike,
-    isYes: boolean,
-    bnbAmount: BigNumberish
+    noAmount: BigNumberish,
+    pdxUsed: BigNumberish
   ];
   export type OutputTuple = [
     marketId: bigint,
     user: string,
-    isYes: boolean,
-    bnbAmount: bigint
+    noAmount: bigint,
+    pdxUsed: bigint
   ];
   export interface OutputObject {
     marketId: bigint;
     user: string;
-    isYes: boolean;
-    bnbAmount: bigint;
+    noAmount: bigint;
+    pdxUsed: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -356,27 +416,24 @@ export namespace BuyWithBNBEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace BuyWithPDXEvent {
+export namespace BuyYesEvent {
   export type InputTuple = [
     marketId: BigNumberish,
     user: AddressLike,
-    isYes: boolean,
-    pdxAmount: BigNumberish,
-    bnbConverted: BigNumberish
+    yesAmount: BigNumberish,
+    pdxUsed: BigNumberish
   ];
   export type OutputTuple = [
     marketId: bigint,
     user: string,
-    isYes: boolean,
-    pdxAmount: bigint,
-    bnbConverted: bigint
+    yesAmount: bigint,
+    pdxUsed: bigint
   ];
   export interface OutputObject {
     marketId: bigint;
     user: string;
-    isYes: boolean;
-    pdxAmount: bigint;
-    bnbConverted: bigint;
+    yesAmount: bigint;
+    pdxUsed: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -384,21 +441,87 @@ export namespace BuyWithPDXEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace MarketCreatedWithBNBEvent {
+export namespace FeeUpdatedEvent {
+  export type InputTuple = [
+    newFeeBps: BigNumberish,
+    newLpShareBps: BigNumberish
+  ];
+  export type OutputTuple = [newFeeBps: bigint, newLpShareBps: bigint];
+  export interface OutputObject {
+    newFeeBps: bigint;
+    newLpShareBps: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace LiquidityAddedEvent {
+  export type InputTuple = [
+    marketId: BigNumberish,
+    yesAmount: BigNumberish,
+    noAmount: BigNumberish,
+    liquidity: BigNumberish
+  ];
+  export type OutputTuple = [
+    marketId: bigint,
+    yesAmount: bigint,
+    noAmount: bigint,
+    liquidity: bigint
+  ];
+  export interface OutputObject {
+    marketId: bigint;
+    yesAmount: bigint;
+    noAmount: bigint;
+    liquidity: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace LiquidityRemovedEvent {
+  export type InputTuple = [
+    marketId: BigNumberish,
+    yesAmount: BigNumberish,
+    noAmount: BigNumberish,
+    liquidity: BigNumberish
+  ];
+  export type OutputTuple = [
+    marketId: bigint,
+    yesAmount: bigint,
+    noAmount: bigint,
+    liquidity: bigint
+  ];
+  export interface OutputObject {
+    marketId: bigint;
+    yesAmount: bigint;
+    noAmount: bigint;
+    liquidity: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace MarketCreatedEvent {
   export type InputTuple = [
     marketId: BigNumberish,
     creator: AddressLike,
-    bnbAmount: BigNumberish
+    question: string
   ];
   export type OutputTuple = [
     marketId: bigint,
     creator: string,
-    bnbAmount: bigint
+    question: string
   ];
   export interface OutputObject {
     marketId: bigint;
     creator: string;
-    bnbAmount: bigint;
+    question: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -406,21 +529,11 @@ export namespace MarketCreatedWithBNBEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace MarketCreatedWithPDXEvent {
-  export type InputTuple = [
-    marketId: BigNumberish,
-    creator: AddressLike,
-    pdxAmount: BigNumberish
-  ];
-  export type OutputTuple = [
-    marketId: bigint,
-    creator: string,
-    pdxAmount: bigint
-  ];
+export namespace OrderCancelledEvent {
+  export type InputTuple = [orderId: BigNumberish];
+  export type OutputTuple = [orderId: bigint];
   export interface OutputObject {
-    marketId: bigint;
-    creator: string;
-    pdxAmount: bigint;
+    orderId: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -428,40 +541,24 @@ export namespace MarketCreatedWithPDXEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace PDXSwappedToBNBEvent {
-  export type InputTuple = [pdxIn: BigNumberish, bnbOut: BigNumberish];
-  export type OutputTuple = [pdxIn: bigint, bnbOut: bigint];
-  export interface OutputObject {
-    pdxIn: bigint;
-    bnbOut: bigint;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace SellForBNBEvent {
+export namespace OrderCreatedEvent {
   export type InputTuple = [
+    orderId: BigNumberish,
     marketId: BigNumberish,
     user: AddressLike,
-    isYes: boolean,
-    tokenAmount: BigNumberish,
-    bnbReceived: BigNumberish
+    orderType: BigNumberish
   ];
   export type OutputTuple = [
+    orderId: bigint,
     marketId: bigint,
     user: string,
-    isYes: boolean,
-    tokenAmount: bigint,
-    bnbReceived: bigint
+    orderType: bigint
   ];
   export interface OutputObject {
+    orderId: bigint;
     marketId: bigint;
     user: string;
-    isYes: boolean;
-    tokenAmount: bigint;
-    bnbReceived: bigint;
+    orderType: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -469,26 +566,35 @@ export namespace SellForBNBEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace SellForPDXEvent {
+export namespace OrderExecutedEvent {
+  export type InputTuple = [orderId: BigNumberish];
+  export type OutputTuple = [orderId: bigint];
+  export interface OutputObject {
+    orderId: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace SellNoEvent {
   export type InputTuple = [
     marketId: BigNumberish,
     user: AddressLike,
-    isYes: boolean,
-    tokenAmount: BigNumberish,
+    noAmount: BigNumberish,
     pdxReceived: BigNumberish
   ];
   export type OutputTuple = [
     marketId: bigint,
     user: string,
-    isYes: boolean,
-    tokenAmount: bigint,
+    noAmount: bigint,
     pdxReceived: bigint
   ];
   export interface OutputObject {
     marketId: bigint;
     user: string;
-    isYes: boolean;
-    tokenAmount: bigint;
+    noAmount: bigint;
     pdxReceived: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -497,11 +603,24 @@ export namespace SellForPDXEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace SlippageToleranceUpdatedEvent {
-  export type InputTuple = [newSlippage: BigNumberish];
-  export type OutputTuple = [newSlippage: bigint];
+export namespace SellYesEvent {
+  export type InputTuple = [
+    marketId: BigNumberish,
+    user: AddressLike,
+    yesAmount: BigNumberish,
+    pdxReceived: BigNumberish
+  ];
+  export type OutputTuple = [
+    marketId: bigint,
+    user: string,
+    yesAmount: bigint,
+    pdxReceived: bigint
+  ];
   export interface OutputObject {
-    newSlippage: bigint;
+    marketId: bigint;
+    user: string;
+    yesAmount: bigint;
+    pdxReceived: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -552,15 +671,13 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  TBNB: TypedContractMethod<[], [string], "view">;
-
-  addLiquidity: TypedContractMethod<
+  addPDXLiquidity: TypedContractMethod<
     [marketId: BigNumberish, yesAmount: BigNumberish, noAmount: BigNumberish],
     [void],
     "nonpayable"
   >;
 
-  buyNoWithBNB: TypedContractMethod<
+  buyNoWithBNBFor: TypedContractMethod<
     [marketId: BigNumberish, beneficiary: AddressLike, minNoOut: BigNumberish],
     [void],
     "payable"
@@ -570,15 +687,14 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     [
       marketId: BigNumberish,
       beneficiary: AddressLike,
-      pdxAmount: BigNumberish,
-      minBNBOut: BigNumberish,
-      minNoOut: BigNumberish
+      minNoOut: BigNumberish,
+      pdxAmount: BigNumberish
     ],
     [void],
     "nonpayable"
   >;
 
-  buyYesWithBNB: TypedContractMethod<
+  buyYesWithBNBFor: TypedContractMethod<
     [marketId: BigNumberish, beneficiary: AddressLike, minYesOut: BigNumberish],
     [void],
     "payable"
@@ -588,9 +704,8 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     [
       marketId: BigNumberish,
       beneficiary: AddressLike,
-      pdxAmount: BigNumberish,
-      minBNBOut: BigNumberish,
-      minYesOut: BigNumberish
+      minYesOut: BigNumberish,
+      pdxAmount: BigNumberish
     ],
     [void],
     "nonpayable"
@@ -602,60 +717,41 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     "nonpayable"
   >;
 
-  claimRedemption: TypedContractMethod<
-    [marketId: BigNumberish],
+  checkOrderTrigger: TypedContractMethod<
+    [orderId: BigNumberish],
+    [boolean],
+    "view"
+  >;
+
+  claimPDXRedemption: TypedContractMethod<
+    [marketId: BigNumberish, amount: BigNumberish],
     [void],
     "nonpayable"
   >;
 
-  createMarketWithBNB: TypedContractMethod<
-    [
-      question: string,
-      category: string,
-      endTime: BigNumberish,
-      initialYes: BigNumberish,
-      initialNo: BigNumberish
-    ],
-    [bigint],
-    "payable"
-  >;
-
   createMarketWithPDX: TypedContractMethod<
     [
-      question: string,
-      category: string,
-      endTime: BigNumberish,
-      initialYes: BigNumberish,
-      initialNo: BigNumberish,
-      pdxAmount: BigNumberish
+      _question: string,
+      _category: string,
+      _endTime: BigNumberish,
+      _initialYes: BigNumberish,
+      _initialNo: BigNumberish
     ],
     [bigint],
     "nonpayable"
   >;
 
   createStopLossOrder: TypedContractMethod<
-    [
-      marketId: BigNumberish,
-      isYes: boolean,
-      tokenAmount: BigNumberish,
-      stopLossPrice: BigNumberish
-    ],
-    [bigint],
+    [marketId: BigNumberish, triggerPrice: BigNumberish, amount: BigNumberish],
+    [void],
     "nonpayable"
   >;
 
   createTakeProfitOrder: TypedContractMethod<
-    [
-      marketId: BigNumberish,
-      isYes: boolean,
-      tokenAmount: BigNumberish,
-      takeProfitPrice: BigNumberish
-    ],
-    [bigint],
+    [marketId: BigNumberish, triggerPrice: BigNumberish, amount: BigNumberish],
+    [void],
     "nonpayable"
   >;
-
-  dexRouter: TypedContractMethod<[], [string], "view">;
 
   executeOrder: TypedContractMethod<
     [orderId: BigNumberish],
@@ -663,38 +759,103 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     "nonpayable"
   >;
 
-  getMarketPaymentToken: TypedContractMethod<
-    [marketId: BigNumberish],
-    [string],
-    "view"
-  >;
+  feeBps: TypedContractMethod<[], [bigint], "view">;
 
-  getMinBNBForPDX: TypedContractMethod<
-    [pdxAmount: BigNumberish],
-    [bigint],
-    "view"
-  >;
+  getUserOrders: TypedContractMethod<[user: AddressLike], [bigint[]], "view">;
 
-  getMinPDXForBNB: TypedContractMethod<
-    [bnbAmount: BigNumberish],
-    [bigint],
-    "view"
-  >;
+  lpShareBps: TypedContractMethod<[], [bigint], "view">;
 
-  marketPaymentToken: TypedContractMethod<
+  nextPDXMarketId: TypedContractMethod<[], [bigint], "view">;
+
+  orders: TypedContractMethod<
     [arg0: BigNumberish],
-    [bigint],
+    [
+      [bigint, string, bigint, bigint, bigint, boolean] & {
+        marketId: bigint;
+        user: string;
+        triggerPrice: bigint;
+        amount: bigint;
+        orderType: bigint;
+        isActive: boolean;
+      }
+    ],
     "view"
   >;
 
   owner: TypedContractMethod<[], [string], "view">;
 
+  pdxMarkets: TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [
+        string,
+        string,
+        string,
+        bigint,
+        string,
+        string,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint
+      ] & {
+        creator: string;
+        question: string;
+        category: string;
+        endTime: bigint;
+        yesToken: string;
+        noToken: string;
+        yesPool: bigint;
+        noPool: bigint;
+        totalBacking: bigint;
+        status: bigint;
+        outcome: bigint;
+      }
+    ],
+    "view"
+  >;
+
   pdxToken: TypedContractMethod<[], [string], "view">;
+
+  pdxUserInvestments: TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [
+      [bigint, bigint, bigint] & {
+        totalInvested: bigint;
+        yesBalance: bigint;
+        noBalance: bigint;
+      }
+    ],
+    "view"
+  >;
+
+  platformFeeCollected: TypedContractMethod<
+    [arg0: BigNumberish],
+    [bigint],
+    "view"
+  >;
 
   predictionMarket: TypedContractMethod<[], [string], "view">;
 
-  removeLiquidity: TypedContractMethod<
+  removePDXLiquidity: TypedContractMethod<
     [marketId: BigNumberish, lpAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  requestResolution: TypedContractMethod<
+    [marketId: BigNumberish, outcome: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  resolutionContract: TypedContractMethod<[], [string], "view">;
+
+  resolutionServer: TypedContractMethod<[], [string], "view">;
+
+  resolveMarket: TypedContractMethod<
+    [marketId: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -713,7 +874,6 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     [
       marketId: BigNumberish,
       tokenAmount: BigNumberish,
-      minBNBOut: BigNumberish,
       minPDXOut: BigNumberish
     ],
     [void],
@@ -734,47 +894,81 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     [
       marketId: BigNumberish,
       tokenAmount: BigNumberish,
-      minBNBOut: BigNumberish,
       minPDXOut: BigNumberish
     ],
     [void],
     "nonpayable"
   >;
 
-  setSlippageTolerance: TypedContractMethod<
-    [_slippage: BigNumberish],
+  setFees: TypedContractMethod<
+    [_feeBps: BigNumberish, _lpShareBps: BigNumberish],
     [void],
     "nonpayable"
   >;
 
-  slippageTolerance: TypedContractMethod<[], [bigint], "view">;
+  setResolutionContract: TypedContractMethod<
+    [_contract: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  setResolutionServer: TypedContractMethod<
+    [_server: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  setViewsAdapter: TypedContractMethod<
+    [_views: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
   transferOwnership: TypedContractMethod<
-    [newOwner: AddressLike],
+    [_newOwner: AddressLike],
     [void],
     "nonpayable"
   >;
 
-  withdrawBNB: TypedContractMethod<[], [void], "nonpayable">;
+  userOrders: TypedContractMethod<
+    [arg0: AddressLike, arg1: BigNumberish],
+    [bigint],
+    "view"
+  >;
 
-  withdrawPDX: TypedContractMethod<[], [void], "nonpayable">;
+  viewsAdapter: TypedContractMethod<[], [string], "view">;
+
+  withdrawBNB: TypedContractMethod<
+    [amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  withdrawPDX: TypedContractMethod<
+    [amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  withdrawPlatformFees: TypedContractMethod<
+    [amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
 
   getFunction(
-    nameOrSignature: "TBNB"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "addLiquidity"
+    nameOrSignature: "addPDXLiquidity"
   ): TypedContractMethod<
     [marketId: BigNumberish, yesAmount: BigNumberish, noAmount: BigNumberish],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "buyNoWithBNB"
+    nameOrSignature: "buyNoWithBNBFor"
   ): TypedContractMethod<
     [marketId: BigNumberish, beneficiary: AddressLike, minNoOut: BigNumberish],
     [void],
@@ -786,15 +980,14 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     [
       marketId: BigNumberish,
       beneficiary: AddressLike,
-      pdxAmount: BigNumberish,
-      minBNBOut: BigNumberish,
-      minNoOut: BigNumberish
+      minNoOut: BigNumberish,
+      pdxAmount: BigNumberish
     ],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "buyYesWithBNB"
+    nameOrSignature: "buyYesWithBNBFor"
   ): TypedContractMethod<
     [marketId: BigNumberish, beneficiary: AddressLike, minYesOut: BigNumberish],
     [void],
@@ -806,9 +999,8 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     [
       marketId: BigNumberish,
       beneficiary: AddressLike,
-      pdxAmount: BigNumberish,
-      minBNBOut: BigNumberish,
-      minYesOut: BigNumberish
+      minYesOut: BigNumberish,
+      pdxAmount: BigNumberish
     ],
     [void],
     "nonpayable"
@@ -817,31 +1009,24 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     nameOrSignature: "cancelOrder"
   ): TypedContractMethod<[orderId: BigNumberish], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "claimRedemption"
-  ): TypedContractMethod<[marketId: BigNumberish], [void], "nonpayable">;
+    nameOrSignature: "checkOrderTrigger"
+  ): TypedContractMethod<[orderId: BigNumberish], [boolean], "view">;
   getFunction(
-    nameOrSignature: "createMarketWithBNB"
+    nameOrSignature: "claimPDXRedemption"
   ): TypedContractMethod<
-    [
-      question: string,
-      category: string,
-      endTime: BigNumberish,
-      initialYes: BigNumberish,
-      initialNo: BigNumberish
-    ],
-    [bigint],
-    "payable"
+    [marketId: BigNumberish, amount: BigNumberish],
+    [void],
+    "nonpayable"
   >;
   getFunction(
     nameOrSignature: "createMarketWithPDX"
   ): TypedContractMethod<
     [
-      question: string,
-      category: string,
-      endTime: BigNumberish,
-      initialYes: BigNumberish,
-      initialNo: BigNumberish,
-      pdxAmount: BigNumberish
+      _question: string,
+      _category: string,
+      _endTime: BigNumberish,
+      _initialYes: BigNumberish,
+      _initialNo: BigNumberish
     ],
     [bigint],
     "nonpayable"
@@ -849,61 +1034,129 @@ export interface TestnetDualTokenAdapter extends BaseContract {
   getFunction(
     nameOrSignature: "createStopLossOrder"
   ): TypedContractMethod<
-    [
-      marketId: BigNumberish,
-      isYes: boolean,
-      tokenAmount: BigNumberish,
-      stopLossPrice: BigNumberish
-    ],
-    [bigint],
+    [marketId: BigNumberish, triggerPrice: BigNumberish, amount: BigNumberish],
+    [void],
     "nonpayable"
   >;
   getFunction(
     nameOrSignature: "createTakeProfitOrder"
   ): TypedContractMethod<
-    [
-      marketId: BigNumberish,
-      isYes: boolean,
-      tokenAmount: BigNumberish,
-      takeProfitPrice: BigNumberish
-    ],
-    [bigint],
+    [marketId: BigNumberish, triggerPrice: BigNumberish, amount: BigNumberish],
+    [void],
     "nonpayable"
   >;
-  getFunction(
-    nameOrSignature: "dexRouter"
-  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "executeOrder"
   ): TypedContractMethod<[orderId: BigNumberish], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "getMarketPaymentToken"
-  ): TypedContractMethod<[marketId: BigNumberish], [string], "view">;
+    nameOrSignature: "feeBps"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
-    nameOrSignature: "getMinBNBForPDX"
-  ): TypedContractMethod<[pdxAmount: BigNumberish], [bigint], "view">;
+    nameOrSignature: "getUserOrders"
+  ): TypedContractMethod<[user: AddressLike], [bigint[]], "view">;
   getFunction(
-    nameOrSignature: "getMinPDXForBNB"
-  ): TypedContractMethod<[bnbAmount: BigNumberish], [bigint], "view">;
+    nameOrSignature: "lpShareBps"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
-    nameOrSignature: "marketPaymentToken"
-  ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
+    nameOrSignature: "nextPDXMarketId"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "orders"
+  ): TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [bigint, string, bigint, bigint, bigint, boolean] & {
+        marketId: bigint;
+        user: string;
+        triggerPrice: bigint;
+        amount: bigint;
+        orderType: bigint;
+        isActive: boolean;
+      }
+    ],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "pdxMarkets"
+  ): TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [
+        string,
+        string,
+        string,
+        bigint,
+        string,
+        string,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint
+      ] & {
+        creator: string;
+        question: string;
+        category: string;
+        endTime: bigint;
+        yesToken: string;
+        noToken: string;
+        yesPool: bigint;
+        noPool: bigint;
+        totalBacking: bigint;
+        status: bigint;
+        outcome: bigint;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "pdxToken"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "pdxUserInvestments"
+  ): TypedContractMethod<
+    [arg0: BigNumberish, arg1: AddressLike],
+    [
+      [bigint, bigint, bigint] & {
+        totalInvested: bigint;
+        yesBalance: bigint;
+        noBalance: bigint;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "platformFeeCollected"
+  ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
   getFunction(
     nameOrSignature: "predictionMarket"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "removeLiquidity"
+    nameOrSignature: "removePDXLiquidity"
   ): TypedContractMethod<
     [marketId: BigNumberish, lpAmount: BigNumberish],
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "requestResolution"
+  ): TypedContractMethod<
+    [marketId: BigNumberish, outcome: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "resolutionContract"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "resolutionServer"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "resolveMarket"
+  ): TypedContractMethod<[marketId: BigNumberish], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "sellNoForBNB"
   ): TypedContractMethod<
@@ -921,7 +1174,6 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     [
       marketId: BigNumberish,
       tokenAmount: BigNumberish,
-      minBNBOut: BigNumberish,
       minPDXOut: BigNumberish
     ],
     [void],
@@ -944,190 +1196,248 @@ export interface TestnetDualTokenAdapter extends BaseContract {
     [
       marketId: BigNumberish,
       tokenAmount: BigNumberish,
-      minBNBOut: BigNumberish,
       minPDXOut: BigNumberish
     ],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "setSlippageTolerance"
-  ): TypedContractMethod<[_slippage: BigNumberish], [void], "nonpayable">;
+    nameOrSignature: "setFees"
+  ): TypedContractMethod<
+    [_feeBps: BigNumberish, _lpShareBps: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
-    nameOrSignature: "slippageTolerance"
-  ): TypedContractMethod<[], [bigint], "view">;
+    nameOrSignature: "setResolutionContract"
+  ): TypedContractMethod<[_contract: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setResolutionServer"
+  ): TypedContractMethod<[_server: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setViewsAdapter"
+  ): TypedContractMethod<[_views: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "transferOwnership"
-  ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
+  ): TypedContractMethod<[_newOwner: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "userOrders"
+  ): TypedContractMethod<
+    [arg0: AddressLike, arg1: BigNumberish],
+    [bigint],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "viewsAdapter"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "withdrawBNB"
-  ): TypedContractMethod<[], [void], "nonpayable">;
+  ): TypedContractMethod<[amount: BigNumberish], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "withdrawPDX"
-  ): TypedContractMethod<[], [void], "nonpayable">;
+  ): TypedContractMethod<[amount: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "withdrawPlatformFees"
+  ): TypedContractMethod<[amount: BigNumberish], [void], "nonpayable">;
 
   getEvent(
-    key: "BNBSwappedToPDX"
+    key: "BuyNo"
   ): TypedContractEvent<
-    BNBSwappedToPDXEvent.InputTuple,
-    BNBSwappedToPDXEvent.OutputTuple,
-    BNBSwappedToPDXEvent.OutputObject
+    BuyNoEvent.InputTuple,
+    BuyNoEvent.OutputTuple,
+    BuyNoEvent.OutputObject
   >;
   getEvent(
-    key: "BuyWithBNB"
+    key: "BuyYes"
   ): TypedContractEvent<
-    BuyWithBNBEvent.InputTuple,
-    BuyWithBNBEvent.OutputTuple,
-    BuyWithBNBEvent.OutputObject
+    BuyYesEvent.InputTuple,
+    BuyYesEvent.OutputTuple,
+    BuyYesEvent.OutputObject
   >;
   getEvent(
-    key: "BuyWithPDX"
+    key: "FeeUpdated"
   ): TypedContractEvent<
-    BuyWithPDXEvent.InputTuple,
-    BuyWithPDXEvent.OutputTuple,
-    BuyWithPDXEvent.OutputObject
+    FeeUpdatedEvent.InputTuple,
+    FeeUpdatedEvent.OutputTuple,
+    FeeUpdatedEvent.OutputObject
   >;
   getEvent(
-    key: "MarketCreatedWithBNB"
+    key: "LiquidityAdded"
   ): TypedContractEvent<
-    MarketCreatedWithBNBEvent.InputTuple,
-    MarketCreatedWithBNBEvent.OutputTuple,
-    MarketCreatedWithBNBEvent.OutputObject
+    LiquidityAddedEvent.InputTuple,
+    LiquidityAddedEvent.OutputTuple,
+    LiquidityAddedEvent.OutputObject
   >;
   getEvent(
-    key: "MarketCreatedWithPDX"
+    key: "LiquidityRemoved"
   ): TypedContractEvent<
-    MarketCreatedWithPDXEvent.InputTuple,
-    MarketCreatedWithPDXEvent.OutputTuple,
-    MarketCreatedWithPDXEvent.OutputObject
+    LiquidityRemovedEvent.InputTuple,
+    LiquidityRemovedEvent.OutputTuple,
+    LiquidityRemovedEvent.OutputObject
   >;
   getEvent(
-    key: "PDXSwappedToBNB"
+    key: "MarketCreated"
   ): TypedContractEvent<
-    PDXSwappedToBNBEvent.InputTuple,
-    PDXSwappedToBNBEvent.OutputTuple,
-    PDXSwappedToBNBEvent.OutputObject
+    MarketCreatedEvent.InputTuple,
+    MarketCreatedEvent.OutputTuple,
+    MarketCreatedEvent.OutputObject
   >;
   getEvent(
-    key: "SellForBNB"
+    key: "OrderCancelled"
   ): TypedContractEvent<
-    SellForBNBEvent.InputTuple,
-    SellForBNBEvent.OutputTuple,
-    SellForBNBEvent.OutputObject
+    OrderCancelledEvent.InputTuple,
+    OrderCancelledEvent.OutputTuple,
+    OrderCancelledEvent.OutputObject
   >;
   getEvent(
-    key: "SellForPDX"
+    key: "OrderCreated"
   ): TypedContractEvent<
-    SellForPDXEvent.InputTuple,
-    SellForPDXEvent.OutputTuple,
-    SellForPDXEvent.OutputObject
+    OrderCreatedEvent.InputTuple,
+    OrderCreatedEvent.OutputTuple,
+    OrderCreatedEvent.OutputObject
   >;
   getEvent(
-    key: "SlippageToleranceUpdated"
+    key: "OrderExecuted"
   ): TypedContractEvent<
-    SlippageToleranceUpdatedEvent.InputTuple,
-    SlippageToleranceUpdatedEvent.OutputTuple,
-    SlippageToleranceUpdatedEvent.OutputObject
+    OrderExecutedEvent.InputTuple,
+    OrderExecutedEvent.OutputTuple,
+    OrderExecutedEvent.OutputObject
+  >;
+  getEvent(
+    key: "SellNo"
+  ): TypedContractEvent<
+    SellNoEvent.InputTuple,
+    SellNoEvent.OutputTuple,
+    SellNoEvent.OutputObject
+  >;
+  getEvent(
+    key: "SellYes"
+  ): TypedContractEvent<
+    SellYesEvent.InputTuple,
+    SellYesEvent.OutputTuple,
+    SellYesEvent.OutputObject
   >;
 
   filters: {
-    "BNBSwappedToPDX(uint256,uint256)": TypedContractEvent<
-      BNBSwappedToPDXEvent.InputTuple,
-      BNBSwappedToPDXEvent.OutputTuple,
-      BNBSwappedToPDXEvent.OutputObject
+    "BuyNo(uint256,address,uint256,uint256)": TypedContractEvent<
+      BuyNoEvent.InputTuple,
+      BuyNoEvent.OutputTuple,
+      BuyNoEvent.OutputObject
     >;
-    BNBSwappedToPDX: TypedContractEvent<
-      BNBSwappedToPDXEvent.InputTuple,
-      BNBSwappedToPDXEvent.OutputTuple,
-      BNBSwappedToPDXEvent.OutputObject
-    >;
-
-    "BuyWithBNB(uint256,address,bool,uint256)": TypedContractEvent<
-      BuyWithBNBEvent.InputTuple,
-      BuyWithBNBEvent.OutputTuple,
-      BuyWithBNBEvent.OutputObject
-    >;
-    BuyWithBNB: TypedContractEvent<
-      BuyWithBNBEvent.InputTuple,
-      BuyWithBNBEvent.OutputTuple,
-      BuyWithBNBEvent.OutputObject
+    BuyNo: TypedContractEvent<
+      BuyNoEvent.InputTuple,
+      BuyNoEvent.OutputTuple,
+      BuyNoEvent.OutputObject
     >;
 
-    "BuyWithPDX(uint256,address,bool,uint256,uint256)": TypedContractEvent<
-      BuyWithPDXEvent.InputTuple,
-      BuyWithPDXEvent.OutputTuple,
-      BuyWithPDXEvent.OutputObject
+    "BuyYes(uint256,address,uint256,uint256)": TypedContractEvent<
+      BuyYesEvent.InputTuple,
+      BuyYesEvent.OutputTuple,
+      BuyYesEvent.OutputObject
     >;
-    BuyWithPDX: TypedContractEvent<
-      BuyWithPDXEvent.InputTuple,
-      BuyWithPDXEvent.OutputTuple,
-      BuyWithPDXEvent.OutputObject
-    >;
-
-    "MarketCreatedWithBNB(uint256,address,uint256)": TypedContractEvent<
-      MarketCreatedWithBNBEvent.InputTuple,
-      MarketCreatedWithBNBEvent.OutputTuple,
-      MarketCreatedWithBNBEvent.OutputObject
-    >;
-    MarketCreatedWithBNB: TypedContractEvent<
-      MarketCreatedWithBNBEvent.InputTuple,
-      MarketCreatedWithBNBEvent.OutputTuple,
-      MarketCreatedWithBNBEvent.OutputObject
+    BuyYes: TypedContractEvent<
+      BuyYesEvent.InputTuple,
+      BuyYesEvent.OutputTuple,
+      BuyYesEvent.OutputObject
     >;
 
-    "MarketCreatedWithPDX(uint256,address,uint256)": TypedContractEvent<
-      MarketCreatedWithPDXEvent.InputTuple,
-      MarketCreatedWithPDXEvent.OutputTuple,
-      MarketCreatedWithPDXEvent.OutputObject
+    "FeeUpdated(uint256,uint256)": TypedContractEvent<
+      FeeUpdatedEvent.InputTuple,
+      FeeUpdatedEvent.OutputTuple,
+      FeeUpdatedEvent.OutputObject
     >;
-    MarketCreatedWithPDX: TypedContractEvent<
-      MarketCreatedWithPDXEvent.InputTuple,
-      MarketCreatedWithPDXEvent.OutputTuple,
-      MarketCreatedWithPDXEvent.OutputObject
-    >;
-
-    "PDXSwappedToBNB(uint256,uint256)": TypedContractEvent<
-      PDXSwappedToBNBEvent.InputTuple,
-      PDXSwappedToBNBEvent.OutputTuple,
-      PDXSwappedToBNBEvent.OutputObject
-    >;
-    PDXSwappedToBNB: TypedContractEvent<
-      PDXSwappedToBNBEvent.InputTuple,
-      PDXSwappedToBNBEvent.OutputTuple,
-      PDXSwappedToBNBEvent.OutputObject
+    FeeUpdated: TypedContractEvent<
+      FeeUpdatedEvent.InputTuple,
+      FeeUpdatedEvent.OutputTuple,
+      FeeUpdatedEvent.OutputObject
     >;
 
-    "SellForBNB(uint256,address,bool,uint256,uint256)": TypedContractEvent<
-      SellForBNBEvent.InputTuple,
-      SellForBNBEvent.OutputTuple,
-      SellForBNBEvent.OutputObject
+    "LiquidityAdded(uint256,uint256,uint256,uint256)": TypedContractEvent<
+      LiquidityAddedEvent.InputTuple,
+      LiquidityAddedEvent.OutputTuple,
+      LiquidityAddedEvent.OutputObject
     >;
-    SellForBNB: TypedContractEvent<
-      SellForBNBEvent.InputTuple,
-      SellForBNBEvent.OutputTuple,
-      SellForBNBEvent.OutputObject
-    >;
-
-    "SellForPDX(uint256,address,bool,uint256,uint256)": TypedContractEvent<
-      SellForPDXEvent.InputTuple,
-      SellForPDXEvent.OutputTuple,
-      SellForPDXEvent.OutputObject
-    >;
-    SellForPDX: TypedContractEvent<
-      SellForPDXEvent.InputTuple,
-      SellForPDXEvent.OutputTuple,
-      SellForPDXEvent.OutputObject
+    LiquidityAdded: TypedContractEvent<
+      LiquidityAddedEvent.InputTuple,
+      LiquidityAddedEvent.OutputTuple,
+      LiquidityAddedEvent.OutputObject
     >;
 
-    "SlippageToleranceUpdated(uint256)": TypedContractEvent<
-      SlippageToleranceUpdatedEvent.InputTuple,
-      SlippageToleranceUpdatedEvent.OutputTuple,
-      SlippageToleranceUpdatedEvent.OutputObject
+    "LiquidityRemoved(uint256,uint256,uint256,uint256)": TypedContractEvent<
+      LiquidityRemovedEvent.InputTuple,
+      LiquidityRemovedEvent.OutputTuple,
+      LiquidityRemovedEvent.OutputObject
     >;
-    SlippageToleranceUpdated: TypedContractEvent<
-      SlippageToleranceUpdatedEvent.InputTuple,
-      SlippageToleranceUpdatedEvent.OutputTuple,
-      SlippageToleranceUpdatedEvent.OutputObject
+    LiquidityRemoved: TypedContractEvent<
+      LiquidityRemovedEvent.InputTuple,
+      LiquidityRemovedEvent.OutputTuple,
+      LiquidityRemovedEvent.OutputObject
+    >;
+
+    "MarketCreated(uint256,address,string)": TypedContractEvent<
+      MarketCreatedEvent.InputTuple,
+      MarketCreatedEvent.OutputTuple,
+      MarketCreatedEvent.OutputObject
+    >;
+    MarketCreated: TypedContractEvent<
+      MarketCreatedEvent.InputTuple,
+      MarketCreatedEvent.OutputTuple,
+      MarketCreatedEvent.OutputObject
+    >;
+
+    "OrderCancelled(uint256)": TypedContractEvent<
+      OrderCancelledEvent.InputTuple,
+      OrderCancelledEvent.OutputTuple,
+      OrderCancelledEvent.OutputObject
+    >;
+    OrderCancelled: TypedContractEvent<
+      OrderCancelledEvent.InputTuple,
+      OrderCancelledEvent.OutputTuple,
+      OrderCancelledEvent.OutputObject
+    >;
+
+    "OrderCreated(uint256,uint256,address,uint8)": TypedContractEvent<
+      OrderCreatedEvent.InputTuple,
+      OrderCreatedEvent.OutputTuple,
+      OrderCreatedEvent.OutputObject
+    >;
+    OrderCreated: TypedContractEvent<
+      OrderCreatedEvent.InputTuple,
+      OrderCreatedEvent.OutputTuple,
+      OrderCreatedEvent.OutputObject
+    >;
+
+    "OrderExecuted(uint256)": TypedContractEvent<
+      OrderExecutedEvent.InputTuple,
+      OrderExecutedEvent.OutputTuple,
+      OrderExecutedEvent.OutputObject
+    >;
+    OrderExecuted: TypedContractEvent<
+      OrderExecutedEvent.InputTuple,
+      OrderExecutedEvent.OutputTuple,
+      OrderExecutedEvent.OutputObject
+    >;
+
+    "SellNo(uint256,address,uint256,uint256)": TypedContractEvent<
+      SellNoEvent.InputTuple,
+      SellNoEvent.OutputTuple,
+      SellNoEvent.OutputObject
+    >;
+    SellNo: TypedContractEvent<
+      SellNoEvent.InputTuple,
+      SellNoEvent.OutputTuple,
+      SellNoEvent.OutputObject
+    >;
+
+    "SellYes(uint256,address,uint256,uint256)": TypedContractEvent<
+      SellYesEvent.InputTuple,
+      SellYesEvent.OutputTuple,
+      SellYesEvent.OutputObject
+    >;
+    SellYes: TypedContractEvent<
+      SellYesEvent.InputTuple,
+      SellYesEvent.OutputTuple,
+      SellYesEvent.OutputObject
     >;
   };
 }

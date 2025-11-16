@@ -1,141 +1,175 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useCallback } from "react";
-import { ethers } from "ethers";
-import { PREDICTION_MARKET_ADDRESS, PREDICTION_MARKET_ABI, OUTCOME_TOKEN_ABI, CHAIN_CONFIG } from "@/lib/web3/config";
+import { useState, useEffect, useCallback } from "react"
+import { ethers } from "ethers"
+import {
+  PREDICTION_MARKET_ADDRESS,
+  PREDICTION_MARKET_ABI,
+  OUTCOME_TOKEN_ABI,
+  CHAIN_CONFIG,
+} from "@/lib/web3/config"
 
 // Simple provider detection
 const getEthereumProvider = () => {
-  if (typeof window === 'undefined') return null;
-  return window.ethereum || null;
-};
+  if (typeof window === "undefined") return null
+  return window.ethereum || null
+}
+
+// ✅ CRITICAL: Create RPC provider fallback
+const createRpcProvider = () => {
+  try {
+    const rpcProvider = new ethers.JsonRpcProvider(CHAIN_CONFIG.rpcUrl)
+    console.log("✅ RPC Provider created:", CHAIN_CONFIG.rpcUrl)
+    return rpcProvider
+  } catch (error) {
+    console.error("❌ Failed to create RPC provider:", error)
+    return null
+  }
+}
 
 // Storage keys for persistence
 const STORAGE_KEYS = {
-  USER_DISCONNECTED: 'user_disconnected',
-  LAST_CONNECTED_ACCOUNT: 'last_connected_account'
-};
+  USER_DISCONNECTED: "user_disconnected",
+  LAST_CONNECTED_ACCOUNT: "last_connected_account",
+}
 
 export function useWeb3() {
-  const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
-  const [signer, setSigner] = useState<ethers.Signer | null>(null);
-  const [account, setAccount] = useState<string | null>(null);
-  const [chainId, setChainId] = useState<number | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  // ✅ FIXED: Allow both BrowserProvider and JsonRpcProvider
+  const [provider, setProvider] = useState<
+    ethers.BrowserProvider | ethers.JsonRpcProvider | null
+  >(null)
+  const [signer, setSigner] = useState<ethers.Signer | null>(null)
+  const [account, setAccount] = useState<string | null>(null)
+  const [chainId, setChainId] = useState<number | null>(null)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   // Check if user has manually disconnected
   const hasUserDisconnected = useCallback(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(STORAGE_KEYS.USER_DISCONNECTED) === 'true';
-  }, []);
+    if (typeof window === "undefined") return false
+    return localStorage.getItem(STORAGE_KEYS.USER_DISCONNECTED) === "true"
+  }, [])
 
   // Set user disconnected flag
   const setUserDisconnected = useCallback((disconnected: boolean) => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return
     if (disconnected) {
-      localStorage.setItem(STORAGE_KEYS.USER_DISCONNECTED, 'true');
+      localStorage.setItem(STORAGE_KEYS.USER_DISCONNECTED, "true")
     } else {
-      localStorage.removeItem(STORAGE_KEYS.USER_DISCONNECTED);
+      localStorage.removeItem(STORAGE_KEYS.USER_DISCONNECTED)
     }
-  }, []);
+  }, [])
 
   // Store last connected account
   const setLastConnectedAccount = useCallback((account: string | null) => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return
     if (account) {
-      localStorage.setItem(STORAGE_KEYS.LAST_CONNECTED_ACCOUNT, account);
+      localStorage.setItem(STORAGE_KEYS.LAST_CONNECTED_ACCOUNT, account)
     } else {
-      localStorage.removeItem(STORAGE_KEYS.LAST_CONNECTED_ACCOUNT);
+      localStorage.removeItem(STORAGE_KEYS.LAST_CONNECTED_ACCOUNT)
     }
-  }, []);
+  }, [])
 
   // Get last connected account
   const getLastConnectedAccount = useCallback(() => {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(STORAGE_KEYS.LAST_CONNECTED_ACCOUNT);
-  }, []);
+    if (typeof window === "undefined") return null
+    return localStorage.getItem(STORAGE_KEYS.LAST_CONNECTED_ACCOUNT)
+  }, [])
+
+  // ✅ CRITICAL FIX: Initialize RPC provider FIRST - runs on mount
+  useEffect(() => {
+    console.log("📡 Initializing RPC provider on mount...")
+    try {
+      const rpcProvider = createRpcProvider()
+      if (rpcProvider) {
+        setProvider(rpcProvider)
+        setChainId(CHAIN_CONFIG.chainId)
+        console.log("✅ RPC Provider initialized successfully")
+      } else {
+        console.error("❌ Failed to create RPC provider")
+      }
+    } catch (error) {
+      console.error("❌ Error in RPC initialization:", error)
+    }
+  }, []) // Empty dependency array - runs ONLY once on mount
 
   const connectWallet = useCallback(async () => {
-    const ethereumProvider = getEthereumProvider();
+    const ethereumProvider = getEthereumProvider()
     if (!ethereumProvider) {
-      setError("Please install MetaMask");
-      return;
+      setError("Please install MetaMask")
+      return
     }
 
     try {
-      setIsConnecting(true);
-      setError(null);
-      setUserDisconnected(false); // Reset disconnect flag when user actively connects
+      setIsConnecting(true)
+      setError(null)
+      setUserDisconnected(false)
 
-      console.log("🔌 Connecting wallet...");
+      console.log("🔌 Connecting wallet...")
 
-      let accounts: string[] = [];
+      let accounts: string[] = []
 
-      // Always request accounts to show wallet selection
-      console.log("📝 Requesting account access...");
+      console.log("📝 Requesting account access...")
       accounts = (await ethereumProvider.request({
         method: "eth_requestAccounts",
-      })) as string[];
+      })) as string[]
 
       if (!accounts || accounts.length === 0) {
-        throw new Error("No accounts found");
+        throw new Error("No accounts found")
       }
 
-      // Create provider and get signer
-      console.log("✅ Creating provider...");
-      const web3Provider = new ethers.BrowserProvider(ethereumProvider);
-      const web3Signer = await web3Provider.getSigner();
-      const address = await web3Signer.getAddress();
-      const network = await web3Provider.getNetwork();
+      console.log("✅ Creating BrowserProvider...")
+      const web3Provider = new ethers.BrowserProvider(ethereumProvider)
+      const web3Signer = await web3Provider.getSigner()
+      const address = await web3Signer.getAddress()
+      const network = await web3Provider.getNetwork()
 
-      console.log("✅ Connected to address:", address);
-      console.log("🌐 Network:", Number(network.chainId));
+      console.log("✅ Connected to address:", address)
+      console.log("🌐 Network:", Number(network.chainId))
 
-      setProvider(web3Provider);
-      setSigner(web3Signer);
-      setAccount(address);
-      setChainId(Number(network.chainId));
-      setLastConnectedAccount(address);
-      setIsInitialized(true);
+      setProvider(web3Provider)
+      setSigner(web3Signer)
+      setAccount(address)
+      setChainId(Number(network.chainId))
+      setLastConnectedAccount(address)
+      setIsInitialized(true)
 
       // Check if we're on the correct network
       if (Number(network.chainId) !== CHAIN_CONFIG.chainId) {
-        console.log("⚠️ Wrong network, attempting to switch...");
-        await switchNetwork();
+        console.log("⚠️ Wrong network, attempting to switch...")
+        await switchNetwork()
       }
     } catch (err: any) {
-      console.error("❌ Error connecting wallet:", err);
-      
-      // Provide more user-friendly error messages
+      console.error("❌ Error connecting wallet:", err)
+
       if (err.code === 4001) {
-        setError("Connection rejected by user");
+        setError("Connection rejected by user")
       } else if (err.code === -32002) {
-        setError("Connection already pending. Please check MetaMask.");
+        setError("Connection already pending. Please check MetaMask.")
       } else {
-        setError(err.message || "Failed to connect wallet");
+        setError(err.message || "Failed to connect wallet")
       }
     } finally {
-      setIsConnecting(false);
+      setIsConnecting(false)
     }
-  }, [setUserDisconnected, setLastConnectedAccount]);
+  }, [])
 
   const switchNetwork = async () => {
-    const ethereumProvider = getEthereumProvider();
-    if (!ethereumProvider) return;
+    const ethereumProvider = getEthereumProvider()
+    if (!ethereumProvider) return
 
     try {
-      console.log("🔄 Switching to", CHAIN_CONFIG.chainName);
+      console.log("🔄 Switching to", CHAIN_CONFIG.chainName)
       await ethereumProvider.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: `0x${CHAIN_CONFIG.chainId.toString(16)}` }],
-      });
-      console.log("✅ Network switched successfully");
+      })
+      console.log("✅ Network switched successfully")
     } catch (switchError: any) {
       if (switchError.code === 4902) {
         try {
-          console.log("➕ Adding network to MetaMask...");
+          console.log("➕ Adding network to MetaMask...")
           await ethereumProvider.request({
             method: "wallet_addEthereumChain",
             params: [
@@ -147,145 +181,151 @@ export function useWeb3() {
                 nativeCurrency: CHAIN_CONFIG.nativeCurrency,
               },
             ],
-          });
-          console.log("✅ Network added successfully");
+          })
+          console.log("✅ Network added successfully")
         } catch (addError) {
-          console.error("❌ Error adding network:", addError);
+          console.error("❌ Error adding network:", addError)
         }
       }
     }
-  };
+  }
 
   const disconnectWallet = useCallback(() => {
-    console.log("🔌 Disconnecting wallet...");
-    setProvider(null);
-    setSigner(null);
-    setAccount(null);
-    setChainId(null);
-    setError(null);
-    setUserDisconnected(true); // Set flag when user manually disconnects
-    setLastConnectedAccount(null); // Clear last connected account
-  }, [setUserDisconnected, setLastConnectedAccount]);
+    console.log("🔌 Disconnecting wallet...")
+    setSigner(null)
+    setAccount(null)
+    setError(null)
+    setUserDisconnected(true)
+    setLastConnectedAccount(null)
 
-  // Initialize wallet connection on component mount ONLY if user hasn't manually disconnected
+    // ✅ Keep RPC provider for read-only operations
+    const rpcProvider = createRpcProvider()
+    if (rpcProvider) {
+      setProvider(rpcProvider)
+      setChainId(CHAIN_CONFIG.chainId)
+    }
+  }, [])
+
+  // Initialize wallet connection on component mount
   useEffect(() => {
     const initializeWallet = async () => {
-      // Don't auto-connect if user has manually disconnected
       if (hasUserDisconnected()) {
-        console.log("ℹ️ Skipping auto-connect - user manually disconnected");
-        setIsInitialized(true);
-        return;
+        console.log("ℹ️ Skipping auto-connect - user manually disconnected")
+        setIsInitialized(true)
+        return
       }
 
-      const ethereumProvider = getEthereumProvider();
+      const ethereumProvider = getEthereumProvider()
       if (!ethereumProvider) {
-        console.log("❌ MetaMask not detected");
-        setIsInitialized(true); // Mark as initialized even without wallet
-        return;
+        console.log("ℹ️ MetaMask not detected - using RPC only")
+        setIsInitialized(true)
+        return
       }
 
       try {
-        console.log("🔍 Checking for existing wallet connection...");
+        console.log("🔍 Checking for existing wallet connection...")
         const accounts = (await ethereumProvider.request({
           method: "eth_accounts",
-        })) as string[];
+        })) as string[]
 
         if (accounts && accounts.length > 0) {
-          console.log("✅ Found existing connection, initializing...");
-          const web3Provider = new ethers.BrowserProvider(ethereumProvider);
-          const web3Signer = await web3Provider.getSigner();
-          const address = await web3Signer.getAddress();
-          const network = await web3Provider.getNetwork();
+          console.log("✅ Found existing connection, initializing...")
+          const web3Provider = new ethers.BrowserProvider(ethereumProvider)
+          const web3Signer = await web3Provider.getSigner()
+          const address = await web3Signer.getAddress()
+          const network = await web3Provider.getNetwork()
 
-          console.log("✅ Wallet initialized");
-          console.log("📍 Address:", address);
-          console.log("🌐 Chain ID:", Number(network.chainId));
+          console.log("✅ Wallet initialized")
+          console.log("📍 Address:", address)
+          console.log("🌐 Chain ID:", Number(network.chainId))
 
-          setProvider(web3Provider);
-          setSigner(web3Signer);
-          setAccount(address);
-          setChainId(Number(network.chainId));
-          setLastConnectedAccount(address);
+          setProvider(web3Provider)
+          setSigner(web3Signer)
+          setAccount(address)
+          setChainId(Number(network.chainId))
+          setLastConnectedAccount(address)
         } else {
-          console.log("ℹ️ No existing wallet connection found");
+          console.log("ℹ️ No existing wallet connection found")
         }
       } catch (error) {
-        console.error("❌ Error initializing wallet:", error);
+        console.error("❌ Error initializing wallet:", error)
       } finally {
-        setIsInitialized(true);
+        setIsInitialized(true)
       }
-    };
+    }
 
-    initializeWallet();
-  }, [hasUserDisconnected, setLastConnectedAccount]);
+    initializeWallet()
+  }, [hasUserDisconnected, setLastConnectedAccount])
 
   // Use polling instead of event listeners to avoid the addListener issue
   useEffect(() => {
-    const ethereumProvider = getEthereumProvider();
-    if (!ethereumProvider || !account || !isInitialized) return;
+    const ethereumProvider = getEthereumProvider()
+    if (!ethereumProvider || !account || !isInitialized) return
 
-    let mounted = true;
-    let lastAccounts: string[] = [account!];
-    let lastChainId: string = chainId ? `0x${chainId.toString(16)}` : "";
+    let mounted = true
+    let lastAccounts: string[] = [account!]
+    let lastChainId: string = chainId ? `0x${chainId.toString(16)}` : ""
 
     const pollForChanges = async () => {
-      if (!mounted) return;
+      if (!mounted) return
 
       try {
         const accounts = (await ethereumProvider.request({
           method: "eth_accounts",
-        })) as string[];
+        })) as string[]
 
         if (JSON.stringify(accounts) !== JSON.stringify(lastAccounts)) {
-          lastAccounts = accounts;
+          lastAccounts = accounts
           if (accounts.length === 0) {
-            console.log("👋 Account disconnected");
-            // Don't set user disconnected flag for automatic disconnections
-            setProvider(null);
-            setSigner(null);
-            setAccount(null);
-            setChainId(null);
+            console.log("👋 Account disconnected")
+            setSigner(null)
+            setAccount(null)
+            // Keep RPC provider
+            const rpcProvider = createRpcProvider()
+            if (rpcProvider) {
+              setProvider(rpcProvider)
+            }
           } else if (accounts[0] !== account) {
-            console.log("🔄 Account changed to:", accounts[0]);
-            setAccount(accounts[0]);
-            setLastConnectedAccount(accounts[0]);
-            const web3Provider = new ethers.BrowserProvider(ethereumProvider);
-            const web3Signer = await web3Provider.getSigner();
-            setSigner(web3Signer);
+            console.log("🔄 Account changed to:", accounts[0])
+            setAccount(accounts[0])
+            setLastConnectedAccount(accounts[0])
+            const web3Provider = new ethers.BrowserProvider(ethereumProvider)
+            const web3Signer = await web3Provider.getSigner()
+            setSigner(web3Signer)
+            setProvider(web3Provider)
           }
         }
 
         const currentChainId = (await ethereumProvider.request({
           method: "eth_chainId",
-        })) as string;
+        })) as string
 
         if (currentChainId !== lastChainId) {
-          lastChainId = currentChainId;
-          const newChainId = parseInt(currentChainId, 16);
-          console.log("🔄 Chain changed to:", newChainId);
-          setChainId(newChainId);
-          
-          // Reinitialize provider on chain change
-          const web3Provider = new ethers.BrowserProvider(ethereumProvider);
-          setProvider(web3Provider);
-          const web3Signer = await web3Provider.getSigner();
-          setSigner(web3Signer);
+          lastChainId = currentChainId
+          const newChainId = parseInt(currentChainId, 16)
+          console.log("🔄 Chain changed to:", newChainId)
+          setChainId(newChainId)
+
+          const web3Provider = new ethers.BrowserProvider(ethereumProvider)
+          setProvider(web3Provider)
+          const web3Signer = await web3Provider.getSigner()
+          setSigner(web3Signer)
         }
       } catch (error) {
-        console.warn("⚠️ Error polling provider:", error);
+        console.warn("⚠️ Error polling provider:", error)
       }
 
       if (mounted) {
-        setTimeout(pollForChanges, 2000);
+        setTimeout(pollForChanges, 2000)
       }
-    };
+    }
 
-    pollForChanges();
+    pollForChanges()
 
     return () => {
-      mounted = false;
-    };
-  }, [account, chainId, isInitialized, setLastConnectedAccount]);
+      mounted = false
+    }
+  }, [account, chainId, isInitialized, setLastConnectedAccount])
 
   return {
     provider,
@@ -299,70 +339,87 @@ export function useWeb3() {
     isCorrectNetwork: chainId === CHAIN_CONFIG.chainId,
     switchNetwork,
     isInitialized,
-  };
+  }
 }
 
 // Hook for interacting with the prediction market contract
-export function usePredictionMarket(provider: ethers.BrowserProvider | null, signer: ethers.Signer | null, account: string | null) {
-  const [isContractReady, setIsContractReady] = useState(false);
+export function usePredictionMarket(
+  provider: ethers.BrowserProvider | ethers.JsonRpcProvider | null,
+  signer: ethers.Signer | null,
+  account: string | null
+) {
+  const [isContractReady, setIsContractReady] = useState(false)
 
   // Check if contract is ready
   useEffect(() => {
     const checkContract = async () => {
-      console.log("🔍 Contract check - Provider:", !!provider, "Account:", !!account);
-      
+      console.log(
+        "🔍 Contract check - Provider:",
+        !!provider,
+        "Account:",
+        !!account
+      )
+
       if (!provider) {
-        console.log("❌ No provider for contract check");
-        setIsContractReady(false);
-        return;
+        console.log("❌ No provider for contract check")
+        setIsContractReady(false)
+        return
       }
 
       try {
-        console.log("🔍 Verifying contract at:", PREDICTION_MARKET_ADDRESS);
+        console.log("🔍 Verifying contract at:", PREDICTION_MARKET_ADDRESS)
         const contract = new ethers.Contract(
-          PREDICTION_MARKET_ADDRESS, 
-          PREDICTION_MARKET_ABI, 
+          PREDICTION_MARKET_ADDRESS,
+          PREDICTION_MARKET_ABI,
           provider
-        );
-        
-        // Test contract by calling a view function
-        const nextId = await contract.nextMarketId();
-        console.log("✅ Contract verified! Next market ID:", Number(nextId));
-        setIsContractReady(true);
-      } catch (error) {
-        console.error("❌ Contract verification failed:", error);
-        setIsContractReady(false);
-      }
-    };
+        )
 
-    checkContract();
-  }, [provider, account]);
+        // Test contract by calling a view function
+        const nextId = await contract.nextMarketId()
+        console.log("✅ Contract verified! Next market ID:", Number(nextId))
+        setIsContractReady(true)
+      } catch (error) {
+        console.error("❌ Contract verification failed:", error)
+        setIsContractReady(false)
+      }
+    }
+
+    checkContract()
+  }, [provider, account])
 
   const getContract = useCallback(
     (withSigner = true) => {
       if (!provider) {
-        console.warn("⚠️ Provider not available for getContract");
-        return null;
+        console.warn("⚠️ Provider not available for getContract")
+        return null
       }
       // For write operations, ensure signer exists
       if (withSigner && !signer) {
-        console.warn("⚠️ Signer not available for write operation");
-        return null;
+        console.warn("⚠️ Signer not available for write operation")
+        return null
       }
-      const signerOrProvider = withSigner && signer ? signer : provider;
-      return new ethers.Contract(PREDICTION_MARKET_ADDRESS, PREDICTION_MARKET_ABI, signerOrProvider);
+      const signerOrProvider = withSigner && signer ? signer : provider
+      return new ethers.Contract(
+        PREDICTION_MARKET_ADDRESS,
+        PREDICTION_MARKET_ABI,
+        signerOrProvider
+      )
     },
     [provider, signer]
-  );
+  )
 
   const getTokenContract = useCallback(
     (tokenAddress: string, withSigner = true) => {
-      if (!provider) return null;
-      const signerOrProvider = withSigner && signer ? signer : provider;
-      return new ethers.Contract(tokenAddress, OUTCOME_TOKEN_ABI, signerOrProvider);
+      if (!provider) return null
+      const signerOrProvider = withSigner && signer ? signer : provider
+      return new ethers.Contract(
+        tokenAddress,
+        OUTCOME_TOKEN_ABI,
+        signerOrProvider
+      )
     },
     [provider, signer]
-  );
+  )
 
   // Create a new market
   const createMarket = async (
@@ -371,149 +428,159 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
     initialYes: string,
     initialNo: string
   ) => {
-    if (!signer) throw new Error("Wallet not connected");
-    
-    const contract = getContract(true);
-    if (!contract) throw new Error("Contract not initialized");
+    if (!signer) throw new Error("Wallet not connected")
 
-    console.log("📝 Creating market:", question);
+    const contract = getContract(true)
+    if (!contract) throw new Error("Contract not initialized")
 
-    const yesAmount = ethers.parseEther(initialYes);
-    const noAmount = ethers.parseEther(initialNo);
-    const totalValue = yesAmount + noAmount;
+    console.log("📝 Creating market:", question)
 
-    const tx = await contract.createMarket(question, endTime, yesAmount, noAmount, {
-      value: totalValue,
-    });
+    const yesAmount = ethers.parseEther(initialYes)
+    const noAmount = ethers.parseEther(initialNo)
+    const totalValue = yesAmount + noAmount
 
-    console.log("⏳ Waiting for transaction:", tx.hash);
-    const receipt = await tx.wait();
-    
+    const tx = await contract.createMarket(
+      question,
+      endTime,
+      yesAmount,
+      noAmount,
+      {
+        value: totalValue,
+      }
+    )
+
+    console.log("⏳ Waiting for transaction:", tx.hash)
+    const receipt = await tx.wait()
+
     // Parse the MarketCreated event to get the market ID
     const event = receipt.logs.find((log: any) => {
       try {
-        return contract.interface.parseLog(log)?.name === "MarketCreated";
+        return contract.interface.parseLog(log)?.name === "MarketCreated"
       } catch {
-        return false;
+        return false
       }
-    });
+    })
 
     if (event) {
-      const parsed = contract.interface.parseLog(event);
-      const marketId = Number(parsed?.args[0]);
-      console.log("✅ Market created with ID:", marketId);
-      return marketId;
+      const parsed = contract.interface.parseLog(event)
+      const marketId = Number(parsed?.args[0])
+      console.log("✅ Market created with ID:", marketId)
+      return marketId
     }
 
-    throw new Error("Market creation event not found");
-  };
+    throw new Error("Market creation event not found")
+  }
 
   // Mint complete sets
   const mintCompleteSets = async (marketId: number, amount: string) => {
-    if (!signer) throw new Error("Wallet not connected");
-    
-    const contract = getContract(true);
-    if (!contract) throw new Error("Contract not initialized");
+    if (!signer) throw new Error("Wallet not connected")
 
-    const value = ethers.parseEther(amount);
-    const tx = await contract.mintCompleteSets(marketId, value, { value });
-    return await tx.wait();
-  };
+    const contract = getContract(true)
+    if (!contract) throw new Error("Contract not initialized")
+
+    const value = ethers.parseEther(amount)
+    const tx = await contract.mintCompleteSets(marketId, value, { value })
+    return await tx.wait()
+  }
 
   // Burn complete sets
   const burnCompleteSets = async (marketId: number, amount: string) => {
-    if (!signer) throw new Error("Wallet not connected");
-    
-    const contract = getContract(true);
-    if (!contract) throw new Error("Contract not initialized");
+    if (!signer) throw new Error("Wallet not connected")
 
-    const value = ethers.parseEther(amount);
-    const tx = await contract.burnCompleteSets(marketId, value);
-    return await tx.wait();
-  };
+    const contract = getContract(true)
+    if (!contract) throw new Error("Contract not initialized")
+
+    const value = ethers.parseEther(amount)
+    const tx = await contract.burnCompleteSets(marketId, value)
+    return await tx.wait()
+  }
 
   // Buy YES tokens
   const buyYes = async (marketId: number, amount: string, slippage = 1) => {
-    if (!signer) throw new Error("Wallet not connected");
-    
-    const contract = getContract(true);
-    if (!contract) throw new Error("Contract not initialized");
+    if (!signer) throw new Error("Wallet not connected")
 
-    const amountIn = ethers.parseEther(amount);
-    
+    const contract = getContract(true)
+    if (!contract) throw new Error("Contract not initialized")
+
+    const amountIn = ethers.parseEther(amount)
+
     // Get expected output with slippage
-    const [amountOut] = await contract.getAmountOut(marketId, amountIn, false);
-    const minOut = (amountOut * BigInt(100 - slippage)) / BigInt(100);
+    const [amountOut] = await contract.getAmountOut(marketId, amountIn, false)
+    const minOut = (amountOut * BigInt(100 - slippage)) / BigInt(100)
 
     // First mint complete sets
-    const mintTx = await contract.mintCompleteSets(marketId, amountIn, { value: amountIn });
-    await mintTx.wait();
+    const mintTx = await contract.mintCompleteSets(marketId, amountIn, {
+      value: amountIn,
+    })
+    await mintTx.wait()
 
     // Then swap NO for YES
-    const swapTx = await contract.swapNoForYes(marketId, amountIn, minOut);
-    return await swapTx.wait();
-  };
+    const swapTx = await contract.swapNoForYes(marketId, amountIn, minOut)
+    return await swapTx.wait()
+  }
 
   // Buy NO tokens
   const buyNo = async (marketId: number, amount: string, slippage = 1) => {
-    if (!signer) throw new Error("Wallet not connected");
-    
-    const contract = getContract(true);
-    if (!contract) throw new Error("Contract not initialized");
+    if (!signer) throw new Error("Wallet not connected")
 
-    const amountIn = ethers.parseEther(amount);
-    
+    const contract = getContract(true)
+    if (!contract) throw new Error("Contract not initialized")
+
+    const amountIn = ethers.parseEther(amount)
+
     // Get expected output with slippage
-    const [amountOut] = await contract.getAmountOut(marketId, amountIn, true);
-    const minOut = (amountOut * BigInt(100 - slippage)) / BigInt(100);
+    const [amountOut] = await contract.getAmountOut(marketId, amountIn, true)
+    const minOut = (amountOut * BigInt(100 - slippage)) / BigInt(100)
 
     // First mint complete sets
-    const mintTx = await contract.mintCompleteSets(marketId, amountIn, { value: amountIn });
-    await mintTx.wait();
+    const mintTx = await contract.mintCompleteSets(marketId, amountIn, {
+      value: amountIn,
+    })
+    await mintTx.wait()
 
     // Then swap YES for NO
-    const swapTx = await contract.swapYesForNo(marketId, amountIn, minOut);
-    return await swapTx.wait();
-  };
+    const swapTx = await contract.swapYesForNo(marketId, amountIn, minOut)
+    return await swapTx.wait()
+  }
 
   // Sell YES tokens
   const sellYes = async (marketId: number, amount: string, slippage = 1) => {
-    if (!signer) throw new Error("Wallet not connected");
-    
-    const contract = getContract(true);
-    if (!contract) throw new Error("Contract not initialized");
+    if (!signer) throw new Error("Wallet not connected")
 
-    const amountIn = ethers.parseEther(amount);
-    const [amountOut] = await contract.getAmountOut(marketId, amountIn, true);
-    const minOut = (amountOut * BigInt(100 - slippage)) / BigInt(100);
+    const contract = getContract(true)
+    if (!contract) throw new Error("Contract not initialized")
 
-    const tx = await contract.swapYesForNo(marketId, amountIn, minOut);
-    return await tx.wait();
-  };
+    const amountIn = ethers.parseEther(amount)
+    const [amountOut] = await contract.getAmountOut(marketId, amountIn, true)
+    const minOut = (amountOut * BigInt(100 - slippage)) / BigInt(100)
+
+    const tx = await contract.swapYesForNo(marketId, amountIn, minOut)
+    return await tx.wait()
+  }
 
   // Sell NO tokens
   const sellNo = async (marketId: number, amount: string, slippage = 1) => {
-    if (!signer) throw new Error("Wallet not connected");
-    
-    const contract = getContract(true);
-    if (!contract) throw new Error("Contract not initialized");
+    if (!signer) throw new Error("Wallet not connected")
 
-    const amountIn = ethers.parseEther(amount);
-    const [amountOut] = await contract.getAmountOut(marketId, amountIn, false);
-    const minOut = (amountOut * BigInt(100 - slippage)) / BigInt(100);
+    const contract = getContract(true)
+    if (!contract) throw new Error("Contract not initialized")
 
-    const tx = await contract.swapNoForYes(marketId, amountIn, minOut);
-    return await tx.wait();
-  };
+    const amountIn = ethers.parseEther(amount)
+    const [amountOut] = await contract.getAmountOut(marketId, amountIn, false)
+    const minOut = (amountOut * BigInt(100 - slippage)) / BigInt(100)
+
+    const tx = await contract.swapNoForYes(marketId, amountIn, minOut)
+    return await tx.wait()
+  }
 
   // Get market data
   const getMarket = async (marketId: number) => {
-    const contract = getContract(false);
-    if (!contract) throw new Error("Contract not initialized");
+    const contract = getContract(false)
+    if (!contract) throw new Error("Contract not initialized")
 
-    console.log(`📊 Fetching market ${marketId}...`);
-    const market = await contract.getMarket(marketId);
-    const [yesPrice, noPrice] = await contract.getPrice(marketId);
+    console.log(`📊 Fetching market ${marketId}...`)
+    const market = await contract.getMarket(marketId)
+    const [yesPrice, noPrice] = await contract.getPrice(marketId)
 
     return {
       id: marketId,
@@ -530,83 +597,85 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
       totalBacking: market[10],
       yesPrice: Number(yesPrice) / 100,
       noPrice: Number(noPrice) / 100,
-    };
-  };
+    }
+  }
 
   // Get all markets
   const getAllMarkets = async () => {
-    const contract = getContract(false);
+    const contract = getContract(false)
     if (!contract) {
-      console.error("❌ Contract not available");
-      throw new Error("Contract not initialized");
+      console.error("❌ Contract not available")
+      throw new Error("Contract not initialized")
     }
 
     try {
-      console.log("📋 Fetching all markets...");
-      const nextId = await contract.nextMarketId();
-      const marketCount = Number(nextId);
-      console.log(`Found ${marketCount} markets`);
+      console.log("📋 Fetching all markets...")
+      const nextId = await contract.nextMarketId()
+      const marketCount = Number(nextId)
+      console.log(`Found ${marketCount} markets`)
 
       if (marketCount === 0) {
-        console.log("ℹ️ No markets created yet");
-        return [];
+        console.log("ℹ️ No markets created yet")
+        return []
       }
 
-      const markets = [];
+      const markets = []
       for (let i = 0; i < marketCount; i++) {
         try {
-          const market = await getMarket(i);
-          markets.push(market);
-          console.log(`✅ Loaded market ${i}: ${market.question.substring(0, 50)}...`);
+          const market = await getMarket(i)
+          markets.push(market)
+          console.log(
+            `✅ Loaded market ${i}: ${market.question.substring(0, 50)}...`
+          )
         } catch (error) {
-          console.warn(`⚠️ Failed to fetch market ${i}:`, error);
+          console.warn(`⚠️ Failed to fetch market ${i}:`, error)
         }
       }
 
-      console.log(`✅ Successfully loaded ${markets.length} markets`);
-      return markets;
+      console.log(`✅ Successfully loaded ${markets.length} markets`)
+      return markets
     } catch (error) {
-      console.error("❌ Error fetching markets:", error);
-      throw error;
+      console.error("❌ Error fetching markets:", error)
+      throw error
     }
-  };
+  }
 
   // Get token balances
   const getTokenBalances = async (marketId: number) => {
-    if (!account) return { yes: "0", no: "0" };
+    if (!account) return { yes: "0", no: "0" }
 
-    const contract = getContract(false);
-    if (!contract) throw new Error("Contract not initialized");
+    const contract = getContract(false)
+    if (!contract) throw new Error("Contract not initialized")
 
-    const market = await contract.getMarket(marketId);
-    const yesTokenContract = getTokenContract(market[5], false);
-    const noTokenContract = getTokenContract(market[6], false);
+    const market = await contract.getMarket(marketId)
+    const yesTokenContract = getTokenContract(market[5], false)
+    const noTokenContract = getTokenContract(market[6], false)
 
     if (!yesTokenContract || !noTokenContract) {
-      return { yes: "0", no: "0" };
+      return { yes: "0", no: "0" }
     }
 
     const [yesBalance, noBalance] = await Promise.all([
       yesTokenContract.balanceOf(account),
       noTokenContract.balanceOf(account),
-    ]);
+    ])
 
     return {
       yes: ethers.formatEther(yesBalance),
       no: ethers.formatEther(noBalance),
-    };
-  };
+    }
+  }
 
   // Redeem winning tokens
   const redeem = async (marketId: number) => {
-    if (!signer) throw new Error("Wallet not connected");
-    
-    const contract = getContract(true);
-    if (!contract) throw new Error("Contract not initialized");
+    if (!signer) throw new Error("Wallet not connected")
 
-    const tx = await contract.redeem(marketId);
-    return await tx.wait();
-  };
+    const contract = getContract(true)
+    if (!contract) throw new Error("Contract not initialized")
+
+    const tx = await contract.redeem(marketId)
+    return await tx.wait()
+  }
 
   return {
     createMarket,
@@ -622,5 +691,5 @@ export function usePredictionMarket(provider: ethers.BrowserProvider | null, sig
     redeem,
     contract: getContract(false),
     isContractReady,
-  };
+  }
 }
