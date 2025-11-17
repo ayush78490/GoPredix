@@ -12,19 +12,24 @@ import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { useRouter } from "next/navigation"
 
-
 const CATEGORIES = [
   "All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy", "General"
 ]
 
-// Payment token filter options
 const PAYMENT_TOKEN_FILTERS = [
   { label: "All Tokens", value: null },
   { label: "🔶 BNB Only", value: "BNB" },
   { label: "💜 PDX Only", value: "PDX" }
 ]
 
-// --- Helper functions ---
+const STATUS_FILTERS = [
+  { label: "All Status", value: null },
+  { label: "🟢 Active", value: "active" },
+  { label: "🔴 Ended", value: "ended" },
+  { label: "✅ Resolved", value: "resolved" }
+]
+
+// Helper: Extract category from question
 const extractCategory = (question: string): string => {
   const lower = question.toLowerCase()
   if (lower.includes("bitcoin") || lower.includes("crypto")) return "Crypto"
@@ -36,6 +41,7 @@ const extractCategory = (question: string): string => {
   return "General"
 }
 
+// Helper: Calculate prices from pools
 const calculatePrices = (yesPool: string, noPool: string) => {
   const yes = parseFloat(yesPool) || 0
   const no = parseFloat(noPool) || 0
@@ -47,10 +53,81 @@ const calculatePrices = (yesPool: string, noPool: string) => {
   }
 }
 
+// Helper: Determine market status
+const getMarketStatus = (market: any) => {
+  const nowInSeconds = Math.floor(Date.now() / 1000)
+  const endTimeInSeconds = Number(market.endTime)
+  const contractStatus = Number(market.status)
+  
+  // Resolved
+  if (contractStatus === 3) {
+    return {
+      isActive: false,
+      isEnded: true,
+      isResolved: true,
+      statusLabel: "Resolved",
+      statusColor: "green"
+    }
+  }
+  
+  // Disputed
+  if (contractStatus === 4) {
+    return {
+      isActive: false,
+      isEnded: true,
+      isResolved: false,
+      statusLabel: "Disputed",
+      statusColor: "orange"
+    }
+  }
+  
+  // Resolution requested
+  if (contractStatus === 2) {
+    return {
+      isActive: false,
+      isEnded: true,
+      isResolved: false,
+      statusLabel: "Resolution Requested",
+      statusColor: "yellow"
+    }
+  }
+  
+  // Time expired
+  if (nowInSeconds >= endTimeInSeconds) {
+    return {
+      isActive: false,
+      isEnded: true,
+      isResolved: false,
+      statusLabel: "Ended",
+      statusColor: "red"
+    }
+  }
+  
+  // Active
+  if (contractStatus === 0) {
+    return {
+      isActive: true,
+      isEnded: false,
+      isResolved: false,
+      statusLabel: "Active",
+      statusColor: "green"
+    }
+  }
+  
+  // Closed
+  return {
+    isActive: false,
+    isEnded: true,
+    isResolved: false,
+    statusLabel: "Closed",
+    statusColor: "red"
+  }
+}
+
+// Helper: Convert raw market to frontend format
 const convertToFrontendMarket = (market: any) => {
   const prices = calculatePrices(market.yesPool, market.noPool)
-  const now = new Date()
-  const endTime = new Date(market.endTime * 1000)
+  const statusInfo = getMarketStatus(market)
   
   return {
     ...market,
@@ -59,18 +136,18 @@ const convertToFrontendMarket = (market: any) => {
     noPrice: prices.noPrice,
     yesMultiplier: prices.yesPrice > 0 ? 100 / prices.yesPrice : 0,
     noMultiplier: prices.noPrice > 0 ? 100 / prices.noPrice : 0,
-    isActive: market.status === 0 && endTime > now,
-    paymentToken: market.paymentToken || "BNB"
+    paymentToken: market.paymentToken || "BNB", // Ensure payment token is set
+    ...statusInfo
   }
 }
 
-// --- Page Component ---
 export default function MarketsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Markets")
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [selectedPaymentToken, setSelectedPaymentToken] = useState<"BNB" | "PDX" | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<"active" | "ended" | "resolved" | null>(null)
 
   const router = useRouter()
   const { account, connectWallet, isCorrectNetwork } = useWeb3Context()
@@ -79,45 +156,52 @@ export default function MarketsPage() {
     isLoading, 
     error, 
     refreshMarkets,
-    getBNBMarkets,
-    getPDXMarkets,
-    getActiveMarkets,
   } = useAllMarkets()
 
-  // ✅ FIXED: Use useMemo to prevent recalculation on every render
+  // Format markets with proper payment token info
   const formattedMarkets = useMemo(() => {
     return markets.map(m => convertToFrontendMarket(m))
   }, [markets])
 
-  // ✅ FIXED: Use useMemo for filtered markets too
+  // Filter markets
   const filteredMarkets = useMemo(() => {
     return formattedMarkets.filter((market) => {
       const cat = (market.category || "general").toLowerCase()
       const matchesCategory =
         selectedCategory.toLowerCase() === "all markets" || cat === selectedCategory.toLowerCase()
       const matchesSearch = market.question.toLowerCase().includes(searchQuery.toLowerCase())
-      
-      // Filter by payment token
       const matchesPaymentToken = selectedPaymentToken === null || market.paymentToken === selectedPaymentToken
       
-      return matchesCategory && matchesSearch && matchesPaymentToken
+      let matchesStatus = true
+      if (selectedStatus === "active") {
+        matchesStatus = market.isActive === true
+      } else if (selectedStatus === "ended") {
+        matchesStatus = market.isEnded === true && market.isResolved === false
+      } else if (selectedStatus === "resolved") {
+        matchesStatus = market.isResolved === true
+      }
+      
+      return matchesCategory && matchesSearch && matchesPaymentToken && matchesStatus
     })
-  }, [formattedMarkets, selectedCategory, searchQuery, selectedPaymentToken])
+  }, [formattedMarkets, selectedCategory, searchQuery, selectedPaymentToken, selectedStatus])
 
-  // ✅ FIXED: Use useMemo for statistics
+  // Calculate statistics
   const stats = useMemo(() => {
-  const bnbCount = markets.filter(m => m.paymentToken === "BNB").length
-  const pdxCount = markets.filter(m => m.paymentToken === "PDX").length
-  const activeCount = markets.filter(m => m.status === 0 && m.endTime > Math.floor(Date.now() / 1000)).length
-  
-  return {
-    bnbMarketCount: bnbCount,
-    pdxMarketCount: pdxCount,
-    totalMarkets: markets.length,
-    activeMarkets: activeCount
-  }
-}, [markets])  // ✅ Only depends on markets!
-
+    const bnbCount = formattedMarkets.filter(m => m.paymentToken === "BNB").length
+    const pdxCount = formattedMarkets.filter(m => m.paymentToken === "PDX").length
+    const activeCount = formattedMarkets.filter(m => m.isActive === true).length
+    const endedCount = formattedMarkets.filter(m => m.isEnded === true && m.isResolved === false).length
+    const resolvedCount = formattedMarkets.filter(m => m.isResolved === true).length
+    
+    return {
+      bnbMarketCount: bnbCount,
+      pdxMarketCount: pdxCount,
+      totalMarkets: formattedMarkets.length,
+      activeMarkets: activeCount,
+      endedMarkets: endedCount,
+      resolvedMarkets: resolvedCount
+    }
+  }, [formattedMarkets])
 
   const handleFaucet = () => {
     router.push("/faucetPDX")
@@ -153,10 +237,9 @@ export default function MarketsPage() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10">
             <div>
               <h1 className="text-4xl font-bold mb-2 text-white">All Markets</h1>
-              {/* Market statistics */}
               <div className="text-sm text-muted-foreground space-x-4 flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-1">
-                  <span className="font-semibold text-foreground">{stats.totalMarkets}</span> Total Markets
+                  <span className="font-semibold text-foreground">{stats.totalMarkets}</span> Total
                 </span>
                 <span className="inline-flex items-center gap-1">
                   🔶 <span className="font-semibold text-yellow-400">{stats.bnbMarketCount}</span> BNB
@@ -166,6 +249,12 @@ export default function MarketsPage() {
                 </span>
                 <span className="inline-flex items-center gap-1">
                   🟢 <span className="font-semibold text-green-400">{stats.activeMarkets}</span> Active
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  🔴 <span className="font-semibold text-red-400">{stats.endedMarkets}</span> Ended
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  ✅ <span className="font-semibold text-blue-400">{stats.resolvedMarkets}</span> Resolved
                 </span>
               </div>
             </div>
@@ -202,7 +291,7 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* Network Warning for Connected Users */}
+          {/* Network Warning */}
           {account && !isCorrectNetwork && (
             <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-4 mb-6 backdrop-blur-sm">
               <div className="flex items-center">
@@ -229,32 +318,60 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* Payment Token Filter */}
-          <div className="mb-6">
-            <div className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-              <Coins className="w-4 h-4" />
-              Filter by Payment Token
+          {/* Filters Section */}
+          <div className="space-y-4 mb-6">
+            {/* Payment Token Filter */}
+            <div>
+              <div className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+                <Coins className="w-4 h-4" />
+                Payment Token
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {PAYMENT_TOKEN_FILTERS.map((filter) => (
+                  <Button
+                    key={filter.label}
+                    size="sm"
+                    variant={selectedPaymentToken === filter.value ? "default" : "outline"}
+                    onClick={() => setSelectedPaymentToken(filter.value as "BNB" | "PDX" | null)}
+                    className={`backdrop-blur-sm ${
+                      selectedPaymentToken === filter.value 
+                        ? "bg-primary text-black border-primary" 
+                        : "bg-card/80"
+                    }`}
+                  >
+                    {filter.label}
+                  </Button>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {PAYMENT_TOKEN_FILTERS.map((filter) => (
-                <Button
-                  key={filter.label}
-                  size="sm"
-                  variant={selectedPaymentToken === filter.value ? "default" : "outline"}
-                  onClick={() => setSelectedPaymentToken(filter.value as "BNB" | "PDX" | null)}
-                  className={`backdrop-blur-sm ${
-                    selectedPaymentToken === filter.value 
-                      ? "bg-primary text-black border-primary" 
-                      : "bg-card/80"
-                  }`}
-                >
-                  {filter.label}
-                </Button>
-              ))}
+
+            {/* Status Filter */}
+            <div>
+              <div className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+                <Trophy className="w-4 h-4" />
+                Market Status
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {STATUS_FILTERS.map((filter) => (
+                  <Button
+                    key={filter.label}
+                    size="sm"
+                    variant={selectedStatus === filter.value ? "default" : "outline"}
+                    onClick={() => setSelectedStatus(filter.value as any)}
+                    className={`backdrop-blur-sm ${
+                      selectedStatus === filter.value 
+                        ? "bg-primary text-black border-primary" 
+                        : "bg-card/80"
+                    }`}
+                  >
+                    {filter.label}
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Categories with action buttons */}
+          {/* Categories */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-10">
             <div className="flex flex-wrap gap-2">
               {CATEGORIES.map((cat) => (
@@ -349,10 +466,11 @@ export default function MarketsPage() {
                         setSelectedCategory("All Markets")
                         setSearchQuery("")
                         setSelectedPaymentToken(null)
+                        setSelectedStatus(null)
                       }}
                       className="mt-4 bg-card/80"
                     >
-                      Clear Filters
+                      Clear All Filters
                     </Button>
                   )}
                 </div>

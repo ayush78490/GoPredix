@@ -44,6 +44,7 @@ export interface PDXMarket {
   noPrice?: number
   yesMultiplier?: number
   noMultiplier?: number
+  paymentToken?: "BNB" | "PDX"
 }
 
 export interface MarketCreationParams {
@@ -225,7 +226,306 @@ export function usePredictionMarketPDX() {
     initializeContracts()
   }, [provider])
 
-  // ==================== MARKET CREATION (PDX ONLY) ====================
+  // ==================== VIEW FUNCTIONS (Declare first to avoid circular dependency) ====================
+
+  const getUserInvestment = useCallback(async (marketId: number, userAddress: string): Promise<UserInvestment> => {
+    if (!viewsContract) throw new Error('Views contract not available')
+    
+    try {
+      const investment = await (viewsContract as any).getMarketInvestment(BigInt(marketId), userAddress)
+      return {
+        totalInvested: ethers.formatEther(investment[0]),
+        yesBalance: ethers.formatEther(investment[1]),
+        noBalance: ethers.formatEther(investment[2])
+      }
+    } catch (error) {
+      console.error('❌ Error fetching user investment:', error)
+      // Return default values if investment not found
+      return {
+        totalInvested: "0",
+        yesBalance: "0",
+        noBalance: "0"
+      }
+    }
+  }, [viewsContract])
+
+  const getResolutionStatus = useCallback(async (marketId: number): Promise<ResolutionState> => {
+    if (!resolutionContract) throw new Error('Resolution contract not available')
+    
+    try {
+      const resolution = await (resolutionContract as any).getResolution(BigInt(marketId))
+      return {
+        requested: resolution[0],
+        requestTime: Number(resolution[1]),
+        requester: resolution[2],
+        disputed: resolution[3],
+        disputeTime: Number(resolution[4]),
+        disputer: resolution[5],
+        resolved: resolution[6],
+        outcome: resolution[7]
+      }
+    } catch (error) {
+      console.error('❌ Error fetching resolution status:', error)
+      throw error
+    }
+  }, [resolutionContract])
+
+  const canRequestResolution = useCallback(async (marketId: number): Promise<boolean> => {
+    if (!resolutionContract) throw new Error('Resolution contract not available')
+    
+    try {
+      return await (resolutionContract as any).canRequestResolution(BigInt(marketId))
+    } catch (error) {
+      console.error('❌ Error checking if can request resolution:', error)
+      return false
+    }
+  }, [resolutionContract])
+
+  const canDispute = useCallback(async (marketId: number): Promise<boolean> => {
+    if (!resolutionContract) throw new Error('Resolution contract not available')
+    
+    try {
+      return await (resolutionContract as any).canDispute(BigInt(marketId))
+    } catch (error) {
+      console.error('❌ Error checking if can dispute:', error)
+      return false
+    }
+  }, [resolutionContract])
+
+  const getResolutionStatusString = useCallback(async (marketId: number): Promise<string> => {
+    if (!resolutionContract) throw new Error('Resolution contract not available')
+    
+    try {
+      return await (resolutionContract as any).getResolutionStatus(BigInt(marketId))
+    } catch (error) {
+      console.error('❌ Error getting resolution status string:', error)
+      return 'Unknown'
+    }
+  }, [resolutionContract])
+
+  const getDisputeDeadline = useCallback(async (marketId: number): Promise<number> => {
+    if (!resolutionContract) throw new Error('Resolution contract not available')
+    
+    try {
+      const deadline = await (resolutionContract as any).getDisputeDeadline(BigInt(marketId))
+      return Number(deadline)
+    } catch (error) {
+      console.error('❌ Error getting dispute deadline:', error)
+      return 0
+    }
+  }, [resolutionContract])
+
+  const getMarketOutcome = useCallback(async (marketId: number): Promise<boolean> => {
+    if (!resolutionContract) throw new Error('Resolution contract not available')
+    
+    try {
+      return await (resolutionContract as any).getMarketOutcome(BigInt(marketId))
+    } catch (error) {
+      console.error('❌ Error getting market outcome:', error)
+      throw error
+    }
+  }, [resolutionContract])
+
+  // ==================== MARKET DATA FETCHING ====================
+
+  const getPDXMarket = useCallback(async (marketId: number): Promise<PDXMarket> => {
+    if (!adapterContract || !viewsContract) throw new Error('PDX Contracts not available')
+
+    try {
+      const marketData = await (adapterContract as any).pdxMarkets(BigInt(marketId))
+      
+      let question = marketData.question || `PDX Market ${marketId}`
+      if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
+        question = question.slice(1, -1)
+      }
+
+      // Get enhanced trading info from views contract
+      const tradingInfo = await (viewsContract as any).getTradingInfo(BigInt(marketId))
+      
+      const market: PDXMarket = {
+        id: marketId,
+        creator: marketData.creator,
+        question: question,
+        category: marketData.category || "General",
+        endTime: Number(marketData.endTime),
+        status: marketData.status || MarketStatus.Open,
+        outcome: marketData.outcome,
+        yesToken: marketData.yesToken,
+        noToken: marketData.noToken,
+        yesPool: ethers.formatEther(marketData.yesPool),
+        noPool: ethers.formatEther(marketData.noPool),
+        totalBacking: ethers.formatEther(marketData.totalBacking),
+        yesPrice: Number(tradingInfo[2]) / 100,
+        noPrice: Number(tradingInfo[3]) / 100,
+        yesMultiplier: Number(tradingInfo[0]) / 10000,
+        noMultiplier: Number(tradingInfo[1]) / 10000,
+        paymentToken: "PDX"
+      }
+
+      return market
+
+    } catch (error) {
+      console.error('❌ Error fetching PDX market:', error)
+      throw error
+    }
+  }, [adapterContract, viewsContract])
+
+  // ==================== USER POSITIONS ====================
+
+  const getPDXMarketIds = useCallback(async (): Promise<number[]> => {
+    if (!adapterContract) throw new Error('Adapter contract not available')
+    
+    try {
+      // This is a simplified implementation - you'll need to track market IDs
+      // For now, return an empty array or implement proper market ID tracking
+      const nextMarketId = await (adapterContract as any).nextPDXMarketId()
+      const marketIds: number[] = []
+      
+      for (let i = 0; i < Number(nextMarketId); i++) {
+        marketIds.push(i)
+      }
+      
+      return marketIds
+    } catch (error) {
+      console.error('❌ Error fetching PDX market IDs:', error)
+      return []
+    }
+  }, [adapterContract])
+
+  const getUserPositions = useCallback(async (userAddress: string): Promise<any[]> => {
+    if (!adapterContract || !viewsContract) throw new Error('PDX Contracts not available')
+
+    try {
+      const markets: any[] = []
+      
+      // Get all PDX markets
+      const marketIds = await getPDXMarketIds()
+      
+      for (const marketId of marketIds) {
+        try {
+          const market = await getPDXMarket(marketId)
+          const investment = await getUserInvestment(marketId, userAddress)
+          
+          if (parseFloat(investment.totalInvested) > 0 || parseFloat(investment.yesBalance) > 0 || parseFloat(investment.noBalance) > 0) {
+            markets.push({
+              market,
+              yesBalance: investment.yesBalance,
+              noBalance: investment.noBalance,
+              totalInvested: investment.totalInvested
+            })
+          }
+        } catch (error) {
+          console.error(`Error fetching market ${marketId}:`, error)
+          // Continue with other markets
+        }
+      }
+      
+      return markets
+    } catch (error) {
+      console.error('❌ Error fetching user positions:', error)
+      return []
+    }
+  }, [adapterContract, viewsContract, getPDXMarket, getUserInvestment, getPDXMarketIds])
+
+  // ==================== ESTIMATION FUNCTIONS ====================
+
+  const getBuyYesMultiplier = useCallback(async (
+    marketId: number,
+    pdxAmount: string
+  ): Promise<MultiplierInfo> => {
+    if (!viewsContract) throw new Error('Views contract not available')
+    
+    try {
+      const pdxAmountWei = ethers.parseEther(pdxAmount)
+      const result = await (viewsContract as any).getBuyYesMultiplier(
+        BigInt(marketId),
+        pdxAmountWei
+      )
+      
+      return {
+        multiplier: Number(result[0]) / 10000,
+        totalOut: ethers.formatEther(result[1]),
+        totalFee: ethers.formatEther(result[2])
+      }
+    } catch (error) {
+      console.error('❌ Error estimating YES purchase:', error)
+      throw error
+    }
+  }, [viewsContract])
+
+  const getBuyNoMultiplier = useCallback(async (
+    marketId: number,
+    pdxAmount: string
+  ): Promise<MultiplierInfo> => {
+    if (!viewsContract) throw new Error('Views contract not available')
+    
+    try {
+      const pdxAmountWei = ethers.parseEther(pdxAmount)
+      const result = await (viewsContract as any).getBuyNoMultiplier(
+        BigInt(marketId),
+        pdxAmountWei
+      )
+      
+      return {
+        multiplier: Number(result[0]) / 10000,
+        totalOut: ethers.formatEther(result[1]),
+        totalFee: ethers.formatEther(result[2])
+      }
+    } catch (error) {
+      console.error('❌ Error estimating NO purchase:', error)
+      throw error
+    }
+  }, [viewsContract])
+
+  const getCurrentMultipliers = useCallback(async (marketId: number): Promise<TradingInfo> => {
+    if (!viewsContract) throw new Error('Views contract not available')
+    
+    try {
+      const result = await (viewsContract as any).getTradingInfo(BigInt(marketId))
+      
+      return {
+        yesMultiplier: Number(result[0]) / 10000,
+        noMultiplier: Number(result[1]) / 10000,
+        yesPrice: Number(result[2]),
+        noPrice: Number(result[3]),
+        totalLiquidity: ethers.formatEther(result[4])
+      }
+    } catch (error) {
+      console.error('❌ Error fetching current multipliers:', error)
+      throw error
+    }
+  }, [viewsContract])
+
+  const getSellEstimatePDX = useCallback(async (
+    marketId: number,
+    tokenAmount: string,
+    isYes: boolean
+  ): Promise<{ pdxOut: string; fee: string }> => {
+    if (!viewsContract) throw new Error('Views contract not available')
+    
+    try {
+      const tokenAmountWei = ethers.parseEther(tokenAmount)
+      const result = await (viewsContract as any).getSellEstimate(
+        BigInt(marketId),
+        tokenAmountWei,
+        isYes
+      )
+      
+      return {
+        pdxOut: ethers.formatEther(result[0]),
+        fee: ethers.formatEther(result[1])
+      }
+    } catch (error) {
+      console.error('❌ Error estimating PDX sell:', error)
+      // Return a fallback estimate
+      return {
+        pdxOut: (parseFloat(tokenAmount) * 0.95).toFixed(6),
+        fee: (parseFloat(tokenAmount) * 0.01).toFixed(6)
+      }
+    }
+  }, [viewsContract])
+
+  // ==================== TRADING FUNCTIONS (PDX ONLY) ====================
 
   const createMarketWithPDX = useCallback(async (
     params: MarketCreationParams
@@ -260,98 +560,53 @@ export function usePredictionMarketPDX() {
       const initialNoWei = ethers.parseEther(params.initialNo)
       const totalValue = initialYesWei + initialNoWei
 
-    // Approve PDX tokens
-    const approveTx = await pdxWithSigner.approve(DUAL_TOKEN_ADAPTER_ADDRESS, totalValue)
-    await approveTx.wait()
-    console.log('✅ PDX approved for market creation')
+      // Approve PDX tokens
+      const approveTx = await pdxWithSigner.approve(DUAL_TOKEN_ADAPTER_ADDRESS, totalValue)
+      await approveTx.wait()
+      console.log('✅ PDX approved for market creation')
 
-    // Create market with PDX
-    const tx = await (adapterWithSigner as any).createMarketWithPDX(
-      params.question,
-      validation.category || params.category || 'General',
-      BigInt(params.endTime),
-      initialYesWei,
-      initialNoWei
-    )
-    console.log('📝 Creating PDX market with initial YES:', params.initialYes, 'NO:', params.initialNo)
-    
-    console.log('⏳ Waiting for market creation transaction:', tx.hash)
-    const receipt = await tx.wait()
-    
-    if (!receipt) {
-      throw new Error('Transaction failed - no receipt returned')
-    }
-
-    // Step 4: Get market ID from event
-    let marketId: number
-    const marketCreatedTopic = ethers.id('MarketCreated(uint256,address,string)')
-    const event = receipt.logs.find((log: any) => log.topics[0] === marketCreatedTopic)
-
-    if (event) {
-      const iface = new ethers.Interface(DUAL_TOKEN_ADAPTER_ABI)
-      const decodedEvent = iface.parseLog(event)
-      marketId = Number(decodedEvent?.args[0])
-    } else {
-      // Fallback: get from nextPDXMarketId
-      const nextId = await (adapterWithSigner as any).nextPDXMarketId()
-      marketId = Number(nextId) - 1
-    }
-
-    console.log(`✅ PDX Market created with ID: ${marketId}`)
-    return marketId
-
-  } catch (error: any) {
-    console.error('❌ Error creating PDX market:', error)
-    throw new Error(error.reason || error.message || 'Failed to create PDX market')
-  } finally {
-    setIsLoading(false)
-  }
-}, [signer, account, isCorrectNetwork, isContractReady, adapterContract, pdxTokenContract])
-
-  // ==================== MARKET DATA FETCHING ====================
-
-  const getPDXMarket = useCallback(async (marketId: number): Promise<PDXMarket> => {
-    if (!adapterContract || !viewsContract) throw new Error('PDX Contracts not available')
-
-    try {
-      const marketData = await (adapterContract as any).pdxMarkets(BigInt(marketId))
+      // Create market with PDX
+      const tx = await (adapterWithSigner as any).createMarketWithPDX(
+        params.question,
+        validation.category || params.category || 'General',
+        BigInt(params.endTime),
+        initialYesWei,
+        initialNoWei
+      )
+      console.log('📝 Creating PDX market with initial YES:', params.initialYes, 'NO:', params.initialNo)
       
-      let question = marketData.question || `PDX Market ${marketId}`
-      if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
-        question = question.slice(1, -1)
+      console.log('⏳ Waiting for market creation transaction:', tx.hash)
+      const receipt = await tx.wait()
+      
+      if (!receipt) {
+        throw new Error('Transaction failed - no receipt returned')
       }
 
-      // Get enhanced trading info from views contract
-      const tradingInfo = await (viewsContract as any).getTradingInfo(BigInt(marketId))
-      
-      const market: PDXMarket = {
-        id: marketId,
-        creator: marketData.creator,
-        question: question,
-        category: marketData.category || "General",
-        endTime: Number(marketData.endTime),
-        status: marketData.status || MarketStatus.Open,
-        outcome: marketData.outcome,
-        yesToken: marketData.yesToken,
-        noToken: marketData.noToken,
-        yesPool: ethers.formatEther(marketData.yesPool),
-        noPool: ethers.formatEther(marketData.noPool),
-        totalBacking: ethers.formatEther(marketData.totalBacking),
-        yesPrice: Number(tradingInfo[2]) / 100,
-        noPrice: Number(tradingInfo[3]) / 100,
-        yesMultiplier: Number(tradingInfo[0]) / 10000,
-        noMultiplier: Number(tradingInfo[1]) / 10000
+      // Step 4: Get market ID from event
+      let marketId: number
+      const marketCreatedTopic = ethers.id('MarketCreated(uint256,address,string)')
+      const event = receipt.logs.find((log: any) => log.topics[0] === marketCreatedTopic)
+
+      if (event) {
+        const iface = new ethers.Interface(DUAL_TOKEN_ADAPTER_ABI)
+        const decodedEvent = iface.parseLog(event)
+        marketId = Number(decodedEvent?.args[0])
+      } else {
+        // Fallback: get from nextPDXMarketId
+        const nextId = await (adapterWithSigner as any).nextPDXMarketId()
+        marketId = Number(nextId) - 1
       }
 
-      return market
+      console.log(`✅ PDX Market created with ID: ${marketId}`)
+      return marketId
 
-    } catch (error) {
-      console.error('❌ Error fetching PDX market:', error)
-      throw error
+    } catch (error: any) {
+      console.error('❌ Error creating PDX market:', error)
+      throw new Error(error.reason || error.message || 'Failed to create PDX market')
+    } finally {
+      setIsLoading(false)
     }
-  }, [adapterContract, viewsContract])
-
-  // ==================== TRADING FUNCTIONS (PDX ONLY) ====================
+  }, [signer, account, isCorrectNetwork, isContractReady, adapterContract, pdxTokenContract])
 
   const buyYesWithPDX = useCallback(async (
     marketId: number,
@@ -713,111 +968,24 @@ export function usePredictionMarketPDX() {
     return await tx.wait()
   }, [signer, isCorrectNetwork, resolutionContract])
 
-  // ==================== VIEW FUNCTIONS ====================
-
-  const getUserInvestment = useCallback(async (marketId: number, userAddress: string): Promise<UserInvestment> => {
-    if (!viewsContract) throw new Error('Views contract not available')
-    
-    try {
-      const investment = await (viewsContract as any).getMarketInvestment(BigInt(marketId), userAddress)
-      return {
-        totalInvested: ethers.formatEther(investment[0]),
-        yesBalance: ethers.formatEther(investment[1]),
-        noBalance: ethers.formatEther(investment[2])
-      }
-    } catch (error) {
-      console.error('❌ Error fetching user investment:', error)
-      throw error
-    }
-  }, [viewsContract])
-
-  const getResolutionStatus = useCallback(async (marketId: number): Promise<ResolutionState> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      const resolution = await (resolutionContract as any).getResolution(BigInt(marketId))
-      return {
-        requested: resolution[0],
-        requestTime: Number(resolution[1]),
-        requester: resolution[2],
-        disputed: resolution[3],
-        disputeTime: Number(resolution[4]),
-        disputer: resolution[5],
-        resolved: resolution[6],
-        outcome: resolution[7]
-      }
-    } catch (error) {
-      console.error('❌ Error fetching resolution status:', error)
-      throw error
-    }
-  }, [resolutionContract])
-
-  const canRequestResolution = useCallback(async (marketId: number): Promise<boolean> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      return await (resolutionContract as any).canRequestResolution(BigInt(marketId))
-    } catch (error) {
-      console.error('❌ Error checking if can request resolution:', error)
-      return false
-    }
-  }, [resolutionContract])
-
-  const canDispute = useCallback(async (marketId: number): Promise<boolean> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      return await (resolutionContract as any).canDispute(BigInt(marketId))
-    } catch (error) {
-      console.error('❌ Error checking if can dispute:', error)
-      return false
-    }
-  }, [resolutionContract])
-
-  const getResolutionStatusString = useCallback(async (marketId: number): Promise<string> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      return await (resolutionContract as any).getResolutionStatus(BigInt(marketId))
-    } catch (error) {
-      console.error('❌ Error getting resolution status string:', error)
-      return 'Unknown'
-    }
-  }, [resolutionContract])
-
-  const getDisputeDeadline = useCallback(async (marketId: number): Promise<number> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      const deadline = await (resolutionContract as any).getDisputeDeadline(BigInt(marketId))
-      return Number(deadline)
-    } catch (error) {
-      console.error('❌ Error getting dispute deadline:', error)
-      return 0
-    }
-  }, [resolutionContract])
-
-  const getMarketOutcome = useCallback(async (marketId: number): Promise<boolean> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      return await (resolutionContract as any).getMarketOutcome(BigInt(marketId))
-    } catch (error) {
-      console.error('❌ Error getting market outcome:', error)
-      throw error
-    }
-  }, [resolutionContract])
-
   return {
     // Market management
     createMarketWithPDX,
     getPDXMarket,
+    getUserPositions,
+    getPDXMarketIds,
     
     // Trading functions (PDX ONLY)
     buyYesWithPDX,
     buyNoWithPDX,
     sellYesForPDX,
     sellNoForPDX,
+    
+    // Estimation functions
+    getBuyYesMultiplier,
+    getBuyNoMultiplier,
+    getCurrentMultipliers,
+    getSellEstimatePDX,
     
     // Liquidity management
     addPDXLiquidity,

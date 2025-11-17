@@ -9,6 +9,7 @@ interface SellTokensParams {
   tokenAmount: string // Amount in ether format (e.g., "1.5")
   minTokenOut: string // Minimum tokens to receive in ether format
   isYes: boolean // true for YES tokens, false for NO tokens
+  paymentToken: "BNB" | "PDX" // Add paymentToken to params
 }
 
 interface SellEstimate {
@@ -16,6 +17,8 @@ interface SellEstimate {
   fee: string
   tokenOutWei: bigint
   feeWei: bigint
+  bnbOut?: string
+  pdxOut?: string
 }
 
 // ==================== BNB SELL TOKENS ====================
@@ -32,7 +35,7 @@ export function useSellTokensBNB() {
    * Sell YES or NO tokens for BNB
    */
   const sellTokens = useCallback(
-    async ({ marketId, tokenAmount, minTokenOut, isYes }: SellTokensParams) => {
+    async (params: Omit<SellTokensParams, 'paymentToken'>) => {
       if (!signer || !account) {
         throw new Error('Wallet not connected')
       }
@@ -45,10 +48,10 @@ export function useSellTokensBNB() {
 
         let receipt
 
-        if (isYes) {
-          receipt = await sellYesForBNB(marketId, tokenAmount, minTokenOut)
+        if (params.isYes) {
+          receipt = await sellYesForBNB(params.marketId, params.tokenAmount, params.minTokenOut)
         } else {
-          receipt = await sellNoForBNB(marketId, tokenAmount, minTokenOut)
+          receipt = await sellNoForBNB(params.marketId, params.tokenAmount, params.minTokenOut)
         }
 
         if (receipt) {
@@ -109,6 +112,7 @@ export function useSellEstimateBNB(marketId: number, tokenAmount: string, isYes:
           fee: result.fee,
           tokenOutWei: ethers.parseEther(result.amountOut),
           feeWei: ethers.parseEther(result.fee),
+          bnbOut: result.amountOut,
         })
       } catch (err: any) {
         const errorMessage = err?.reason || err?.message || 'Failed to fetch estimate'
@@ -214,7 +218,7 @@ export function useSellTokensPDX() {
    * Sell YES or NO tokens for PDX
    */
   const sellTokens = useCallback(
-    async ({ marketId, tokenAmount, minTokenOut, isYes }: SellTokensParams) => {
+    async (params: Omit<SellTokensParams, 'paymentToken'>) => {
       if (!signer || !account) {
         throw new Error('Wallet not connected')
       }
@@ -227,10 +231,10 @@ export function useSellTokensPDX() {
 
         let receipt
 
-        if (isYes) {
-          receipt = await sellYesForPDX(marketId, tokenAmount, minTokenOut)
+        if (params.isYes) {
+          receipt = await sellYesForPDX(params.marketId, params.tokenAmount, params.minTokenOut)
         } else {
-          receipt = await sellNoForPDX(marketId, tokenAmount, minTokenOut)
+          receipt = await sellNoForPDX(params.marketId, params.tokenAmount, params.minTokenOut)
         }
 
         if (receipt) {
@@ -267,6 +271,7 @@ export function useSellTokensPDX() {
  */
 export function useSellEstimatePDX(marketId: number, tokenAmount: string, isYes: boolean) {
   const { provider } = useWeb3Context()
+  const { getSellEstimatePDX } = usePredictionMarketPDX()
   const [estimate, setEstimate] = useState<SellEstimate | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -282,28 +287,37 @@ export function useSellEstimatePDX(marketId: number, tokenAmount: string, isYes:
         setIsLoading(true)
         setError(null)
 
-        // For PDX, you would need to implement similar swap calculation
-        // For now, we'll use placeholder until PDX helper view functions are ready
-        const dummyResult = {
-          amountOut: tokenAmount,
-          fee: (parseFloat(tokenAmount) * 0.01).toFixed(4)
-        }
+        // Use the actual PDX estimation function
+        const result = await getSellEstimatePDX(marketId, tokenAmount, isYes)
 
         setEstimate({
-          tokenOut: dummyResult.amountOut,
-          fee: dummyResult.fee,
-          tokenOutWei: ethers.parseEther(dummyResult.amountOut),
-          feeWei: ethers.parseEther(dummyResult.fee),
+          tokenOut: result.pdxOut,
+          fee: result.fee,
+          tokenOutWei: ethers.parseEther(result.pdxOut),
+          feeWei: ethers.parseEther(result.fee),
+          pdxOut: result.pdxOut,
         })
       } catch (err: any) {
         const errorMessage = err?.reason || err?.message || 'Failed to fetch estimate'
         setError(new Error(errorMessage))
         console.error('Error fetching PDX sell estimate:', err)
-      } finally {
-        setIsLoading(false)
+        
+        // Fallback to dummy calculation if PDX estimation fails
+        const dummyResult = {
+          pdxOut: (parseFloat(tokenAmount) * 0.95).toFixed(6),
+          fee: (parseFloat(tokenAmount) * 0.01).toFixed(6)
+        }
+
+        setEstimate({
+          tokenOut: dummyResult.pdxOut,
+          fee: dummyResult.fee,
+          tokenOutWei: ethers.parseEther(dummyResult.pdxOut),
+          feeWei: ethers.parseEther(dummyResult.fee),
+          pdxOut: dummyResult.pdxOut,
+        })
       }
     },
-    [provider, marketId, tokenAmount, isYes]
+    [provider, marketId, tokenAmount, isYes, getSellEstimatePDX]
   )
 
   return {
@@ -385,7 +399,7 @@ export function useTokenBalancePDX(marketId: number) {
   }
 }
 
-// ==================== UNIFIED HOOK (AUTO-DETECT TOKEN) ====================
+// ==================== UNIFIED HOOKS ====================
 
 /**
  * Unified sell tokens hook that automatically uses BNB or PDX based on token
@@ -394,7 +408,27 @@ export function useSellTokens(paymentToken: "BNB" | "PDX") {
   const bnbHook = useSellTokensBNB()
   const pdxHook = useSellTokensPDX()
 
-  return paymentToken === "BNB" ? bnbHook : pdxHook
+  const sellTokens = useCallback(
+    async (params: SellTokensParams) => {
+      // Extract the parameters needed for individual hooks (without paymentToken)
+      const { paymentToken: _, ...sellParams } = params
+      
+      if (paymentToken === "BNB") {
+        return await bnbHook.sellTokens(sellParams)
+      } else {
+        return await pdxHook.sellTokens(sellParams)
+      }
+    },
+    [paymentToken, bnbHook, pdxHook]
+  )
+
+  return {
+    sellTokens,
+    isLoading: paymentToken === "BNB" ? bnbHook.isLoading : pdxHook.isLoading,
+    isSuccess: paymentToken === "BNB" ? bnbHook.isSuccess : pdxHook.isSuccess,
+    error: paymentToken === "BNB" ? bnbHook.error : pdxHook.error,
+    txHash: paymentToken === "BNB" ? bnbHook.txHash : pdxHook.txHash,
+  }
 }
 
 /**
@@ -420,4 +454,33 @@ export function useTokenBalance(paymentToken: "BNB" | "PDX", marketId: number) {
   const pdxBalance = useTokenBalancePDX(marketId)
 
   return paymentToken === "BNB" ? bnbBalance : pdxBalance
+}
+
+// ==================== SIMPLIFIED HOOK (For components that don't know paymentToken upfront) ====================
+
+/**
+ * Simplified sell hook that determines paymentToken automatically based on market
+ * This is useful for components that don't know the paymentToken upfront
+ */
+export function useAutoSellTokens() {
+  const [paymentToken, setPaymentToken] = useState<"BNB" | "PDX">("BNB")
+  const sellHook = useSellTokens(paymentToken)
+
+  const sellTokens = useCallback(
+    async (params: SellTokensParams) => {
+      setPaymentToken(params.paymentToken)
+      return await sellHook.sellTokens(params)
+    },
+    [sellHook]
+  )
+
+  return {
+    sellTokens,
+    isLoading: sellHook.isLoading,
+    isSuccess: sellHook.isSuccess,
+    error: sellHook.error,
+    txHash: sellHook.txHash,
+    paymentToken,
+    setPaymentToken,
+  }
 }

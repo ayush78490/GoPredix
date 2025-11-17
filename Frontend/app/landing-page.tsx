@@ -4,7 +4,7 @@ import { useState } from "react"
 import Header from "@/components/header"
 import CreateMarketModal from "@/components/createMarketModal"
 import { Button } from "@/components/ui/button"
-import { Loader2, Trophy } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { useWeb3Context } from "@/lib/wallet-context"
 import Footer from "@/components/footer"
 import { useRouter } from "next/navigation"
@@ -19,13 +19,15 @@ export default function LandingPage() {
   const handleExplore = () => {
     router.push("/markets")
   }
+
   const handleLeaderboardClick = () => {
-    router.push('/leaderboard')
+    router.push("/leaderboard")
   }
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
-      {/* Light Rays Background */}
+
+      {/* Background Rays */}
       <div className="fixed inset-0 z-0">
         <LightRays
           raysOrigin="top-center"
@@ -40,12 +42,13 @@ export default function LandingPage() {
         />
       </div>
 
-      {/* Content overlay for better readability */}
+      {/* Content Overlay */}
       <div className="relative z-10 bg-black/80 min-h-screen">
         <Header />
 
         <div className="max-w-7xl mx-auto px-4 py-8">
-          {/* Initializing State */}
+
+          {/* Web3 Initialization */}
           {!isInitialized && (
             <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -53,40 +56,97 @@ export default function LandingPage() {
             </div>
           )}
 
-          {/* Landing Page Content - Always shown after initialization */}
+          {/* HERO SECTION */}
           {isInitialized && (
-            <div className="flex flex-col items-center justify-center min-h-[60vh]">
-              {/* GOPREDIX header */}
-              <h1 className="text-4xl md:text-5xl font-bold mb-10 tracking-widest text-white">GOPREDIX</h1>
-              
-              {/* Centered design from reference image */}
-              <div className="max-w-2xl w-full text-center flex flex-col items-center">
-                <p className="text-base md:text-lg text-white mb-10" style={{ fontFamily: 'monospace' }}>
-                  Predict the outcome of future events and earn rewards for your accuracy.
-                  Create your own markets on any topic you can imagine.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
-                  <button
-                    className="px-8 py-3 rounded-full bg-[#ECFEFF]/50 text-white font-medium text-lg shadow hover:bg-[#ECFEFF] hover:text-black transition"
-                    onClick={handleExplore}
-                  >
-                    Explore Markets
-                  </button>
-                  <button
-                    className="px-8 py-3 rounded-full border border-[#ECFEFF] font-medium text-lg text-white bg-transparent hover:bg-[#ECFEFF] hover:text-black transition"
-                    onClick={() => connectWallet()}
-                  >
-                    Create Market
-                  </button>
-                </div>
+            <section className="flex flex-col items-center justify-center text-center min-h-[70vh]">
+
+              <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-widest text-white drop-shadow-lg">
+                GOPREDIX
+              </h1>
+
+              <p className="text-base md:text-lg text-white/80 max-w-2xl mb-10 font-mono">
+                Predict the outcome of future events, trade your beliefs, and earn rewards for your accuracy.
+              </p>
+
+              {/* Hero Buttons */}
+              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                <button
+                  className="px-8 py-3 rounded-full bg-[#ECFEFF]/50 text-white font-medium text-lg shadow hover:bg-[#ECFEFF] hover:text-black transition"
+                  onClick={handleExplore}
+                >
+                  Explore Markets
+                </button>
+
+                <button
+                  className="px-8 py-3 rounded-full border border-[#ECFEFF] font-medium text-lg text-white bg-transparent hover:bg-[#ECFEFF] hover:text-black transition"
+                  onClick={() => connectWallet()}
+                >
+                  Create Market
+                </button>
               </div>
-            </div>
+            </section>
           )}
+
+          {/* ================================
+              EMPTY SPACE (removed prediction-market section)
+              ================================= */}
+          <div className="h-[10vh]"></div>
+
+          {/* --------------------------------
+              HOW IT WORKS SECTION
+              -------------------------------- */}
+          <section className="max-w-4xl mx-auto text-center mb-24">
+            <h2 className="text-3xl font-bold text-white drop-shadow-lg mb-6">
+              How It Works
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+              <div className="p-6 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-xl hover:scale-[1.02] transition shadow">
+                <h3 className="text-xl font-semibold text-white mb-2">Create a Market</h3>
+                <p className="text-white/60">
+                  Define any event with a clear outcome and allow others to participate.
+                </p>
+              </div>
+
+              <div className="p-6 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-xl hover:scale-[1.02] transition shadow">
+                <h3 className="text-xl font-semibold text-white mb-2">Predict & Trade</h3>
+                <p className="text-white/60">
+                  Stake your belief, buy or sell positions, and react as sentiment changes.
+                </p>
+              </div>
+
+              <div className="p-6 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-xl hover:scale-[1.02] transition shadow">
+                <h3 className="text-xl font-semibold text-white mb-2">Settle & Earn</h3>
+                <p className="text-white/60">
+                  After results are verified, correct predictions receive rewards instantly.
+                </p>
+              </div>
+
+            </div>
+          </section>
+
+          {/* --------------------------------
+              INFO SECTION (NO METRICS, JUST INFORMATIVE)
+              -------------------------------- */}
+          <section className="max-w-4xl mx-auto text-center mb-24">
+            <h2 className="text-3xl font-bold text-white drop-shadow-lg mb-4">
+              A Smarter Way to Predict the Future
+            </h2>
+
+            <p className="text-white/70 max-w-3xl mx-auto leading-relaxed">
+              Prediction markets turn everyday insights into valuable information.  
+              Instead of guessing, you participate in markets where collective confidence
+              shapes probabilities. By contributing your knowledge, you help build a more  
+              accurate, community-driven outlook on real-world events — from sports and  
+              politics to technology and global trends.
+            </p>
+          </section>
+
         </div>
 
-        <Footer/>
+        <Footer />
 
-        {/* Create Market Modal */}
         {showCreateModal && (
           <CreateMarketModal
             onClose={() => setShowCreateModal(false)}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Header from "@/components/header"
 import PriceChart from "@/components/price-chart"
@@ -10,10 +10,13 @@ import { Card } from "@/components/ui/card"
 import { ArrowLeft, Volume2, TrendingUp, Loader2, Calendar, User, Coins } from "lucide-react"
 import Link from "next/link"
 import { useAllMarkets } from "@/hooks/getAllMarkets"
+import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
+import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
+import { useWeb3Context } from "@/lib/wallet-context"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 
-// Helper function to generate slug from question
+// Helper: Generate slug from question
 export const generateSlug = (question: string, id: number | string): string => {
   const baseSlug = question
     .toLowerCase()
@@ -26,26 +29,18 @@ export const generateSlug = (question: string, id: number | string): string => {
   return `${baseSlug}-${id}` || `market-${id}`
 }
 
-// Helper function to extract ID from slug
+// Helper: Extract ID from slug
 export const extractIdFromSlug = (slug: string): number | null => {
   if (!slug) return null
-  
-  if (/^\d+$/.test(slug)) {
-    return parseInt(slug)
-  }
-  
+  if (/^\d+$/.test(slug)) return parseInt(slug)
   const idMatch = slug.match(/-(\d+)$/)
-  if (idMatch) {
-    return parseInt(idMatch[1])
-  }
-  
+  if (idMatch) return parseInt(idMatch[1])
   return null
 }
 
-// Helper function to extract category from question
+// Helper: Extract category from question
 const extractCategory = (question = ""): string => {
   const lowerQuestion = question.toLowerCase()
-
   if (lowerQuestion.includes("bitcoin") || lowerQuestion.includes("crypto") || lowerQuestion.includes("ethereum") || lowerQuestion.includes("blockchain"))
     return "Crypto"
   if (lowerQuestion.includes("election") || lowerQuestion.includes("president") || lowerQuestion.includes("politics") || lowerQuestion.includes("government"))
@@ -62,11 +57,10 @@ const extractCategory = (question = ""): string => {
     return "Entertainment"
   if (lowerQuestion.includes("science") || lowerQuestion.includes("health") || lowerQuestion.includes("research") || lowerQuestion.includes("medical"))
     return "Science"
-
   return "General"
 }
 
-// Convert on-chain market to frontend market format
+// Helper: Convert on-chain market to frontend format
 const convertToFrontendMarket = (m: any, id: number | string) => {
   const question = m?.question ?? m?.title ?? `Market ${id}`
   const category = m?.category ? m.category.toUpperCase() : extractCategory(question)
@@ -84,8 +78,6 @@ const convertToFrontendMarket = (m: any, id: number | string) => {
   const noOdds = totalPool > 0 ? (noPool / totalPool) * 100 : 50
 
   const slug = generateSlug(question, id)
-
-  // Extract payment token
   const paymentToken = m?.paymentToken || "BNB"
 
   return {
@@ -108,7 +100,7 @@ const convertToFrontendMarket = (m: any, id: number | string) => {
   }
 }
 
-// Generate synthetic price history
+// Helper: Generate synthetic price history
 const generatePriceHistory = (market: any, days: number = 7) => {
   const history = []
   const now = Date.now()
@@ -129,7 +121,7 @@ const generatePriceHistory = (market: any, days: number = 7) => {
   return history
 }
 
-// Get payment token badge
+// Helper: Get payment token badge
 const getPaymentTokenBadge = (token: string) => {
   const tokenConfig: Record<string, any> = {
     "BNB": { 
@@ -166,84 +158,170 @@ export default function MarketPage() {
   const [isChartLoading, setIsChartLoading] = useState(true)
 
   const { markets: allMarkets, isLoading: marketsLoading, getAllMarkets, isContractReady } = useAllMarkets()
+  
+  // Get account from Web3 context
+  const { account } = useWeb3Context()
+  
+  // Initialize both hooks
+  const bnbHook = usePredictionMarketBNB()
+  const pdxHook = usePredictionMarketPDX()
 
-  // Extract market ID from slug and find the correct market
+  // Load market data with proper payment token detection
+  const loadMarketData = useCallback(async () => {
+    if (!marketSlug) {
+      setIsLoading(false)
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      let marketsToSearch = allMarkets
+      
+      // Fetch markets if not already loaded
+      if (allMarkets.length === 0 && !marketsLoading && isContractReady) {
+        console.log("📋 No markets in cache, fetching from blockchain...")
+        marketsToSearch = await getAllMarkets()
+      }
+
+      let foundMarket: any = null
+      const extractedId = extractIdFromSlug(marketSlug)
+
+      console.log(`🔍 Looking for market with slug: "${marketSlug}", extracted ID: ${extractedId}`)
+      console.log(`📊 Available markets:`, marketsToSearch.map((m: any) => ({ id: m.id, question: m.question?.substring(0, 30) })))
+
+      // Strategy 1: Try direct ID match first (handles URLs like /markets/0, /markets/1)
+      if (extractedId !== null && extractedId >= 0) {
+        const market = marketsToSearch.find((m: any) => {
+          const marketId = typeof m.id === 'string' ? parseInt(m.id) : Number(m.id)
+          return marketId === extractedId
+        })
+        
+        if (market) {
+          console.log(`✅ Found market by ID: ${extractedId}`)
+          foundMarket = convertToFrontendMarket(market, extractedId)
+        }
+      }
+
+      // Strategy 2: If slug is a pure number, treat it as direct ID
+      if (!foundMarket && /^\d+$/.test(marketSlug)) {
+        const directId = parseInt(marketSlug)
+        const market = marketsToSearch.find((m: any) => {
+          const marketId = typeof m.id === 'string' ? parseInt(m.id) : Number(m.id)
+          return marketId === directId
+        })
+        
+        if (market) {
+          console.log(`✅ Found market by direct ID: ${directId}`)
+          foundMarket = convertToFrontendMarket(market, directId)
+        }
+      }
+
+      // Strategy 3: Search by full slug match
+      if (!foundMarket) {
+        for (let i = 0; i < marketsToSearch.length; i++) {
+          const marketData = marketsToSearch[i]
+          const marketId = typeof marketData.id === 'string' ? parseInt(marketData.id) : Number(marketData.id)
+          const formatted = convertToFrontendMarket(marketData, marketId)
+          
+          if (formatted.slug === marketSlug) {
+            console.log(`✅ Found market by slug: ${marketSlug}`)
+            foundMarket = formatted
+            break
+          }
+        }
+      }
+
+      if (foundMarket) {
+        // ✅ CRITICAL: Detect payment token and fetch additional data from correct hook
+        const paymentToken = foundMarket.paymentToken || "BNB"
+        const marketId = typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id)
+        
+        console.log(`🔍 Market ${marketId} uses payment token: ${paymentToken}`)
+        
+        try {
+          if (paymentToken === "PDX" && pdxHook.isContractReady) {
+            console.log("📊 Fetching PDX market details...")
+            const pdxMarket = await pdxHook.getPDXMarket(marketId)
+            
+            // Try to get user investment, but don't fail if it errors
+            let userInvestment = null
+            try {
+              // Only fetch user investment if we have an account
+              if (account) {
+                userInvestment = await pdxHook.getUserInvestment(marketId, account)
+              }
+            } catch (investmentError) {
+              console.warn("⚠️ Could not fetch user investment:", investmentError)
+              userInvestment = {
+                totalInvested: "0",
+                yesBalance: "0",
+                noBalance: "0"
+              }
+            }
+            
+            foundMarket = {
+              ...foundMarket,
+              ...pdxMarket,
+              id: marketId.toString(), // Ensure consistent ID format
+              paymentToken: "PDX",
+              userInvestment
+            }
+            console.log("✅ PDX market data loaded")
+          } else if (paymentToken === "BNB" && bnbHook.isContractReady) {
+            console.log("📊 Fetching BNB market details...")
+            const bnbMarket = await bnbHook.getMarket(marketId)
+            
+            foundMarket = {
+              ...foundMarket,
+              ...bnbMarket,
+              id: marketId.toString(), // Ensure consistent ID format
+              paymentToken: "BNB"
+            }
+            console.log("✅ BNB market data loaded")
+          }
+        } catch (hookError) {
+          console.warn("⚠️ Could not fetch additional market data:", hookError)
+          // Continue with basic market data
+        }
+        
+        setMarket(foundMarket)
+        setError(null)
+        
+        const priceHistory = generatePriceHistory(foundMarket)
+        setChartData(priceHistory)
+        setIsChartLoading(false)
+        
+        console.log(`✅ Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
+      } else {
+        setError(`Market not found. Slug: ${marketSlug}`)
+        console.warn(`❌ Market not found with slug: ${marketSlug}`)
+      }
+    } catch (err: any) {
+      console.error("❌ Failed to load market:", err)
+      setError(err?.message ?? "Failed to load market")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [marketSlug, allMarkets.length, marketsLoading, isContractReady, bnbHook.isContractReady, pdxHook.isContractReady])
+
+  // Execute load on mount and when dependencies change
   useEffect(() => {
     let cancelled = false
 
-    const loadMarketData = async () => {
-      if (!marketSlug) {
-        setIsLoading(false)
-        return
-      }
-
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        let marketsToSearch = allMarkets
-        
-        // Fetch markets if not already loaded
-        if (allMarkets.length === 0 && !marketsLoading) {
-          console.log("📋 No markets in cache, fetching from blockchain...")
-          marketsToSearch = await getAllMarkets()
-        }
-
-        if (cancelled) return
-
-        let foundMarket: any = null
-        let foundId: number = -1
-
-        const extractedId = extractIdFromSlug(marketSlug)
-
-        // Try direct ID match first
-        if (extractedId !== null && extractedId >= 0) {
-          const market = marketsToSearch.find((m: any) => m.id === extractedId.toString())
-          if (market) {
-            foundMarket = convertToFrontendMarket(market, extractedId)
-            foundId = extractedId
-          }
-        }
-
-        // If not found by ID, search by slug
-        if (!foundMarket) {
-          for (let i = 0; i < marketsToSearch.length; i++) {
-            const marketData = marketsToSearch[i]
-            const formatted = convertToFrontendMarket(marketData, i)
-            if (formatted.slug === marketSlug) {
-              foundMarket = formatted
-              foundId = i
-              break
-            }
-          }
-        }
-
-        if (foundMarket) {
-          setMarket(foundMarket)
-          setError(null)
-          
-          const priceHistory = generatePriceHistory(foundMarket)
-          setChartData(priceHistory)
-          setIsChartLoading(false)
-          
-          console.log(`✅ Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
-        } else {
-          setError(`Market not found. Slug: ${marketSlug}`)
-          console.warn(`❌ Market not found with slug: ${marketSlug}`)
-        }
-      } catch (err: any) {
-        console.error("❌ Failed to load market:", err)
-        setError(err?.message ?? "Failed to load market")
-      } finally {
-        if (!cancelled) setIsLoading(false)
+    const executeLoad = async () => {
+      if (!cancelled) {
+        await loadMarketData()
       }
     }
 
-    loadMarketData()
+    executeLoad()
+
     return () => {
       cancelled = true
     }
-  }, [marketSlug, allMarkets, marketsLoading, getAllMarkets])
+  }, [loadMarketData])
 
   // Update chart when market changes
   useEffect(() => {
@@ -251,7 +329,7 @@ export default function MarketPage() {
       const newChartData = generatePriceHistory(market)
       setChartData(newChartData)
     }
-  }, [market?.yesOdds])
+  }, [market?.yesOdds, market?.id, isChartLoading])
 
   // UI helpers
   const formatVolume = (vol: number) => {
@@ -286,7 +364,21 @@ export default function MarketPage() {
 
   const statusBadge = getStatusBadge()
 
-  // Show loading if markets are still loading
+  // Memoized derived data
+  const memoizedMarketData = useMemo(() => {
+    if (!market) return null
+    
+    const tokenSymbol = market.paymentToken === "PDX" ? "PDX" : "BNB"
+    const formattedLiquidity = market.totalLiquidity ? `${parseFloat(market.totalLiquidity).toFixed(2)} ${tokenSymbol}` : 'N/A'
+    
+    return {
+      tokenSymbol,
+      formattedLiquidity,
+      resolutionDate: new Date(market.resolutionDate)
+    }
+  }, [market])
+
+  // Loading states
   if (marketsLoading && !market) {
     return (
       <main className="min-h-screen bg-background relative overflow-hidden">
@@ -316,7 +408,6 @@ export default function MarketPage() {
     )
   }
 
-  // Loading / error / not found UI
   if (isLoading) {
     return (
       <main className="min-h-screen bg-background relative overflow-hidden">
@@ -428,13 +519,13 @@ export default function MarketPage() {
     )
   }
 
-  // Get token symbol and format liquidity
-  const tokenSymbol = market.paymentToken === "PDX" ? "PDX" : "BNB"
-  const formattedLiquidity = market.totalLiquidity ? `${parseFloat(market.totalLiquidity).toFixed(2)} ${tokenSymbol}` : 'N/A'
+  const { tokenSymbol, formattedLiquidity } = memoizedMarketData || {
+    tokenSymbol: "BNB",
+    formattedLiquidity: "N/A"
+  }
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
-      {/* Light Rays Background */}
       <div className="fixed inset-0 z-0">
         <LightRays
           raysOrigin="top-center"
@@ -449,12 +540,10 @@ export default function MarketPage() {
         />
       </div>
 
-      {/* Content overlay */}
       <div className="relative z-10 bg-black/80">
         <Header />
 
         <div className="max-w-6xl mx-auto px-4 py-8">
-          {/* Back */}
           <div className="mb-4 flex items-center justify-between gap-4">
             <Link href="/">
               <Button variant="ghost" className="gap-2 backdrop-blur-sm bg-card/80">
@@ -463,7 +552,6 @@ export default function MarketPage() {
               </Button>
             </Link>
 
-            {/* Summary on wide screens */}
             <div className="hidden sm:flex items-center gap-4 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/30 backdrop-blur-sm">
                 <Volume2 className="w-4 h-4" /> {formatVolume(market.volume)}
@@ -471,12 +559,10 @@ export default function MarketPage() {
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/30 backdrop-blur-sm">
                 <TrendingUp className="w-4 h-4" /> {market.daysLeft}d left
               </span>
-              {/* Payment token badge */}
               {getPaymentTokenBadge(market.paymentToken)}
             </div>
           </div>
 
-          {/* Connection status */}
           {!isContractReady && (
             <div className="mb-6 p-3 bg-yellow-950/30 border border-yellow-600/50 rounded-lg backdrop-blur-sm text-yellow-400">
               <p className="text-sm">
@@ -486,7 +572,6 @@ export default function MarketPage() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main column */}
             <div className="lg:col-span-2 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -510,7 +595,6 @@ export default function MarketPage() {
                 {market.description}
               </p>
 
-              {/* Creator info */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-sm text-muted-foreground backdrop-blur-sm bg-card/80 p-4 rounded-lg">
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 flex-shrink-0" />
@@ -522,12 +606,10 @@ export default function MarketPage() {
                 </div>
               </div>
 
-              {/* Chart */}
               <div className="w-full bg-card rounded-lg p-4 backdrop-blur-sm">
                 <PriceChart data={chartData} isLoading={isChartLoading} />
               </div>
 
-              {/* Stats grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card className="p-4 backdrop-blur-sm bg-card/80">
                   <div className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
@@ -555,20 +637,17 @@ export default function MarketPage() {
               </div>
             </div>
 
-            {/* Sidebar / trade panel */}
             <div className="lg:col-span-1">
               <Card className="p-6 sticky top-6 space-y-6 backdrop-blur-sm bg-card/80">
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-semibold">Current Odds</h2>
-                    {/* Show token indicator */}
                     <div className="text-xs">
                       {getPaymentTokenBadge(market.paymentToken)}
                     </div>
                   </div>
                 </div>
 
-                {/* Responsive odds */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     onClick={() => handleOpenModal("YES")}
@@ -627,7 +706,6 @@ export default function MarketPage() {
 
         <Footer />
 
-        {/* Trade Modal - Pass payment token */}
         {showModal && market.isActive && (
           <TradeModal 
             market={market} 
