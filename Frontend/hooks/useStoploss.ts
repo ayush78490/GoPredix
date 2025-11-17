@@ -5,7 +5,7 @@ import { usePredictionMarketBNB } from './use-predection-market'
 import { usePredictionMarketPDX } from './use-prediction-market-pdx'
 
 // Types
-interface OrderInfo {
+export interface OrderInfo {
   orderId: string
   user: string
   marketId: string
