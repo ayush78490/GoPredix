@@ -348,50 +348,63 @@ export default function TradeModal({
   }
 
   const executePDXTrade = async () => {
-    const marketId = validateMarketId(market?.id)
-    if (!pdxHook?.buyYesWithPDX || !pdxHook?.buyNoWithPDX) {
-      throw new Error("PDX trade functions not available")
-    }
-    if (!signer || !account) throw new Error("Wallet not connected")
-    if (!expectedOut || parseFloat(expectedOut) <= 0) {
-      throw new Error("Invalid expected payout")
-    }
-
-    // ✅ Use the displayed expectedOut (what user saw)
-    const userExpectedOut = expectedOut
-
-    // ✅ Apply Python formula: min_tokens = amount_out * (1 - (slippage / 100))
-    const minOut = calculateMinimumOutput(userExpectedOut, slippage)
-    
-    // Validate the calculation
-    const isValid = validateSlippageCalculation(userExpectedOut, minOut, slippage)
-    if (!isValid) {
-      throw new Error("Slippage calculation error. Please try again.")
-    }
-
-    // Ensure sufficient balance
-    const pdxAmountWei = ethers.parseEther(amount)
-    await ensureSufficientPDXBalance(pdxAmountWei)
-
-    console.log(`📤 Executing PDX trade:`, {
-      marketId,
-      outcome,
-      amount,
-      userExpectedOut,
-      slippageTolerance: `${slippage}%`,
-      minOut,
-      minOutFormatted: parseFloat(minOut).toFixed(6),
-      formula: `minOut = ${userExpectedOut} * (1 - ${slippage/100}) = ${minOut}`,
-      validationPassed: isValid
-    })
-
-    // Execute trade with validated minimum
-    if (outcome === "YES") {
-      return await pdxHook.buyYesWithPDX(marketId, amount, minOut)
-    } else {
-      return await pdxHook.buyNoWithPDX(marketId, amount, minOut)
-    }
+  const marketId = validateMarketId(market?.id)
+  if (!pdxHook?.buyYesWithPDX || !pdxHook?.buyNoWithPDX) {
+    throw new Error("PDX trade functions not available")
   }
+  if (!signer || !account) throw new Error("Wallet not connected")
+
+  // Ensure sufficient balance
+  const pdxAmountWei = ethers.parseEther(amount)
+  await ensureSufficientPDXBalance(pdxAmountWei)
+
+  // ✅ FIX: Get FRESH prices right before transaction
+  console.log("🔄 Refreshing prices before transaction...")
+  let freshResult
+  try {
+    if (outcome === "YES") {
+      freshResult = await pdxHook.getBuyYesMultiplier(marketId, amount)
+    } else {
+      freshResult = await pdxHook.getBuyNoMultiplier(marketId, amount)
+    }
+  } catch (err) {
+    console.error("❌ Failed to get fresh prices:", err)
+    throw new Error("Failed to recalculate prices. Market may have changed. Try again.")
+  }
+
+  if (!freshResult || parseFloat(freshResult.totalOut || "0") <= 0) {
+    throw new Error("No payout available - market conditions changed. Try again.")
+  }
+
+  // ✅ Use FRESH expectedOut (not the old one from UI)
+  const freshExpectedOut = freshResult.totalOut
+  console.log("📊 Fresh calculation:", {
+    oldExpectedOut: expectedOut,
+    freshExpectedOut,
+    difference: expectedOut ? ((parseFloat(freshExpectedOut) - parseFloat(expectedOut)) / parseFloat(expectedOut) * 100).toFixed(2) + "%" : "N/A"
+  })
+
+  // ✅ Calculate minOut from FRESH prices
+  const minOut = calculateMinimumOutput(freshExpectedOut, slippage)
+  
+  console.log(`📤 Executing PDX trade with FRESH prices:`, {
+    marketId,
+    outcome,
+    amount,
+    freshExpectedOut,  // ✅ Using fresh, not old
+    slippageTolerance: `${slippage}%`,
+    minOut,
+    minOutFormatted: parseFloat(minOut).toFixed(6)
+  })
+
+  // ✅ FIXED: minOut FIRST, then amount (same as BNB)
+  if (outcome === "YES") {
+    return await pdxHook.buyYesWithPDX(marketId, minOut, amount)
+  } else {
+    return await pdxHook.buyNoWithPDX(marketId, minOut, amount)
+  }
+}
+
 
   const executeTrade = async () => {
     console.log(`🚀 Executing ${paymentToken} trade...`)
