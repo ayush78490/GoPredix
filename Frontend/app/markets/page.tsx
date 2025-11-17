@@ -208,8 +208,7 @@ export default function MarketsPage() {
   }
 
   const handleHowItWorks = () => {
-    setShowHowItWorks(true)
-    console.log("How it Works clicked")
+    router.push("/leaderboard")
   }
 
   return (
@@ -232,9 +231,9 @@ export default function MarketsPage() {
       <div className="relative z-10 bg-black/80 min-h-screen">
         <Header />
 
-        <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto px-4 py-8 ">
           {/* Top section */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 mt-[10vh]">
             <div>
               <h1 className="text-4xl font-bold mb-2 text-white">All Markets</h1>
               <div className="text-sm text-muted-foreground space-x-4 flex flex-wrap gap-2">
@@ -242,19 +241,19 @@ export default function MarketsPage() {
                   <span className="font-semibold text-foreground">{stats.totalMarkets}</span> Total
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  🔶 <span className="font-semibold text-yellow-400">{stats.bnbMarketCount}</span> BNB
+                  <span className="font-semibold text-yellow-400">{stats.bnbMarketCount}</span> BNB
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  💜 <span className="font-semibold text-purple-400">{stats.pdxMarketCount}</span> PDX
+                  <span className="font-semibold text-purple-400">{stats.pdxMarketCount}</span> PDX
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  🟢 <span className="font-semibold text-green-400">{stats.activeMarkets}</span> Active
+                  <span className="font-semibold text-green-400">{stats.activeMarkets}</span> Active
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  🔴 <span className="font-semibold text-red-400">{stats.endedMarkets}</span> Ended
+                  <span className="font-semibold text-red-400">{stats.endedMarkets}</span> Ended
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  ✅ <span className="font-semibold text-blue-400">{stats.resolvedMarkets}</span> Resolved
+                  <span className="font-semibold text-blue-400">{stats.resolvedMarkets}</span> Resolved
                 </span>
               </div>
             </div>
@@ -318,58 +317,7 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* Filters Section */}
-          <div className="space-y-4 mb-6">
-            {/* Payment Token Filter */}
-            <div>
-              <div className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-                <Coins className="w-4 h-4" />
-                Payment Token
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {PAYMENT_TOKEN_FILTERS.map((filter) => (
-                  <Button
-                    key={filter.label}
-                    size="sm"
-                    variant={selectedPaymentToken === filter.value ? "default" : "outline"}
-                    onClick={() => setSelectedPaymentToken(filter.value as "BNB" | "PDX" | null)}
-                    className={`backdrop-blur-sm ${
-                      selectedPaymentToken === filter.value 
-                        ? "bg-primary text-black border-primary" 
-                        : "bg-card/80"
-                    }`}
-                  >
-                    {filter.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Status Filter */}
-            <div>
-              <div className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-                <Trophy className="w-4 h-4" />
-                Market Status
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {STATUS_FILTERS.map((filter) => (
-                  <Button
-                    key={filter.label}
-                    size="sm"
-                    variant={selectedStatus === filter.value ? "default" : "outline"}
-                    onClick={() => setSelectedStatus(filter.value as any)}
-                    className={`backdrop-blur-sm ${
-                      selectedStatus === filter.value 
-                        ? "bg-primary text-black border-primary" 
-                        : "bg-card/80"
-                    }`}
-                  >
-                    {filter.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </div>
+          
 
           {/* Categories */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-10">
@@ -409,7 +357,7 @@ export default function MarketsPage() {
                 className="backdrop-blur-sm bg-card/80"
               >
                 <Info className="w-4 h-4 mr-2" />
-                How it Works
+                Leaderboard
               </Button>
             </div>
           </div>
@@ -418,14 +366,14 @@ export default function MarketsPage() {
           {isLoading && (
             <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-3 text-muted-foreground">Loading markets from blockchain...</span>
+              <span className="ml-3 text-muted-foreground">Loading markets from GoPredix...</span>
             </div>
           )}
 
           {/* Error State */}
           {error && !isLoading && (
             <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6 backdrop-blur-sm">
-              <p className="text-destructive font-medium">⚠️ Error loading markets</p>
+              <p className="text-destructive font-medium"> Error loading markets</p>
               <p className="text-destructive/80 text-sm mt-1">{error}</p>
               <Button onClick={refreshMarkets} variant="outline" size="sm" className="mt-2 bg-card/80">
                 Try Again

@@ -11,6 +11,7 @@ import Header from "@/components/header"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { ethers } from "ethers"
+import Image from "next/image"
 
 // Import the ABI
 import FAUCET_ABI from "@/contracts/faucetabi.json"
@@ -391,10 +392,17 @@ export default function FaucetPage() {
 
         <div className="max-w-4xl mx-auto px-4 py-8">
           {/* Header Section */}
-          <div className="text-center mb-12">
+          <div className="text-center mb-12 mt-[10vh]">
             <div className="flex justify-center items-center mb-4">
-              <div className="p-3 bg-primary/20 rounded-full">
-                <Droplets className="w-12 h-12 text-primary" />
+              <div className="p-3 rounded-full">
+                <Image
+                src="/logo.png"
+                alt="Droplets"
+                width={12}
+                height={12}
+                className="w-16 h-16 drop-shadow-[0_0_10px_rgba(0,150,255,0.7)]"
+              />
+
               </div>
             </div>
             <h1 className="text-4xl font-bold text-white mb-4">PDX Faucet</h1>
@@ -409,11 +417,11 @@ export default function FaucetPage() {
                 <strong>Important:</strong> Make sure you're connected to <strong>BNB Testnet</strong>not BNB Mainnet!
                 The faucet will automatically prompt you to switch networks.
                 <strong>Get tBNB</strong>
-                Whitelist your wallet on our DIDCORD to get tBNB
+                Whitelist your wallet on our DISCORD to get tBNB
 
                 <Button variant="outline" size="icon" asChild>
                   <a href="https://discord.gg/predix" target="_blank" rel="noopener noreferrer">
-                    <SiDiscord className="w-4 h-4" />
+                    <SiDiscord className="w-4 h-4 " />
                   </a>
                 </Button>
               </AlertDescription>

@@ -19,9 +19,9 @@ export default function Header() {
   }
 
   return (
-    <header className="w-full py-5">
+    <header className="w-full py-5 fixed top-0 left-0 right-0 z-50 ">
       <div className="max-w-7xl mx-auto px-2">
-        <div className="flex items-center justify-between bg-[#16131e]/10 rounded-full px-6 py-4 shadow-sm border border-[#23222f]">
+        <div className="flex items-center justify-between bg-black/50 rounded-full px-6 py-4 shadow-sm border border-[#23222f]">
           {/* Left: Logo and nav */}
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition">
@@ -36,9 +36,8 @@ export default function Header() {
             <Link href="/">
               <nav className="hidden md:flex items-center gap-2">
                 <Button
-                  variant="ghost"
                   size="sm"
-                  className="text-white mr-8 text-2xl px-0 py-2 rounded-2xl"
+                  className="text-white mr-8 text-2xl px-0 py-2 rounded-2xl bg-transparent "
                 >
                   GOPREDIX
                 </Button>
@@ -50,6 +49,7 @@ export default function Header() {
           <div className="flex items-center gap-3">
             <Link href="/profile">
               <Button
+                variant="ghost"
                 size="sm" 
                 className="text-white bg-transparent hover:text-black rounded-full px-5"
               >

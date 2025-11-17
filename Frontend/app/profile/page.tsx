@@ -47,29 +47,30 @@ export default function ProfilePage() {
   
   const { account, connectWallet, provider } = useWeb3Context()
   
-  // ✅ Get hooks correctly - removed contractAddress and redeem from destructuring
+  // ✅ Get hooks for both BNB and PDX
   const bnbHook = usePredictionMarketBNB()
   const {
-    getUserPositions,
-    getMarketInvestment, 
-    getCurrentMultipliers,
+    getUserPositions: getBNBUserPositions,
+    getMarketInvestment: getBNBMarketInvestment, 
+    getCurrentMultipliers: getBNBCurrentMultipliers,
     getMarket: getMarketBNB
   } = bnbHook
 
-  const bnbContractAddress = FALLBACK_BNB_CONTRACT
-
-  // PDX Hook
-  const { 
+  const pdxHook = usePredictionMarketPDX()
+  const {
+    getUserPositions: getPDXUserPositions,
     getUserInvestment: getPDXUserInvestment,
     getPDXMarket,
+    getCurrentMultipliers: getPDXCurrentMultipliers,
     adapterAddress: pdxAdapterAddress,
     claimPDXRedemption: redeemPDX
-  } = usePredictionMarketPDX()
+  } = pdxHook
+
+  const bnbContractAddress = FALLBACK_BNB_CONTRACT
 
   // ✅ Initialize useStopLossTakeProfit with required paymentToken parameter
   const bnbOrders = useStopLossTakeProfit("BNB", account || undefined)
   const pdxOrders = useStopLossTakeProfit("PDX", account || undefined)
-
 
   // Sell tokens hook
   const { sellTokens, isLoading: isSelling, isSuccess: sellSuccess, error: sellError, txHash: sellTxHash } = useAutoSellTokens()
@@ -101,6 +102,10 @@ export default function ProfilePage() {
 
   // Determine payment token for a market
   const determinePaymentToken = useCallback((market: any): "BNB" | "PDX" => {
+    if (market?.paymentToken) {
+      return market.paymentToken
+    }
+    
     if (market?.isPDXMarket !== undefined) {
       return market.isPDXMarket ? "PDX" : "BNB"
     }
@@ -114,30 +119,25 @@ export default function ProfilePage() {
 
   // ✅ Helper function to fetch and enrich position with market data
   const fetchAndEnrichPosition = useCallback(
-    async (position: any): Promise<EnhancedUserPosition> => {
+    async (position: any, paymentToken: "BNB" | "PDX"): Promise<EnhancedUserPosition> => {
       try {
         let marketData
         
-        // Try BNB first, then PDX
-        if (getMarketBNB) {
+        if (paymentToken === "BNB") {
           try {
             marketData = await getMarketBNB(position.marketId)
           } catch (e) {
-            try {
-              marketData = await getPDXMarket(position.marketId)
-            } catch (e2) {
-              marketData = null
-            }
+            console.error(`Failed to fetch BNB market ${position.marketId}:`, e)
+            marketData = null
           }
         } else {
           try {
             marketData = await getPDXMarket(position.marketId)
           } catch (e) {
+            console.error(`Failed to fetch PDX market ${position.marketId}:`, e)
             marketData = null
           }
         }
-
-        const paymentToken = marketData ? determinePaymentToken(marketData) : "BNB"
 
         return {
           ...position,
@@ -160,7 +160,7 @@ export default function ProfilePage() {
           ...position,
           market: {
             id: position.marketId,
-            paymentToken: "BNB",
+            paymentToken,
             question: "Error loading market",
             category: "",
             status: MarketStatus.Open,
@@ -169,7 +169,7 @@ export default function ProfilePage() {
         }
       }
     },
-    [getMarketBNB, getPDXMarket, determinePaymentToken]
+    [getMarketBNB, getPDXMarket]
   )
 
   // Get sell estimate with proper payment token
@@ -180,7 +180,7 @@ export default function ProfilePage() {
     sellTokenType === 'yes'
   )
 
-  // ✅ Load positions and enrich with market data
+  // ✅ Load positions from both BNB and PDX
   useEffect(() => {
     const loadData = async () => {
       if (!account) return
@@ -188,12 +188,34 @@ export default function ProfilePage() {
       setIsLoading(true)
 
       try {
-        // Get user positions (only has marketId, yesBalance, noBalance)
-        const userPositions = await getUserPositions(account)
-        
+        // Get user positions from both BNB and PDX
+        const [bnbPositions, pdxPositions] = await Promise.all([
+          getBNBUserPositions(account).catch(e => {
+            console.error("Failed to load BNB positions:", e)
+            return []
+          }),
+          getPDXUserPositions(account).catch(e => {
+            console.error("Failed to load PDX positions:", e)
+            return []
+          })
+        ])
+
+        // Transform PDX positions to match BNB format
+        const transformedPDXPositions = pdxPositions.map((pos: any) => ({
+          marketId: pos.market?.id || pos.marketId,
+          yesBalance: pos.yesBalance || "0",
+          noBalance: pos.noBalance || "0"
+        }))
+
+        // Combine all positions
+        const allPositions = [
+          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const })),
+          ...transformedPDXPositions.map((pos: any) => ({ ...pos, paymentToken: "PDX" as const }))
+        ]
+
         // Enrich each position with full market data
         const enrichedPositions = await Promise.all(
-          userPositions.map(fetchAndEnrichPosition)
+          allPositions.map(pos => fetchAndEnrichPosition(pos, pos.paymentToken))
         )
 
         setPositions(enrichedPositions)
@@ -205,7 +227,7 @@ export default function ProfilePage() {
         })
         setMarketTypes(marketTypesMap)
 
-        // Fetch investments
+        // Fetch investments for each position
         const investmentsPromises = enrichedPositions.map(async (pos) => {
           try {
             let investment
@@ -213,7 +235,7 @@ export default function ProfilePage() {
               const pdxInvestment = await getPDXUserInvestment(pos.marketId, account)
               investment = pdxInvestment.totalInvested
             } else {
-              investment = await getMarketInvestment(account, pos.marketId)
+              investment = await getBNBMarketInvestment(account, pos.marketId)
             }
             return { marketId: pos.marketId, investment }
           } catch {
@@ -221,10 +243,16 @@ export default function ProfilePage() {
           }
         })
 
-        // Fetch odds
+        // Fetch odds for each position
         const oddsPromises = enrichedPositions.map(async (pos) => {
           try {
-            return { marketId: pos.marketId, odds: await getCurrentMultipliers(pos.marketId) }
+            let odds
+            if (pos.market.paymentToken === "PDX") {
+              odds = await getPDXCurrentMultipliers(pos.marketId)
+            } else {
+              odds = await getBNBCurrentMultipliers(pos.marketId)
+            }
+            return { marketId: pos.marketId, odds }
           } catch {
             return {
               marketId: pos.marketId,
@@ -256,7 +284,16 @@ export default function ProfilePage() {
     }
 
     loadData()
-  }, [account, getUserPositions, fetchAndEnrichPosition, getMarketInvestment, getCurrentMultipliers, getPDXUserInvestment])
+  }, [
+    account, 
+    getBNBUserPositions, 
+    getPDXUserPositions, 
+    fetchAndEnrichPosition, 
+    getBNBMarketInvestment, 
+    getBNBCurrentMultipliers,
+    getPDXUserInvestment,
+    getPDXCurrentMultipliers
+  ])
 
   // Update payment token when selected market changes
   useEffect(() => {
@@ -382,17 +419,32 @@ export default function ProfilePage() {
         if (paymentToken === "BNB") {
           // Use BNB orders hook for BNB market redemption
           console.log("Redeeming BNB market:", marketId)
-          // Note: Check if bnbOrders has a redeem or claim method
-          // For now, using redeemPDX pattern
-          // await bnbOrders.claimWinnings?.(marketId)
+          // Note: You'll need to implement BNB redemption logic here
+          // await bnbHook.redeemWinnings?.(marketId)
         } else {
           await redeemPDX(marketId)
         }
         
         // Refresh positions
-        const userPositions = await getUserPositions(account)
+        const [bnbPositions, pdxPositions] = await Promise.all([
+          getBNBUserPositions(account).catch(() => []),
+          getPDXUserPositions(account).catch(() => [])
+        ])
+
+        const transformedPDXPositions = pdxPositions.map((pos: any) => ({
+          marketId: pos.market?.id || pos.marketId,
+          yesBalance: pos.yesBalance || "0",
+          noBalance: pos.noBalance || "0",
+          paymentToken: "PDX" as const
+        }))
+
+        const allPositions = [
+          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const })),
+          ...transformedPDXPositions
+        ]
+
         const enrichedPositions = await Promise.all(
-          userPositions.map(fetchAndEnrichPosition)
+          allPositions.map(pos => fetchAndEnrichPosition(pos, pos.paymentToken))
         )
         setPositions(enrichedPositions)
         
@@ -402,7 +454,7 @@ export default function ProfilePage() {
           const pdxInvestment = await getPDXUserInvestment(marketId, account)
           updatedInvestment = pdxInvestment.totalInvested
         } else {
-          updatedInvestment = await getMarketInvestment(account, marketId)
+          updatedInvestment = await getBNBMarketInvestment(account, marketId)
         }
         
         setMarketInvestments(prev => ({
@@ -415,7 +467,7 @@ export default function ProfilePage() {
         setRedeemingMarketId(null)
       }
     },
-    [account, redeemPDX, fetchAndEnrichPosition, getUserPositions, getPDXUserInvestment, getMarketInvestment]
+    [account, redeemPDX, fetchAndEnrichPosition, getBNBUserPositions, getPDXUserPositions, getPDXUserInvestment, getBNBMarketInvestment]
   )
 
   const handleOpenOrderDialog = useCallback((market: EnhancedUserPosition, type: 'stopLoss' | 'takeProfit') => {
@@ -481,9 +533,25 @@ export default function ProfilePage() {
 
       // Refresh positions after successful sale
       if (account) {
-        const userPositions = await getUserPositions(account)
+        const [bnbPositions, pdxPositions] = await Promise.all([
+          getBNBUserPositions(account).catch(() => []),
+          getPDXUserPositions(account).catch(() => [])
+        ])
+
+        const transformedPDXPositions = pdxPositions.map((pos: any) => ({
+          marketId: pos.market?.id || pos.marketId,
+          yesBalance: pos.yesBalance || "0",
+          noBalance: pos.noBalance || "0",
+          paymentToken: "PDX" as const
+        }))
+
+        const allPositions = [
+          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const })),
+          ...transformedPDXPositions
+        ]
+
         const enrichedPositions = await Promise.all(
-          userPositions.map(fetchAndEnrichPosition)
+          allPositions.map(pos => fetchAndEnrichPosition(pos, pos.paymentToken))
         )
         setPositions(enrichedPositions)
       }
@@ -492,7 +560,7 @@ export default function ProfilePage() {
     } catch (error) {
       console.error("Failed to sell tokens:", error)
     }
-  }, [selectedSellMarket, sellTokenAmount, minOut, sellTokenType, sellTokens, account, getUserPositions, fetchAndEnrichPosition])
+  }, [selectedSellMarket, sellTokenAmount, minOut, sellTokenType, sellTokens, account, getBNBUserPositions, getPDXUserPositions, fetchAndEnrichPosition])
 
   const handleSellAmountChange = useCallback((value: string) => {
     setSellTokenAmount(value)
@@ -621,8 +689,8 @@ export default function ProfilePage() {
 
       <div className="relative z-10 bg-black/80 min-h-screen">
         <Header />
-        <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="mb-8">
+        <div className="max-w-6xl mx-auto px-4 py-8 ">
+          <div className="mb-8 mt-[10vh]">
             <h1 className="text-3xl font-bold mb-2">Your Portfolio</h1>
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
               <div>

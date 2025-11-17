@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useParams } from "next/navigation"
 import Header from "@/components/header"
 import PriceChart from "@/components/price-chart"
@@ -15,6 +15,16 @@ import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 import { useWeb3Context } from "@/lib/wallet-context"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
+
+// Helper: Safe BigInt serialization for localStorage
+const safeStringify = (obj: any): string => {
+  return JSON.stringify(obj, (_, value) => {
+    if (typeof value === 'bigint') {
+      return value.toString()
+    }
+    return value
+  })
+}
 
 // Helper: Generate slug from question
 export const generateSlug = (question: string, id: number | string): string => {
@@ -151,11 +161,15 @@ export default function MarketPage() {
 
   const [market, setMarket] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
   const [outcome, setOutcome] = useState<"YES" | "NO" | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [chartData, setChartData] = useState<any[]>([])
   const [isChartLoading, setIsChartLoading] = useState(true)
+
+  // Use ref to track if market was found to prevent further searches
+  const marketFoundRef = useRef(false)
+  const searchAttemptedRef = useRef(false)
 
   const { markets: allMarkets, isLoading: marketsLoading, getAllMarkets, isContractReady } = useAllMarkets()
   
@@ -166,15 +180,50 @@ export default function MarketPage() {
   const bnbHook = usePredictionMarketBNB()
   const pdxHook = usePredictionMarketPDX()
 
+  // Safe user investment fetch with error handling
+  const safeGetUserInvestment = useCallback(async (marketId: number, account: string) => {
+    try {
+      // Only fetch user investment if we have an account and valid market ID
+      if (!account || marketId < 0) {
+        return {
+          totalInvested: "0",
+          yesBalance: "0",
+          noBalance: "0"
+        }
+      }
+      
+      const investment = await pdxHook.getUserInvestment(marketId, account)
+      return investment || {
+        totalInvested: "0",
+        yesBalance: "0",
+        noBalance: "0"
+      }
+    } catch (error) {
+      console.warn("⚠️ Could not fetch user investment:", error)
+      return {
+        totalInvested: "0",
+        yesBalance: "0",
+        noBalance: "0"
+      }
+    }
+  }, [pdxHook])
+
   // Load market data with proper payment token detection
   const loadMarketData = useCallback(async () => {
+    // If market was already found, don't search again
+    if (marketFoundRef.current) {
+      console.log("✅ Market already found, skipping search")
+      return
+    }
+
     if (!marketSlug) {
       setIsLoading(false)
       return
     }
 
+    // Mark that we're attempting a search
+    searchAttemptedRef.current = true
     setIsLoading(true)
-    setError(null)
 
     try {
       let marketsToSearch = allMarkets
@@ -182,14 +231,19 @@ export default function MarketPage() {
       // Fetch markets if not already loaded
       if (allMarkets.length === 0 && !marketsLoading && isContractReady) {
         console.log("📋 No markets in cache, fetching from blockchain...")
-        marketsToSearch = await getAllMarkets()
+        try {
+          marketsToSearch = await getAllMarkets()
+        } catch (fetchError) {
+          console.warn("⚠️ Could not fetch markets, using empty array:", fetchError)
+          marketsToSearch = []
+        }
       }
 
       let foundMarket: any = null
       const extractedId = extractIdFromSlug(marketSlug)
 
       console.log(`🔍 Looking for market with slug: "${marketSlug}", extracted ID: ${extractedId}`)
-      console.log(`📊 Available markets:`, marketsToSearch.map((m: any) => ({ id: m.id, question: m.question?.substring(0, 30) })))
+      console.log(`📊 Available markets:`, marketsToSearch.map((m: any) => ({ id: m.id, slug: generateSlug(m.question, m.id) })))
 
       // Strategy 1: Try direct ID match first (handles URLs like /markets/0, /markets/1)
       if (extractedId !== null && extractedId >= 0) {
@@ -218,15 +272,16 @@ export default function MarketPage() {
         }
       }
 
-      // Strategy 3: Search by full slug match
+      // Strategy 3: Search by slug match (improved logic)
       if (!foundMarket) {
         for (let i = 0; i < marketsToSearch.length; i++) {
           const marketData = marketsToSearch[i]
           const marketId = typeof marketData.id === 'string' ? parseInt(marketData.id) : Number(marketData.id)
           const formatted = convertToFrontendMarket(marketData, marketId)
           
-          if (formatted.slug === marketSlug) {
-            console.log(`✅ Found market by slug: ${marketSlug}`)
+          // Check both exact slug match and ID match from slug
+          if (formatted.slug === marketSlug || formatted.id === marketSlug) {
+            console.log(`✅ Found market by slug match: ${marketSlug}`)
             foundMarket = formatted
             break
           }
@@ -234,6 +289,9 @@ export default function MarketPage() {
       }
 
       if (foundMarket) {
+        // ✅ CRITICAL: Mark that market was found to prevent future searches
+        marketFoundRef.current = true
+        
         // ✅ CRITICAL: Detect payment token and fetch additional data from correct hook
         const paymentToken = foundMarket.paymentToken || "BNB"
         const marketId = typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id)
@@ -245,21 +303,8 @@ export default function MarketPage() {
             console.log("📊 Fetching PDX market details...")
             const pdxMarket = await pdxHook.getPDXMarket(marketId)
             
-            // Try to get user investment, but don't fail if it errors
-            let userInvestment = null
-            try {
-              // Only fetch user investment if we have an account
-              if (account) {
-                userInvestment = await pdxHook.getUserInvestment(marketId, account)
-              }
-            } catch (investmentError) {
-              console.warn("⚠️ Could not fetch user investment:", investmentError)
-              userInvestment = {
-                totalInvested: "0",
-                yesBalance: "0",
-                noBalance: "0"
-              }
-            }
+            // Safe user investment fetch
+            const userInvestment = await safeGetUserInvestment(marketId, account || "")
             
             foundMarket = {
               ...foundMarket,
@@ -283,35 +328,53 @@ export default function MarketPage() {
           }
         } catch (hookError) {
           console.warn("⚠️ Could not fetch additional market data:", hookError)
-          // Continue with basic market data
+          // Continue with basic market data - don't fail the entire load
         }
         
         setMarket(foundMarket)
-        setError(null)
         
         const priceHistory = generatePriceHistory(foundMarket)
         setChartData(priceHistory)
         setIsChartLoading(false)
         
         console.log(`✅ Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
+        setIsLoading(false)
+        return;
+        
       } else {
-        setError(`Market not found. Slug: ${marketSlug}`)
-        console.warn(`❌ Market not found with slug: ${marketSlug}`)
+        // If market not found, retry after a delay but with limits
+        console.warn(`❌ Market not found with slug: ${marketSlug}, retrying... (attempt ${retryCount + 1})`)
+        
+        // Stop retrying after 5 attempts to prevent infinite loops
+        if (retryCount < 5) {
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1)
+          }, 2000) // Retry after 2 seconds
+        } else {
+          console.error(`❌ Giving up after ${retryCount} attempts for market: ${marketSlug}`)
+          setIsLoading(false)
+        }
       }
     } catch (err: any) {
       console.error("❌ Failed to load market:", err)
-      setError(err?.message ?? "Failed to load market")
-    } finally {
-      setIsLoading(false)
-    }
-  }, [marketSlug, allMarkets.length, marketsLoading, isContractReady, bnbHook.isContractReady, pdxHook.isContractReady])
+      // Retry on error after a delay but with limits
+      if (retryCount < 5) {
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1)
+        }, 2000) // Retry after 2 seconds
+      } else {
+        console.error(`❌ Giving up after ${retryCount} attempts due to errors`)
+        setIsLoading(false)
+      }
+    } 
+  }, [marketSlug, allMarkets, marketsLoading, isContractReady, bnbHook.isContractReady, pdxHook.isContractReady, account, safeGetUserInvestment, retryCount, getAllMarkets])
 
   // Execute load on mount and when dependencies change
   useEffect(() => {
     let cancelled = false
 
     const executeLoad = async () => {
-      if (!cancelled) {
+      if (!cancelled && !marketFoundRef.current) {
         await loadMarketData()
       }
     }
@@ -323,6 +386,22 @@ export default function MarketPage() {
     }
   }, [loadMarketData])
 
+  // Auto-retry when retryCount changes - but only if market not found
+  useEffect(() => {
+    if (retryCount > 0 && retryCount <= 5 && !marketFoundRef.current) {
+      console.log(`🔄 Retry attempt ${retryCount} for market: ${marketSlug}`)
+      loadMarketData()
+    }
+  }, [retryCount, marketSlug, loadMarketData])
+
+  // Also reload when allMarkets updates - but only if market not found
+  useEffect(() => {
+    if (allMarkets.length > 0 && !market && isLoading && !marketFoundRef.current) {
+      console.log("🔄 Markets data updated, retrying search...")
+      loadMarketData()
+    }
+  }, [allMarkets.length, market, isLoading, loadMarketData])
+
   // Update chart when market changes
   useEffect(() => {
     if (market && !isChartLoading) {
@@ -330,6 +409,15 @@ export default function MarketPage() {
       setChartData(newChartData)
     }
   }, [market?.yesOdds, market?.id, isChartLoading])
+
+  // Reset market found state when slug changes
+  useEffect(() => {
+    marketFoundRef.current = false
+    searchAttemptedRef.current = false
+    setMarket(null)
+    setIsLoading(true)
+    setRetryCount(0)
+  }, [marketSlug])
 
   // UI helpers
   const formatVolume = (vol: number) => {
@@ -378,10 +466,10 @@ export default function MarketPage() {
     }
   }, [market])
 
-  // Loading states
-  if (marketsLoading && !market) {
+  // Show loading spinner only when loading and no market found
+  if (isLoading && !market) {
     return (
-      <main className="min-h-screen bg-background relative overflow-hidden">
+      <main className="min-h-screen bg-black/80 relative overflow-hidden">
         <div className="fixed inset-0 z-0">
           <LightRays
             raysOrigin="top-center"
@@ -398,9 +486,31 @@ export default function MarketPage() {
         <div className="relative z-10">
           <Header />
           <div className="max-w-6xl mx-auto px-4 py-12">
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-4">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <p className="text-muted-foreground">Loading markets from blockchain...</p>
+              <p className="text-muted-foreground text-center">
+                Loading market details...
+                {retryCount > 0 && (
+                  <span className="block text-sm text-yellow-400 mt-1">
+                    Attempt {retryCount} of 5...
+                  </span>
+                )}
+              </p>
+              <Button 
+                onClick={() => setRetryCount(prev => prev + 1)} 
+                variant="outline" 
+                className="mt-2 backdrop-blur-sm bg-card/80"
+                disabled={retryCount >= 5}
+              >
+                {retryCount >= 5 ? 'Max Retries Reached' : 'Retry Now'}
+              </Button>
+              {retryCount >= 5 && (
+                <Link href="/markets">
+                  <Button variant="ghost" className="mt-2">
+                    Back to Markets
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -408,38 +518,10 @@ export default function MarketPage() {
     )
   }
 
-  if (isLoading) {
+  // Show not found state when not loading but no market
+  if (!isLoading && !market) {
     return (
-      <main className="min-h-screen bg-background relative overflow-hidden">
-        <div className="fixed inset-0 z-0">
-          <LightRays
-            raysOrigin="top-center"
-            raysColor="#6366f1"
-            raysSpeed={1.5}
-            lightSpread={0.8}
-            rayLength={1.2}
-            followMouse={true}
-            mouseInfluence={0.1}
-            noiseAmount={0.1}
-            distortion={0.05}
-          />
-        </div>
-        <div className="relative z-10">
-          <Header />
-          <div className="max-w-6xl mx-auto px-4 py-12">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <p className="text-muted-foreground">Loading market details...</p>
-            </div>
-          </div>
-        </div>
-      </main>
-    )
-  }
-
-  if (error && !market) {
-    return (
-      <main className="min-h-screen bg-background relative overflow-hidden">
+      <main className="min-h-screen bg-black/80 relative overflow-hidden">
         <div className="fixed inset-0 z-0">
           <LightRays
             raysOrigin="top-center"
@@ -456,46 +538,7 @@ export default function MarketPage() {
         <div className="relative z-10">
           <Header />
           <div className="max-w-6xl mx-auto px-4 py-8">
-            <Link href="/">
-              <Button variant="ghost" className="mb-6 -ml-4 gap-2 text-muted-foreground hover:text-foreground backdrop-blur-sm bg-card/80">
-                <ArrowLeft className="w-4 h-4" />
-                Back to Markets
-              </Button>
-            </Link>
-
-            <div className="bg-destructive/10 border border-destructive rounded-lg p-6 text-center backdrop-blur-sm bg-card/80">
-              <p className="text-destructive font-medium">❌ Error loading market</p>
-              <p className="text-destructive/80 text-sm mt-1">{error}</p>
-              <Button onClick={() => window.location.reload()} variant="outline" className="mt-4 backdrop-blur-sm bg-card/80">
-                Try Again
-              </Button>
-            </div>
-          </div>
-        </div>
-      </main>
-    )
-  }
-
-  if (!market) {
-    return (
-      <main className="min-h-screen bg-background relative overflow-hidden">
-        <div className="fixed inset-0 z-0">
-          <LightRays
-            raysOrigin="top-center"
-            raysColor="#6366f1"
-            raysSpeed={1.5}
-            lightSpread={0.8}
-            rayLength={1.2}
-            followMouse={true}
-            mouseInfluence={0.1}
-            noiseAmount={0.1}
-            distortion={0.05}
-          />
-        </div>
-        <div className="relative z-10">
-          <Header />
-          <div className="max-w-6xl mx-auto px-4 py-8">
-            <Link href="/">
+            <Link href="/markets">
               <Button variant="ghost" className="mb-6 -ml-4 gap-2 text-muted-foreground hover:text-foreground backdrop-blur-sm bg-card/80">
                 <ArrowLeft className="w-4 h-4" />
                 Back to Markets
@@ -503,15 +546,25 @@ export default function MarketPage() {
             </Link>
 
             <div className="text-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
-              <p className="text-muted-foreground text-lg">Market not found.</p>
+              <p className="text-muted-foreground text-lg"><strong> RPC is bit down.</strong></p>
               <p className="text-sm text-muted-foreground mt-2">
-                Slug: {marketSlug}
+                For trade on this market. Visit after some time
               </p>
-              <Link href="/">
-                <Button variant="outline" className="mt-4 bg-transparent backdrop-blur-sm bg-card/80">
-                  Back to All Markets
+              {/* <div className="mt-4 flex gap-2 justify-center">
+                <Button onClick={() => {
+                  marketFoundRef.current = false
+                  searchAttemptedRef.current = false
+                  setRetryCount(0)
+                  loadMarketData()
+                }} variant="outline">
+                  Try Again
                 </Button>
-              </Link>
+                <Link href="/">
+                  <Button variant="ghost">
+                    Back to All Markets
+                  </Button>
+                </Link>
+              </div> */}
             </div>
           </div>
         </div>
@@ -545,7 +598,7 @@ export default function MarketPage() {
 
         <div className="max-w-6xl mx-auto px-4 py-8">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <Link href="/">
+            <Link href="/markets">
               <Button variant="ghost" className="gap-2 backdrop-blur-sm bg-card/80">
                 <ArrowLeft className="w-4 h-4" />
                 Back to Markets
