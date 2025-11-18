@@ -6,4 +6,3 @@ export type { IPDX } from "./IPDX";
 export type { IPredictionMarket } from "./IPredictionMarket";
 export type { OutcomeToken } from "./OutcomeToken";
 export type { TestnetDualTokenAdapter } from "./TestnetDualTokenAdapter";
-export type { TestnetDualTokenAdapter_MAIN } from "./TestnetDualTokenAdapter_MAIN";
