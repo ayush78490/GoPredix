@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { ethers } from "ethers"
 import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarketBNB, MarketStatus, Outcome } from "@/hooks/use-predection-market"
-import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 import { useStopLossTakeProfit } from "@/hooks/useStoploss"
 import { useAutoSellTokens, useSellEstimate } from "@/hooks/useSellToken"
 import { OrderInfo } from "@/hooks/useStoploss"
@@ -38,8 +37,79 @@ interface EnhancedUserPosition {
     noPool?: bigint
     yesPrice?: number
     noPrice?: number
-    paymentToken: "BNB" | "PDX"
+    paymentToken: "BNB"
     [key: string]: any
+  }
+}
+
+// Market status function
+const getMarketStatus = (market: any) => {
+  const nowInSeconds = Math.floor(Date.now() / 1000)
+  const endTimeInSeconds = Number(market.endTime)
+  const contractStatus = Number(market.status)
+  
+  // Resolved
+  if (contractStatus === 3) {
+    return {
+      isActive: false,
+      isEnded: true,
+      isResolved: true,
+      statusLabel: "Resolved",
+      statusColor: "green"
+    }
+  }
+  
+  // Disputed
+  if (contractStatus === 4) {
+    return {
+      isActive: false,
+      isEnded: true,
+      isResolved: false,
+      statusLabel: "Disputed",
+      statusColor: "orange"
+    }
+  }
+  
+  // Resolution requested
+  if (contractStatus === 2) {
+    return {
+      isActive: false,
+      isEnded: true,
+      isResolved: false,
+      statusLabel: "Resolution Requested",
+      statusColor: "yellow"
+    }
+  }
+  
+  // Time expired
+  if (nowInSeconds >= endTimeInSeconds) {
+    return {
+      isActive: false,
+      isEnded: true,
+      isResolved: false,
+      statusLabel: "Ended",
+      statusColor: "red"
+    }
+  }
+  
+  // Active
+  if (contractStatus === 0) {
+    return {
+      isActive: true,
+      isEnded: false,
+      isResolved: false,
+      statusLabel: "Active",
+      statusColor: "green"
+    }
+  }
+  
+  // Closed
+  return {
+    isActive: false,
+    isEnded: true,
+    isResolved: false,
+    statusLabel: "Closed",
+    statusColor: "red"
   }
 }
 
@@ -47,7 +117,7 @@ export default function ProfilePage() {
   
   const { account, connectWallet, provider } = useWeb3Context()
   
-  // ✅ Get hooks for both BNB and PDX
+  // ✅ Get hooks for BNB only
   const bnbHook = usePredictionMarketBNB()
   const {
     getUserPositions: getBNBUserPositions,
@@ -56,21 +126,10 @@ export default function ProfilePage() {
     getMarket: getMarketBNB
   } = bnbHook
 
-  const pdxHook = usePredictionMarketPDX()
-  const {
-    getUserPositions: getPDXUserPositions,
-    getUserInvestment: getPDXUserInvestment,
-    getPDXMarket,
-    getCurrentMultipliers: getPDXCurrentMultipliers,
-    adapterAddress: pdxAdapterAddress,
-    claimPDXRedemption: redeemPDX
-  } = pdxHook
-
   const bnbContractAddress = FALLBACK_BNB_CONTRACT
 
-  // ✅ Initialize useStopLossTakeProfit with required paymentToken parameter
+  // ✅ Initialize useStopLossTakeProfit with BNB payment token
   const bnbOrders = useStopLossTakeProfit("BNB", account || undefined)
-  const pdxOrders = useStopLossTakeProfit("PDX", account || undefined)
 
   // Sell tokens hook
   const { sellTokens, isLoading: isSelling, isSuccess: sellSuccess, error: sellError, txHash: sellTxHash } = useAutoSellTokens()
@@ -81,7 +140,6 @@ export default function ProfilePage() {
   const [marketOdds, setMarketOdds] = useState<{ [key: string]: { yesMultiplier: number, noMultiplier: number, yesPrice: number, noPrice: number } }>({})
   const [isLoading, setIsLoading] = useState(false)
   const [redeemingMarketId, setRedeemingMarketId] = useState<string | null>(null)
-  const [marketTypes, setMarketTypes] = useState<{ [key: string]: "BNB" | "PDX" }>({})
 
   // Order Dialog State
   const [orderDialogOpen, setOrderDialogOpen] = useState(false)
@@ -98,45 +156,19 @@ export default function ProfilePage() {
   const [sellTokenAmount, setSellTokenAmount] = useState('')
   const [minOut, setMinOut] = useState('')
   const [estimateAmount, setEstimateAmount] = useState('')
-  const [paymentToken, setPaymentToken] = useState<"BNB" | "PDX">("BNB")
-
-  // Determine payment token for a market
-  const determinePaymentToken = useCallback((market: any): "BNB" | "PDX" => {
-    if (market?.paymentToken) {
-      return market.paymentToken
-    }
-    
-    if (market?.isPDXMarket !== undefined) {
-      return market.isPDXMarket ? "PDX" : "BNB"
-    }
-    
-    if (market?.id && market.id >= 1000) {
-      return "PDX"
-    }
-    
-    return "BNB"
-  }, [])
+  const [paymentToken] = useState<"BNB">("BNB")
 
   // ✅ Helper function to fetch and enrich position with market data
   const fetchAndEnrichPosition = useCallback(
-    async (position: any, paymentToken: "BNB" | "PDX"): Promise<EnhancedUserPosition> => {
+    async (position: any): Promise<EnhancedUserPosition> => {
       try {
         let marketData
         
-        if (paymentToken === "BNB") {
-          try {
-            marketData = await getMarketBNB(position.marketId)
-          } catch (e) {
-            console.error(`Failed to fetch BNB market ${position.marketId}:`, e)
-            marketData = null
-          }
-        } else {
-          try {
-            marketData = await getPDXMarket(position.marketId)
-          } catch (e) {
-            console.error(`Failed to fetch PDX market ${position.marketId}:`, e)
-            marketData = null
-          }
+        try {
+          marketData = await getMarketBNB(position.marketId)
+        } catch (e) {
+          console.error(`Failed to fetch BNB market ${position.marketId}:`, e)
+          marketData = null
         }
 
         return {
@@ -144,10 +176,10 @@ export default function ProfilePage() {
           market: marketData ? {
             ...marketData,
             id: position.marketId,
-            paymentToken
+            paymentToken: "BNB"
           } : {
             id: position.marketId,
-            paymentToken,
+            paymentToken: "BNB",
             question: "Market data unavailable",
             category: "",
             status: MarketStatus.Open,
@@ -160,7 +192,7 @@ export default function ProfilePage() {
           ...position,
           market: {
             id: position.marketId,
-            paymentToken,
+            paymentToken: "BNB",
             question: "Error loading market",
             category: "",
             status: MarketStatus.Open,
@@ -169,18 +201,18 @@ export default function ProfilePage() {
         }
       }
     },
-    [getMarketBNB, getPDXMarket]
+    [getMarketBNB]
   )
 
-  // Get sell estimate with proper payment token
+  // Get sell estimate with BNB payment token
   const { estimate: sellEstimate, isLoading: isEstimating, fetchEstimate } = useSellEstimate(
-    paymentToken,
+    "BNB",
     selectedSellMarket?.marketId || 0,
     estimateAmount,
     sellTokenType === 'yes'
   )
 
-  // ✅ Load positions from both BNB and PDX
+  // ✅ Load positions from BNB only
   useEffect(() => {
     const loadData = async () => {
       if (!account) return
@@ -188,55 +220,28 @@ export default function ProfilePage() {
       setIsLoading(true)
 
       try {
-        // Get user positions from both BNB and PDX
-        const [bnbPositions, pdxPositions] = await Promise.all([
-          getBNBUserPositions(account).catch(e => {
-            console.error("Failed to load BNB positions:", e)
-            return []
-          }),
-          getPDXUserPositions(account).catch(e => {
-            console.error("Failed to load PDX positions:", e)
-            return []
-          })
-        ])
+        // Get user positions from BNB only
+        const bnbPositions = await getBNBUserPositions(account).catch(e => {
+          console.error("Failed to load BNB positions:", e)
+          return []
+        })
 
-        // Transform PDX positions to match BNB format
-        const transformedPDXPositions = pdxPositions.map((pos: any) => ({
-          marketId: pos.market?.id || pos.marketId,
-          yesBalance: pos.yesBalance || "0",
-          noBalance: pos.noBalance || "0"
-        }))
-
-        // Combine all positions
+        // Combine all positions (only BNB now)
         const allPositions = [
-          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const })),
-          ...transformedPDXPositions.map((pos: any) => ({ ...pos, paymentToken: "PDX" as const }))
+          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const }))
         ]
 
         // Enrich each position with full market data
         const enrichedPositions = await Promise.all(
-          allPositions.map(pos => fetchAndEnrichPosition(pos, pos.paymentToken))
+          allPositions.map(pos => fetchAndEnrichPosition(pos))
         )
 
         setPositions(enrichedPositions)
 
-        // Store market types for reference
-        const marketTypesMap: { [key: string]: "BNB" | "PDX" } = {}
-        enrichedPositions.forEach(pos => {
-          marketTypesMap[pos.marketId] = pos.market.paymentToken
-        })
-        setMarketTypes(marketTypesMap)
-
         // Fetch investments for each position
         const investmentsPromises = enrichedPositions.map(async (pos) => {
           try {
-            let investment
-            if (pos.market.paymentToken === "PDX") {
-              const pdxInvestment = await getPDXUserInvestment(pos.marketId, account)
-              investment = pdxInvestment.totalInvested
-            } else {
-              investment = await getBNBMarketInvestment(account, pos.marketId)
-            }
+            const investment = await getBNBMarketInvestment(account, pos.marketId)
             return { marketId: pos.marketId, investment }
           } catch {
             return { marketId: pos.marketId, investment: "0" }
@@ -246,12 +251,7 @@ export default function ProfilePage() {
         // Fetch odds for each position
         const oddsPromises = enrichedPositions.map(async (pos) => {
           try {
-            let odds
-            if (pos.market.paymentToken === "PDX") {
-              odds = await getPDXCurrentMultipliers(pos.marketId)
-            } else {
-              odds = await getBNBCurrentMultipliers(pos.marketId)
-            }
+            const odds = await getBNBCurrentMultipliers(pos.marketId)
             return { marketId: pos.marketId, odds }
           } catch {
             return {
@@ -287,27 +287,17 @@ export default function ProfilePage() {
   }, [
     account, 
     getBNBUserPositions, 
-    getPDXUserPositions, 
     fetchAndEnrichPosition, 
     getBNBMarketInvestment, 
-    getBNBCurrentMultipliers,
-    getPDXUserInvestment,
-    getPDXCurrentMultipliers
+    getBNBCurrentMultipliers
   ])
 
-  // Update payment token when selected market changes
-  useEffect(() => {
-    if (selectedSellMarket) {
-      setPaymentToken(selectedSellMarket.market.paymentToken)
-    }
-  }, [selectedSellMarket])
-
-  // Fetch estimate when amount or payment token changes
+  // Fetch estimate when amount changes
   useEffect(() => {
     if (estimateAmount && parseFloat(estimateAmount) > 0) {
       fetchEstimate()
     }
-  }, [estimateAmount, paymentToken, fetchEstimate])
+  }, [estimateAmount, fetchEstimate])
 
   // Update minOut with 2% slippage when estimate is available
   useEffect(() => {
@@ -315,147 +305,100 @@ export default function ProfilePage() {
       const slippage = 0.98
       let minOutValue = "0"
       
-      if (paymentToken === "BNB" && sellEstimate.bnbOut) {
+      if (sellEstimate.bnbOut) {
         minOutValue = (parseFloat(sellEstimate.bnbOut) * slippage).toFixed(6)
-      } else if (paymentToken === "PDX" && sellEstimate.pdxOut) {
-        minOutValue = (parseFloat(sellEstimate.pdxOut) * slippage).toFixed(6)
       } else if (sellEstimate.tokenOut) {
         minOutValue = (parseFloat(sellEstimate.tokenOut) * slippage).toFixed(6)
       }
       
       setMinOut(minOutValue)
     }
-  }, [sellEstimate, paymentToken])
+  }, [sellEstimate])
 
-  const isMarketActive = useCallback((market: any): boolean => {
-    if (market.isActive !== undefined) {
-      return market.isActive
-    }
-    
-    const now = Math.floor(Date.now() / 1000)
-    const isOpenStatus = market.status === MarketStatus.Open
-    const hasNotEnded = market.endTime > now
-    
-    return isOpenStatus && hasNotEnded
-  }, [])
-
+  // Updated market status function using the new getMarketStatus
   const getMarketStatusInfo = useCallback((market: any) => {
-    const active = isMarketActive(market)
-    const status = market.status as MarketStatus
-    const now = Math.floor(Date.now() / 1000)
+    const status = getMarketStatus(market)
     
-    if (!active) {
-      return {
-        label: "Inactive",
-        color: "bg-gray-500 text-white",
-        description: "Market is not active for trading"
-      }
-    }
-
-    const statusConfig: Record<MarketStatus, { label: string; color: string; description: string }> = {
-      [MarketStatus.Open]: { 
+    const statusConfig: Record<string, { label: string; color: string; description: string }> = {
+      "Active": { 
         label: "Active", 
         color: "bg-green-500 text-white",
-        description: market.endTime > now ? "Open for trading" : "Trading ended, awaiting resolution"
+        description: "Open for trading"
       },
-      [MarketStatus.Closed]: { 
+      "Closed": { 
         label: "Closed", 
         color: "bg-yellow-500 text-white",
         description: "Trading closed, pending resolution"
       },
-      [MarketStatus.ResolutionRequested]: { 
+      "Resolution Requested": { 
         label: "Resolving", 
         color: "bg-blue-500 text-white",
         description: "AI resolution in progress"
       },
-      [MarketStatus.Resolved]: { 
+      "Resolved": { 
         label: "Resolved", 
         color: "bg-purple-500 text-white",
         description: "Market has been resolved"
       },
-      [MarketStatus.Disputed]: { 
+      "Disputed": { 
         label: "Disputed", 
         color: "bg-red-500 text-white",
         description: "Resolution under dispute"
       },
+      "Ended": {
+        label: "Ended",
+        color: "bg-red-500 text-white",
+        description: "Trading period has ended"
+      }
     }
     
-    return statusConfig[status] || { 
-      label: "Unknown", 
+    return statusConfig[status.statusLabel] || { 
+      label: status.statusLabel, 
       color: "bg-gray-500 text-white",
-      description: "Status unknown"
+      description: `Market is ${status.statusLabel.toLowerCase()}`
     }
-  }, [isMarketActive])
+  }, [])
 
   // ✅ FIX: Get active orders for a specific market with proper typing
   const getActiveOrdersForMarket = useCallback((marketId: number): OrderInfo[] => {
     try {
-      const position = positions.find(p => p.marketId === marketId)
-      if (!position || !position.market) return []
-      
-      const tokenType = position.market.paymentToken
-      const orderHook = tokenType === "BNB" ? bnbOrders : pdxOrders
-      
-      if (!orderHook.activeOrders || orderHook.activeOrders.length === 0) {
+      if (!bnbOrders.activeOrders || bnbOrders.activeOrders.length === 0) {
         return []
       }
       
-      return orderHook.activeOrders.filter(
+      return bnbOrders.activeOrders.filter(
         order => parseInt(order.marketId) === marketId
       )
     } catch (error) {
       console.error("Error getting active orders for market:", error)
       return []
     }
-  }, [positions, bnbOrders, pdxOrders])
+  }, [bnbOrders.activeOrders])
 
-  // ✅ Updated redeem function to use correct hook instance based on payment token
+  // ✅ Updated redeem function for BNB only
   const handleRedeem = useCallback(
-    async (marketId: number, paymentToken: "BNB" | "PDX") => {
+    async (marketId: number) => {
       if (!account) return
       
       setRedeemingMarketId(marketId.toString())
       try {
-        if (paymentToken === "BNB") {
-          // Use BNB orders hook for BNB market redemption
-          console.log("Redeeming BNB market:", marketId)
-          // Note: You'll need to implement BNB redemption logic here
-          // await bnbHook.redeemWinnings?.(marketId)
-        } else {
-          await redeemPDX(marketId)
-        }
+        // Note: You'll need to implement BNB redemption logic here
+        // await bnbHook.redeemWinnings?.(marketId)
+        console.log("Redeeming BNB market:", marketId)
         
         // Refresh positions
-        const [bnbPositions, pdxPositions] = await Promise.all([
-          getBNBUserPositions(account).catch(() => []),
-          getPDXUserPositions(account).catch(() => [])
-        ])
-
-        const transformedPDXPositions = pdxPositions.map((pos: any) => ({
-          marketId: pos.market?.id || pos.marketId,
-          yesBalance: pos.yesBalance || "0",
-          noBalance: pos.noBalance || "0",
-          paymentToken: "PDX" as const
-        }))
-
+        const bnbPositions = await getBNBUserPositions(account).catch(() => [])
         const allPositions = [
-          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const })),
-          ...transformedPDXPositions
+          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const }))
         ]
 
         const enrichedPositions = await Promise.all(
-          allPositions.map(pos => fetchAndEnrichPosition(pos, pos.paymentToken))
+          allPositions.map(pos => fetchAndEnrichPosition(pos))
         )
         setPositions(enrichedPositions)
         
         // Update investment
-        let updatedInvestment
-        if (paymentToken === "PDX") {
-          const pdxInvestment = await getPDXUserInvestment(marketId, account)
-          updatedInvestment = pdxInvestment.totalInvested
-        } else {
-          updatedInvestment = await getBNBMarketInvestment(account, marketId)
-        }
+        const updatedInvestment = await getBNBMarketInvestment(account, marketId)
         
         setMarketInvestments(prev => ({
           ...prev,
@@ -467,7 +410,7 @@ export default function ProfilePage() {
         setRedeemingMarketId(null)
       }
     },
-    [account, redeemPDX, fetchAndEnrichPosition, getBNBUserPositions, getPDXUserPositions, getPDXUserInvestment, getBNBMarketInvestment]
+    [account, fetchAndEnrichPosition, getBNBUserPositions, getBNBMarketInvestment]
   )
 
   const handleOpenOrderDialog = useCallback((market: EnhancedUserPosition, type: 'stopLoss' | 'takeProfit') => {
@@ -478,7 +421,7 @@ export default function ProfilePage() {
     setTriggerPrice('')
   }, [])
 
-  // ✅ FIX: Create order with correct hook based on payment token and correct marketId type
+  // ✅ FIX: Create order with BNB hook only
   const handleCreateOrder = useCallback(async () => {
     if (!selectedMarket || !tokenAmount || !triggerPrice) return
 
@@ -491,23 +434,20 @@ export default function ProfilePage() {
         triggerPrice: parseFloat(triggerPrice)
       }
 
-      // Use correct hook based on payment token
-      const orderHook = selectedMarket.market.paymentToken === "BNB" ? bnbOrders : pdxOrders
-      
       const result = orderType === 'stopLoss'
-        ? await orderHook.createStopLossOrder(params)
-        : await orderHook.createTakeProfitOrder(params)
+        ? await bnbOrders.createStopLossOrder(params)
+        : await bnbOrders.createTakeProfitOrder(params)
 
       if (result?.success || result) {
         setOrderDialogOpen(false)
-        if (orderHook.refreshOrders) {
-          await orderHook.refreshOrders()
+        if (bnbOrders.refreshOrders) {
+          await bnbOrders.refreshOrders()
         }
       }
     } catch (error) {
       console.error("Failed to create order:", error)
     }
-  }, [selectedMarket, tokenAmount, triggerPrice, orderType, tokenType, bnbOrders, pdxOrders])
+  }, [selectedMarket, tokenAmount, triggerPrice, orderType, tokenType, bnbOrders])
 
   const handleOpenSellDialog = useCallback((market: EnhancedUserPosition, type: 'yes' | 'no') => {
     setSelectedSellMarket(market)
@@ -518,7 +458,7 @@ export default function ProfilePage() {
     setEstimateAmount('')
   }, [])
 
-  // ✅ Handle sell tokens with correct parameter names
+  // ✅ Handle sell tokens with BNB only
   const handleSellTokens = useCallback(async () => {
     if (!selectedSellMarket || !sellTokenAmount || !minOut) return
 
@@ -528,30 +468,18 @@ export default function ProfilePage() {
         tokenAmount: sellTokenAmount,
         minTokenOut: minOut,
         isYes: sellTokenType === 'yes',
-        paymentToken: selectedSellMarket.market.paymentToken
+        paymentToken: "BNB"
       })
 
       // Refresh positions after successful sale
       if (account) {
-        const [bnbPositions, pdxPositions] = await Promise.all([
-          getBNBUserPositions(account).catch(() => []),
-          getPDXUserPositions(account).catch(() => [])
-        ])
-
-        const transformedPDXPositions = pdxPositions.map((pos: any) => ({
-          marketId: pos.market?.id || pos.marketId,
-          yesBalance: pos.yesBalance || "0",
-          noBalance: pos.noBalance || "0",
-          paymentToken: "PDX" as const
-        }))
-
+        const bnbPositions = await getBNBUserPositions(account).catch(() => [])
         const allPositions = [
-          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const })),
-          ...transformedPDXPositions
+          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const }))
         ]
 
         const enrichedPositions = await Promise.all(
-          allPositions.map(pos => fetchAndEnrichPosition(pos, pos.paymentToken))
+          allPositions.map(pos => fetchAndEnrichPosition(pos))
         )
         setPositions(enrichedPositions)
       }
@@ -560,7 +488,7 @@ export default function ProfilePage() {
     } catch (error) {
       console.error("Failed to sell tokens:", error)
     }
-  }, [selectedSellMarket, sellTokenAmount, minOut, sellTokenType, sellTokens, account, getBNBUserPositions, getPDXUserPositions, fetchAndEnrichPosition])
+  }, [selectedSellMarket, sellTokenAmount, minOut, sellTokenType, sellTokens, account, getBNBUserPositions, fetchAndEnrichPosition])
 
   const handleSellAmountChange = useCallback((value: string) => {
     setSellTokenAmount(value)
@@ -569,12 +497,9 @@ export default function ProfilePage() {
 
   const totalInvestment = Object.values(marketInvestments).reduce((acc, val) => acc + parseFloat(val || "0"), 0)
   const totalMarkets = positions.length
-  const activeMarkets = positions.filter(pos => isMarketActive(pos.market)).length
-  const resolvedMarkets = positions.filter(pos => pos.market.status === MarketStatus.Resolved).length
-  const inactiveMarkets = positions.filter(pos => !isMarketActive(pos.market)).length
-
-  const bnbMarkets = positions.filter(pos => marketTypes[pos.marketId] === "BNB").length
-  const pdxMarkets = positions.filter(pos => marketTypes[pos.marketId] === "PDX").length
+  const activeMarkets = positions.filter(pos => getMarketStatus(pos.market).isActive).length
+  const resolvedMarkets = positions.filter(pos => getMarketStatus(pos.market).isResolved).length
+  const inactiveMarkets = positions.filter(pos => !getMarketStatus(pos.market).isActive).length
 
   const copyToClipboard = useCallback((text: string) => { 
     navigator.clipboard.writeText(text) 
@@ -593,8 +518,9 @@ export default function ProfilePage() {
 
   const hasWinningTokens = useCallback((position: EnhancedUserPosition): boolean => {
     const market = position.market
+    const marketStatus = getMarketStatus(market)
     
-    if (market.status !== MarketStatus.Resolved) {
+    if (!marketStatus.isResolved) {
       return false
     }
     
@@ -614,8 +540,9 @@ export default function ProfilePage() {
 
   const calculatePotentialWinnings = useCallback((position: EnhancedUserPosition): string => {
     const market = position.market
+    const marketStatus = getMarketStatus(market)
     
-    if (market.status !== MarketStatus.Resolved) {
+    if (!marketStatus.isResolved) {
       return "0"
     }
     
@@ -719,27 +646,6 @@ export default function ProfilePage() {
                       </Button>
                     </div>
                   )}
-                  {pdxAdapterAddress && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg">
-                      <span>PDX Contract: {pdxAdapterAddress.slice(0, 8)}...{pdxAdapterAddress.slice(-6)}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 hover:bg-muted"
-                        onClick={() => copyToClipboard(pdxAdapterAddress)}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 hover:bg-muted"
-                        onClick={() => window.open(getBlockExplorerUrl(pdxAdapterAddress), '_blank')}
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </div>
               <Card className="p-4 bg-primary/5 border-primary/20 backdrop-blur-sm bg-card/80">
@@ -751,7 +657,7 @@ export default function ProfilePage() {
                       {isLoading ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
-                        `${totalInvestment.toFixed(4)} (BNB + PDX)`
+                        `${totalInvestment.toFixed(4)} BNB`
                       )}
                     </p>
                   </div>
@@ -761,7 +667,7 @@ export default function ProfilePage() {
           </div>
 
           {positions.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <Coins className="w-5 h-5 text-green-500" />
@@ -781,14 +687,6 @@ export default function ProfilePage() {
                 <div className="text-2xl font-bold mb-2">{resolvedMarkets}</div>
                 <p className="text-sm text-muted-foreground">Resolved</p>
               </Card>
-              <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="text-2xl font-bold mb-2">{bnbMarkets}</div>
-                <p className="text-sm text-muted-foreground">BNB Markets</p>
-              </Card>
-              <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="text-2xl font-bold mb-2">{pdxMarkets}</div>
-                <p className="text-sm text-muted-foreground">PDX Markets</p>
-              </Card>
             </div>
           )}
 
@@ -799,7 +697,7 @@ export default function ProfilePage() {
                   <CheckCircle className="w-6 h-6 text-white" />
                   <div>
                     <p className="text-white font-semibold">Total Winnings Available</p>
-                    <p className="text-white text-lg font-bold">{totalWinnings.toFixed(4)} (BNB + PDX)</p>
+                    <p className="text-white text-lg font-bold">{totalWinnings.toFixed(4)} BNB</p>
                   </div>
                 </div>
                 <div className="text-white text-sm">
@@ -835,25 +733,25 @@ export default function ProfilePage() {
                 const odds = marketOdds[position.marketId] || { yesPrice: 5000, noPrice: 5000 }
                 const predicted = getPredictedOutcome(odds.yesPrice, odds.noPrice)
                 const market = position.market
+                const marketStatus = getMarketStatus(market)
                 const hasWinnings = hasWinningTokens(position)
                 const potentialWinnings = calculatePotentialWinnings(position)
-                const marketActive = isMarketActive(market)
                 const statusInfo = getMarketStatusInfo(market)
                 
                 // ✅ FIXED: Get active orders with proper typing
                 const marketOrders: OrderInfo[] = getActiveOrdersForMarket(market.id)
                 
-                const marketPaymentToken = market.paymentToken
+                const marketPaymentToken = "BNB"
 
                 const yesBalance = parseFloat(position.yesBalance || "0")
                 const noBalance = parseFloat(position.noBalance || "0")
-                const hasSellableTokens = yesBalance > 0 || noBalance > 0
+                const hasSellableTokens = (yesBalance > 0 || noBalance > 0) && marketStatus.isActive
 
                 return (
                   <Card key={index} className={`p-6 hover:shadow-lg transition-shadow backdrop-blur-sm bg-card/80 ${
-                    !marketActive ? 'opacity-70 border-gray-400' : 'border-2'
+                    !marketStatus.isActive ? 'opacity-70 border-gray-400' : 'border-2'
                   }`}>
-                    {!marketActive && (
+                    {!marketStatus.isActive && (
                       <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 text-gray-600" />
                         <span className="text-sm text-gray-700">This market is no longer active for trading</span>
@@ -865,10 +763,10 @@ export default function ProfilePage() {
                         <div className="flex items-center gap-3 mb-2">
                           <Link href={`/market/${market.id}`}>
                             <h3 className={`text-lg font-semibold hover:text-primary transition-colors cursor-pointer line-clamp-2 ${
-                              !marketActive ? 'text-gray-600' : ''
+                              !marketStatus.isActive ? 'text-gray-600' : ''
                             }`}>
                               {market.question}
-                              {!marketActive && (
+                              {!marketStatus.isActive && (
                                 <span className="ml-2 text-xs text-gray-500">(Inactive)</span>
                               )}
                             </h3>
@@ -877,18 +775,16 @@ export default function ProfilePage() {
                             <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color} backdrop-blur-sm`}>
                               {statusInfo.label}
                             </span>
-                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                              marketPaymentToken === "BNB" ? "bg-yellow-500 text-white" : "bg-purple-500 text-white"
-                            } backdrop-blur-sm`}>
-                              {marketPaymentToken}
+                            <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-500 text-white backdrop-blur-sm">
+                              BNB
                             </span>
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span>Market ID: {market.id}</span>
                           <span>Category: {market.category || "General"}</span>
-                          <span>Token: {marketPaymentToken}</span>
-                          {market.status === MarketStatus.Resolved && (
+                          <span>Token: BNB</span>
+                          {marketStatus.isResolved && (
                             <span className="font-medium">
                               Outcome: {(() => {
                                 switch (market.outcome as Outcome) {
@@ -899,7 +795,7 @@ export default function ProfilePage() {
                               })()}
                             </span>
                           )}
-                          {!marketActive && (
+                          {!marketStatus.isActive && (
                             <span className="text-gray-500">• Inactive</span>
                           )}
                         </div>
@@ -909,64 +805,64 @@ export default function ProfilePage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
                       <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
+                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
                       }`}>
-                        <p className="text-xs text-muted-foreground mb-1">{marketPaymentToken} Invested</p>
+                        <p className="text-xs text-muted-foreground mb-1">BNB Invested</p>
                         <p className={`text-lg font-bold flex items-center gap-1 ${
-                          marketActive ? 'text-primary' : 'text-gray-600'
+                          marketStatus.isActive ? 'text-primary' : 'text-gray-600'
                         }`}>
                           <Coins className="w-4 h-4" />{investment.toFixed(4)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">Total in this market</p>
                       </div>
                       <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
+                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
                       }`}>
                         <p className="text-xs text-muted-foreground mb-1">YES Tokens</p>
                         <p className={`text-lg font-bold flex items-center gap-1 ${
-                          marketActive ? 'text-green-600' : 'text-gray-600'
+                          marketStatus.isActive ? 'text-green-600' : 'text-gray-600'
                         }`}>
                           {yesBalance.toFixed(4)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          ≈ {(yesBalance * (odds.yesPrice || 50) / 100).toFixed(4)} {marketPaymentToken}
+                          ≈ {(yesBalance * (odds.yesPrice || 50) / 100).toFixed(4)} BNB
                         </p>
                       </div>
                       <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
+                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
                       }`}>
                         <p className="text-xs text-muted-foreground mb-1">NO Tokens</p>
                         <p className={`text-lg font-bold flex items-center gap-1 ${
-                          marketActive ? 'text-red-600' : 'text-gray-600'
+                          marketStatus.isActive ? 'text-red-600' : 'text-gray-600'
                         }`}>
                           {noBalance.toFixed(4)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          ≈ {(noBalance * (odds.noPrice || 50) / 100).toFixed(4)} {marketPaymentToken}
+                          ≈ {(noBalance * (odds.noPrice || 50) / 100).toFixed(4)} BNB
                         </p>
                       </div>
                       <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
+                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
                       }`}>
                         <p className="text-xs text-muted-foreground mb-1">Predicted Outcome</p>
                         <p className={`text-lg font-bold ${
-                          marketActive ? 'text-blue-600' : 'text-gray-600'
+                          marketStatus.isActive ? 'text-blue-600' : 'text-gray-600'
                         }`}>
                           {predicted.outcomeText}
                         </p>
                         <p className="text-xs text-muted-foreground">{predicted.confidence.toFixed(2)}% confidence</p>
                       </div>
                       <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
+                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
                       }`}>
                         <p className="text-xs text-muted-foreground mb-1">Current Odds</p>
                         <div className="space-y-1">
                           <div className="flex justify-between text-sm">
-                            <span className={marketActive ? "text-green-600" : "text-gray-600"}>YES:</span>
+                            <span className={marketStatus.isActive ? "text-green-600" : "text-gray-600"}>YES:</span>
                             <span className="font-medium">{(odds.yesPrice / 100).toFixed(1)}%</span>
                           </div>
                           <div className="flex justify-between text-sm">
-                            <span className={marketActive ? "text-red-600" : "text-gray-600"}>NO:</span>
+                            <span className={marketStatus.isActive ? "text-red-600" : "text-gray-600"}>NO:</span>
                             <span className="font-medium">{(odds.noPrice / 100).toFixed(1)}%</span>
                           </div>
                         </div>
@@ -997,7 +893,7 @@ export default function ProfilePage() {
                       </div>
                     )}
 
-                    {market.status === MarketStatus.Resolved && hasWinnings && (
+                    {marketStatus.isResolved && hasWinnings && (
                       <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -1005,17 +901,17 @@ export default function ProfilePage() {
                             <div>
                               <p className="text-sm font-medium text-green-800">Winnings Available</p>
                               <p className="text-lg font-bold text-green-600">
-                                {potentialWinnings} {marketPaymentToken}
+                                {potentialWinnings} BNB
                               </p>
                               <p className="text-xs text-green-600">
-                                {market.outcome === Outcome.Yes ? 'YES' : 'NO'} tokens can be redeemed for {marketPaymentToken}
+                                {market.outcome === Outcome.Yes ? 'YES' : 'NO'} tokens can be redeemed for BNB
                               </p>
                             </div>
                           </div>
                           <Button 
                             size="sm" 
                             className="bg-green-600 hover:bg-green-700 backdrop-blur-sm flex items-center gap-2"
-                            onClick={() => handleRedeem(market.id, marketPaymentToken)}
+                            onClick={() => handleRedeem(market.id)}
                             disabled={redeemingMarketId === market.id.toString()}
                           >
                             {redeemingMarketId === market.id.toString() ? (
@@ -1023,13 +919,13 @@ export default function ProfilePage() {
                             ) : (
                               <CheckCircle className="w-4 h-4" />
                             )}
-                            Claim {potentialWinnings} {marketPaymentToken}
+                            Claim {potentialWinnings} BNB
                           </Button>
                         </div>
                       </div>
                     )}
 
-                    {market.status === MarketStatus.Resolved && !hasWinnings && (
+                    {marketStatus.isResolved && !hasWinnings && (
                       <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
@@ -1048,7 +944,7 @@ export default function ProfilePage() {
                         <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">View Market</Button>
                       </Link>
                       
-                      {marketActive && market.status === MarketStatus.Open && (
+                      {marketStatus.isActive && (
                         <>
                           <Link href={`/market/${market.id}?tab=trade`}>
                             <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">Trade More</Button>
@@ -1140,7 +1036,7 @@ export default function ProfilePage() {
                 <p className="text-sm font-medium mb-1">Market</p>
                 <p className="text-xs text-muted-foreground line-clamp-2">{selectedMarket.market.question}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Token: {selectedMarket.market.paymentToken}
+                  Token: BNB
                 </p>
               </div>
             )}
@@ -1224,15 +1120,15 @@ export default function ProfilePage() {
             <Button 
               variant="outline" 
               onClick={() => setOrderDialogOpen(false)}
-              disabled={bnbOrders.loading || pdxOrders.loading}
+              disabled={bnbOrders.loading}
             >
               Cancel
             </Button>
             <Button 
               onClick={handleCreateOrder}
-              disabled={(bnbOrders.loading || pdxOrders.loading) || !tokenAmount || !triggerPrice}
+              disabled={bnbOrders.loading || !tokenAmount || !triggerPrice}
             >
-              {(bnbOrders.loading || pdxOrders.loading) ? (
+              {bnbOrders.loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Creating...
@@ -1260,7 +1156,7 @@ export default function ProfilePage() {
               Sell {sellTokenType === 'yes' ? 'YES' : 'NO'} Tokens
             </DialogTitle>
             <DialogDescription>
-              Sell your {sellTokenType === 'yes' ? 'YES' : 'NO'} tokens back to the market for {paymentToken}.
+              Sell your {sellTokenType === 'yes' ? 'YES' : 'NO'} tokens back to the market for BNB.
             </DialogDescription>
           </DialogHeader>
 
@@ -1284,7 +1180,7 @@ export default function ProfilePage() {
                 <p className="text-sm font-medium mb-1">Market</p>
                 <p className="text-xs text-muted-foreground line-clamp-2">{selectedSellMarket.market.question}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Token: {paymentToken}
+                  Token: BNB
                 </p>
               </div>
             )}
@@ -1319,21 +1215,15 @@ export default function ProfilePage() {
                 <p className="text-sm font-medium text-blue-800">Estimated Output</p>
                 <div className="space-y-1">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{paymentToken} to receive:</span>
+                    <span className="text-muted-foreground">BNB to receive:</span>
                     <span className="font-bold text-blue-700">
-                      {paymentToken === "BNB" 
-                        ? `${parseFloat(sellEstimate.bnbOut || "0").toFixed(6)} ${paymentToken}`
-                        : `${parseFloat(sellEstimate.pdxOut || "0").toFixed(6)} ${paymentToken}`
-                      }
+                      {parseFloat(sellEstimate.bnbOut || "0").toFixed(6)} BNB
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Fee:</span>
                     <span className="text-muted-foreground">
-                      {paymentToken === "BNB"
-                        ? `${parseFloat(sellEstimate.fee || "0").toFixed(6)} ${paymentToken}`
-                        : `${parseFloat(sellEstimate.fee || "0").toFixed(6)} ${paymentToken}`
-                      }
+                      {parseFloat(sellEstimate.fee || "0").toFixed(6)} BNB
                     </span>
                   </div>
                 </div>
@@ -1341,7 +1231,7 @@ export default function ProfilePage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="minOut">Minimum {paymentToken} Out (Slippage Protection)</Label>
+              <Label htmlFor="minOut">Minimum BNB Out (Slippage Protection)</Label>
               <Input
                 id="minOut"
                 type="number"
@@ -1409,7 +1299,7 @@ export default function ProfilePage() {
               ) : (
                 <>
                   <DollarSign className="w-4 h-4 mr-2" />
-                  Sell for {paymentToken}
+                  Sell for BNB
                 </>
               )}
             </Button>

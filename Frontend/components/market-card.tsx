@@ -1,12 +1,11 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { TrendingUp, Volume2, Clock, User, AlertCircle, Coins } from "lucide-react"
+import { TrendingUp, Volume2, Clock, User, AlertCircle, Coins, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { MarketStatus, Outcome } from "@/hooks/use-predection-market"  // FIXED: Removed PaymentToken
 import { useState } from "react"
 import CustomAlertDialog from "@/components/customAlert"
-
 
 interface FrontendMarket {
   id: string
@@ -42,14 +41,14 @@ interface FrontendMarket {
   paymentToken?: string  // FIXED: Changed from PaymentToken to string
 }
 
-
 interface MarketCardProps {
   market: FrontendMarket
   disabled?: boolean
+  isLoading?: boolean
+  onClick?: () => void
 }
 
-
-export default function MarketCard({ market, disabled = false }: MarketCardProps) {
+export default function MarketCard({ market, disabled = false, isLoading = false, onClick }: MarketCardProps) {
   const [showAlert, setShowAlert] = useState(false)
   
   const marketTitle = market.title || market.question || `Market ${market.id}`
@@ -170,25 +169,42 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
   const isDataValid = Boolean(market.question || market.title)
 
   const handleClick = (e: React.MouseEvent) => {
-    if (disabled) {
+    if (disabled || isLoading) {
       e.preventDefault()
-      setShowAlert(true)
+      if (disabled) {
+        setShowAlert(true)
+      }
+      return
     }
+    
+    if (onClick) {
+      e.preventDefault()
+      onClick()
+    }
+    // If no onClick handler is provided, the Link will handle navigation normally
   }
 
   return (
     <div className="relative">
       <Link
-        href={disabled ? "#" : `/markets/${market.slug || market.id}`}
+        href={disabled || isLoading ? "#" : `/markets/${market.slug || market.id}`}
         onClick={handleClick}
         className="block"
       >
         <Card
           className={`overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50 ${
             !isMarketActive ? "" : ""
-          } ${disabled ? "" : ""}`}
+          } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          <div className="p-4">
+          {/* Loading Overlay */}
+          {isLoading && (
+            <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg z-10">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-2 text-sm">Loading...</span>
+            </div>
+          )}
+
+          <div className="p-4 relative">
             {/* Header - Category, Token, and Status */}
             <div className="flex items-center justify-between mb-3 gap-2">
               <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
@@ -373,7 +389,9 @@ export default function MarketCard({ market, disabled = false }: MarketCardProps
 
             <div className="mt-3 text-center">
               <p className="text-xs text-muted-foreground">
-                {!isMarketActive
+                {isLoading 
+                  ? "Loading market..." 
+                  : !isMarketActive
                   ? "Market inactive"
                   : market.status === 0
                   ? "Click to trade"

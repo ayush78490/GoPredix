@@ -1,14 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import Header from "@/components/header"
 import PriceChart from "@/components/price-chart"
 import TradeModal from "@/components/trade-modal"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ArrowLeft, Volume2, TrendingUp, Loader2, Calendar, User, Coins } from "lucide-react"
-import Link from "next/link"
 import { useAllMarkets } from "@/hooks/getAllMarkets"
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
@@ -157,6 +156,7 @@ const getPaymentTokenBadge = (token: string) => {
 
 export default function MarketPage() {
   const params = useParams()
+  const router = useRouter()
   const marketSlug = params?.slug as string
 
   const [market, setMarket] = useState<any>(null)
@@ -166,6 +166,7 @@ export default function MarketPage() {
   const [showModal, setShowModal] = useState(false)
   const [chartData, setChartData] = useState<any[]>([])
   const [isChartLoading, setIsChartLoading] = useState(true)
+  const [isNavigatingBack, setIsNavigatingBack] = useState(false)
 
   // Use ref to track if market was found to prevent further searches
   const marketFoundRef = useRef(false)
@@ -218,12 +219,14 @@ export default function MarketPage() {
 
     if (!marketSlug) {
       setIsLoading(false)
+      setIsChartLoading(false)
       return
     }
 
     // Mark that we're attempting a search
     searchAttemptedRef.current = true
     setIsLoading(true)
+    setIsChartLoading(true)
 
     try {
       let marketsToSearch = allMarkets
@@ -243,7 +246,6 @@ export default function MarketPage() {
       const extractedId = extractIdFromSlug(marketSlug)
 
       console.log(`🔍 Looking for market with slug: "${marketSlug}", extracted ID: ${extractedId}`)
-      console.log(`📊 Available markets:`, marketsToSearch.map((m: any) => ({ id: m.id, slug: generateSlug(m.question, m.id) })))
 
       // Strategy 1: Try direct ID match first (handles URLs like /markets/0, /markets/1)
       if (extractedId !== null && extractedId >= 0) {
@@ -333,12 +335,17 @@ export default function MarketPage() {
         
         setMarket(foundMarket)
         
+        // Generate chart data
         const priceHistory = generatePriceHistory(foundMarket)
         setChartData(priceHistory)
-        setIsChartLoading(false)
+        
+        // Set loading states to false after all data is ready
+        setTimeout(() => {
+          setIsChartLoading(false)
+          setIsLoading(false)
+        }, 300) // Small delay for smooth transition
         
         console.log(`✅ Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
-        setIsLoading(false)
         return;
         
       } else {
@@ -353,6 +360,7 @@ export default function MarketPage() {
         } else {
           console.error(`❌ Giving up after ${retryCount} attempts for market: ${marketSlug}`)
           setIsLoading(false)
+          setIsChartLoading(false)
         }
       }
     } catch (err: any) {
@@ -365,6 +373,7 @@ export default function MarketPage() {
       } else {
         console.error(`❌ Giving up after ${retryCount} attempts due to errors`)
         setIsLoading(false)
+        setIsChartLoading(false)
       }
     } 
   }, [marketSlug, allMarkets, marketsLoading, isContractReady, bnbHook.isContractReady, pdxHook.isContractReady, account, safeGetUserInvestment, retryCount, getAllMarkets])
@@ -416,8 +425,16 @@ export default function MarketPage() {
     searchAttemptedRef.current = false
     setMarket(null)
     setIsLoading(true)
+    setIsChartLoading(true)
     setRetryCount(0)
+    setIsNavigatingBack(false)
   }, [marketSlug])
+
+  // Handle back navigation with loading state
+  const handleBackNavigation = () => {
+    setIsNavigatingBack(true)
+    router.push("/markets")
+  }
 
   // UI helpers
   const formatVolume = (vol: number) => {
@@ -466,8 +483,11 @@ export default function MarketPage() {
     }
   }, [market])
 
-  // Show loading spinner only when loading and no market found
-  if (isLoading && !market) {
+  // Check if all data is loaded
+  const isDataFullyLoaded = market && !isLoading && !isChartLoading
+
+  // Show loading spinner when data is not fully loaded
+  if (!isDataFullyLoaded) {
     return (
       <main className="min-h-screen bg-black/80 relative overflow-hidden">
         <div className="fixed inset-0 z-0">
@@ -485,32 +505,77 @@ export default function MarketPage() {
         </div>
         <div className="relative z-10">
           <Header />
-          <div className="max-w-6xl mx-auto px-4 py-12">
-            <div className="flex flex-col items-center gap-4">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <p className="text-muted-foreground text-center">
-                Loading market details...
-                {retryCount > 0 && (
-                  <span className="block text-sm text-yellow-400 mt-1">
-                    Attempt {retryCount} of 5...
-                  </span>
-                )}
-              </p>
+          <div className="max-w-6xl mx-auto px-4 py-8 mt-[10vh]">
+            <div className="mb-6">
               <Button 
-                onClick={() => setRetryCount(prev => prev + 1)} 
-                variant="outline" 
-                className="mt-2 backdrop-blur-sm bg-card/80"
-                disabled={retryCount >= 5}
+                onClick={handleBackNavigation}
+                variant="ghost" 
+                className="gap-2 backdrop-blur-sm bg-card/80"
+                disabled={isNavigatingBack}
               >
-                {retryCount >= 5 ? 'Max Retries Reached' : 'Retry Now'}
-              </Button>
-              {retryCount >= 5 && (
-                <Link href="/markets">
-                  <Button variant="ghost" className="mt-2">
+                {isNavigatingBack ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <ArrowLeft className="w-4 h-4" />
                     Back to Markets
-                  </Button>
-                </Link>
-              )}
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Loading skeleton for market content */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-[10vh]">
+              <div className="lg:col-span-2 space-y-6">
+                {/* Header skeleton */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-20 h-6 bg-gray-700 rounded-full animate-pulse"></div>
+                    <div className="w-48 h-8 bg-gray-700 rounded-lg animate-pulse"></div>
+                  </div>
+                  <div className="w-24 h-6 bg-gray-700 rounded-lg animate-pulse"></div>
+                </div>
+
+                {/* Description skeleton */}
+                <div className="w-full h-20 bg-gray-700 rounded-lg animate-pulse"></div>
+
+                {/* Info skeleton */}
+                <div className="w-full h-16 bg-gray-700 rounded-lg animate-pulse"></div>
+
+                {/* Chart skeleton */}
+                <div className="w-full bg-card rounded-lg p-4 backdrop-blur-sm h-80">
+                  <div className="h-full flex flex-col items-center justify-center gap-4">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                    <p className="text-muted-foreground">Loading market chart...</p>
+                  </div>
+                </div>
+
+                {/* Stats skeleton */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-20 bg-gray-700 rounded-lg animate-pulse"></div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="lg:col-span-1">
+                <Card className="p-6 sticky top-6 space-y-6 backdrop-blur-sm bg-card/80 h-96">
+                  <div className="flex flex-col items-center justify-center h-full gap-4">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                    <p className="text-muted-foreground text-center">
+                      {market ? 'Loading trading data...' : 'Loading market...'}
+                    </p>
+                    {retryCount > 0 && (
+                      <p className="text-sm text-yellow-400 text-center">
+                        Attempt {retryCount} of 5...
+                      </p>
+                    )}
+                  </div>
+                </Card>
+              </div>
             </div>
           </div>
         </div>
@@ -518,8 +583,8 @@ export default function MarketPage() {
     )
   }
 
-  // Show not found state when not loading but no market
-  if (!isLoading && !market) {
+  // Show not found state when not loading but no market (should not happen with above logic, but as fallback)
+  if (!market) {
     return (
       <main className="min-h-screen bg-black/80 relative overflow-hidden">
         <div className="fixed inset-0 z-0">
@@ -537,34 +602,21 @@ export default function MarketPage() {
         </div>
         <div className="relative z-10">
           <Header />
-          <div className="max-w-6xl mx-auto px-4 py-8">
-            <Link href="/markets">
-              <Button variant="ghost" className="mb-6 -ml-4 gap-2 text-muted-foreground hover:text-foreground backdrop-blur-sm bg-card/80">
-                <ArrowLeft className="w-4 h-4" />
-                Back to Markets
-              </Button>
-            </Link>
+          <div className="max-w-6xl mx-auto px-4 py-8 mt-[10vh]">
+            <Button 
+              onClick={handleBackNavigation}
+              variant="ghost" 
+              className="mb-6 -ml-4 gap-2 text-muted-foreground hover:text-foreground backdrop-blur-sm bg-card/80"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Markets
+            </Button>
 
             <div className="text-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
-              <p className="text-muted-foreground text-lg"><strong> RPC is bit down.</strong></p>
+              <p className="text-muted-foreground text-lg"><strong>Market not found</strong></p>
               <p className="text-sm text-muted-foreground mt-2">
-                For trade on this market. Visit after some time
+                The market you're looking for doesn't exist or is currently unavailable.
               </p>
-              {/* <div className="mt-4 flex gap-2 justify-center">
-                <Button onClick={() => {
-                  marketFoundRef.current = false
-                  searchAttemptedRef.current = false
-                  setRetryCount(0)
-                  loadMarketData()
-                }} variant="outline">
-                  Try Again
-                </Button>
-                <Link href="/">
-                  <Button variant="ghost">
-                    Back to All Markets
-                  </Button>
-                </Link>
-              </div> */}
             </div>
           </div>
         </div>
@@ -597,13 +649,25 @@ export default function MarketPage() {
         <Header />
 
         <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <Link href="/markets">
-              <Button variant="ghost" className="gap-2 backdrop-blur-sm bg-card/80">
-                <ArrowLeft className="w-4 h-4" />
-                Back to Markets
-              </Button>
-            </Link>
+          <div className="mb-4 flex items-center justify-between gap-4 mt-[10vh]">
+            <Button 
+              onClick={handleBackNavigation}
+              variant="ghost" 
+              className="gap-2 backdrop-blur-sm bg-card/80 relative"
+              disabled={isNavigatingBack}
+            >
+              {isNavigatingBack ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Markets
+                </>
+              )}
+            </Button>
 
             <div className="hidden sm:flex items-center gap-4 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/30 backdrop-blur-sm">
