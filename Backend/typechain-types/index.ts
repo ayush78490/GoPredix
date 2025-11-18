@@ -34,8 +34,6 @@ export type { IOutcomeToken } from "./contracts/dualtokenadapter.sol/IOutcomeTok
 export { IOutcomeToken__factory } from "./factories/contracts/dualtokenadapter.sol/IOutcomeToken__factory";
 export type { IPDX } from "./contracts/dualtokenadapter.sol/IPDX";
 export { IPDX__factory } from "./factories/contracts/dualtokenadapter.sol/IPDX__factory";
-export type { TestnetDualTokenAdapter_MAIN } from "./contracts/dualtokenadapter.sol/TestnetDualTokenAdapter_MAIN";
-export { TestnetDualTokenAdapter_MAIN__factory } from "./factories/contracts/dualtokenadapter.sol/TestnetDualTokenAdapter_MAIN__factory";
 export type { TestnetDualTokenAdapter } from "./contracts/dualtokenadapter.sol/TestnetDualTokenAdapter";
 export { TestnetDualTokenAdapter__factory } from "./factories/contracts/dualtokenadapter.sol/TestnetDualTokenAdapter__factory";
 export type { TestnetDualTokenAdapterViews } from "./contracts/dualtokenadapterview.sol/TestnetDualTokenAdapterViews";
@@ -46,8 +44,14 @@ export type { IPredictionMarketCore } from "./contracts/helperContract.sol/IPred
 export { IPredictionMarketCore__factory } from "./factories/contracts/helperContract.sol/IPredictionMarketCore__factory";
 export type { PredictionMarketHelper } from "./contracts/helperContract.sol/PredictionMarketHelper";
 export { PredictionMarketHelper__factory } from "./factories/contracts/helperContract.sol/PredictionMarketHelper__factory";
+export type { MarketFactory } from "./contracts/marketFactory.sol/MarketFactory";
+export { MarketFactory__factory } from "./factories/contracts/marketFactory.sol/MarketFactory__factory";
 export type { PDXFaucet } from "./contracts/pdxfaucet.sol/PDXFaucet";
 export { PDXFaucet__factory } from "./factories/contracts/pdxfaucet.sol/PDXFaucet__factory";
+export type { IPredictionMarketExternal } from "./contracts/PredectionMarket.sol/IPredictionMarketExternal";
+export { IPredictionMarketExternal__factory } from "./factories/contracts/PredectionMarket.sol/IPredictionMarketExternal__factory";
+export type { PredictionMarket } from "./contracts/PredectionMarket.sol/PredictionMarket";
+export { PredictionMarket__factory } from "./factories/contracts/PredectionMarket.sol/PredictionMarket__factory";
 export type { IMainAdapter } from "./contracts/resolutionpdx.sol/IMainAdapter";
 export { IMainAdapter__factory } from "./factories/contracts/resolutionpdx.sol/IMainAdapter__factory";
 export type { TestnetDualTokenAdapterResolution } from "./contracts/resolutionpdx.sol/TestnetDualTokenAdapterResolution";

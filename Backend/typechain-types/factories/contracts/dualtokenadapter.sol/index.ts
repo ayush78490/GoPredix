@@ -6,4 +6,3 @@ export { IPDX__factory } from "./IPDX__factory";
 export { IPredictionMarket__factory } from "./IPredictionMarket__factory";
 export { OutcomeToken__factory } from "./OutcomeToken__factory";
 export { TestnetDualTokenAdapter__factory } from "./TestnetDualTokenAdapter__factory";
-export { TestnetDualTokenAdapter_MAIN__factory } from "./TestnetDualTokenAdapter_MAIN__factory";

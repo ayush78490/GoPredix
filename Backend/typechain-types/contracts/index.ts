@@ -3,6 +3,8 @@
 /* eslint-disable */
 import type * as bazarSol from "./Bazar.sol";
 export type { bazarSol };
+import type * as predectionMarketSol from "./PredectionMarket.sol";
+export type { predectionMarketSol };
 import type * as dualtokenadapterSol from "./dualtokenadapter.sol";
 export type { dualtokenadapterSol };
 import type * as dualtokenadapterviewSol from "./dualtokenadapterview.sol";
@@ -11,6 +13,8 @@ import type * as gpxSol from "./gpx.sol";
 export type { gpxSol };
 import type * as helperContractSol from "./helperContract.sol";
 export type { helperContractSol };
+import type * as marketFactorySol from "./marketFactory.sol";
+export type { marketFactorySol };
 import type * as pdxfaucetSol from "./pdxfaucet.sol";
 export type { pdxfaucetSol };
 import type * as resolutionpdxSol from "./resolutionpdx.sol";

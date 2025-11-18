@@ -297,14 +297,17 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
   const createStopLossOrder = useCallback(async (params: CreateOrderParams) => {
     setLoading(true)
     setError(null)
-
+    if (!pdxHook.isContractReady) {
+      setError('Contract not ready')
+      setLoading(false)
+      return { success: false, error: 'Contract not ready' }
+    }
     try {
       const receipt = await pdxHook.createStopLossOrder(
         params.marketId,
         params.triggerPrice,
         params.tokenAmount
       )
-
       setLoading(false)
       return { success: true, txHash: receipt?.transactionHash || 'success' }
     } catch (err: any) {
@@ -319,14 +322,17 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
   const createTakeProfitOrder = useCallback(async (params: CreateOrderParams) => {
     setLoading(true)
     setError(null)
-
+    if (!pdxHook.isContractReady) {
+      setError('Contract not ready')
+      setLoading(false)
+      return { success: false, error: 'Contract not ready' }
+    }
     try {
       const receipt = await pdxHook.createTakeProfitOrder(
         params.marketId,
         params.triggerPrice,
         params.tokenAmount
       )
-
       setLoading(false)
       return { success: true, txHash: receipt?.transactionHash || 'success' }
     } catch (err: any) {
@@ -341,11 +347,14 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
   const executeOrder = useCallback(async (orderId: string) => {
     setLoading(true)
     setError(null)
-
+    if (!pdxHook.isContractReady) {
+      setError('Contract not ready')
+      setLoading(false)
+      return { success: false, error: 'Contract not ready' }
+    }
     try {
       const orderId_num = parseInt(orderId)
       const receipt = await pdxHook.executeOrder(orderId_num)
-
       setLoading(false)
       return { success: true, txHash: receipt?.transactionHash || 'success' }
     } catch (err: any) {
@@ -360,11 +369,14 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
   const cancelOrder = useCallback(async (orderId: string) => {
     setLoading(true)
     setError(null)
-
+    if (!pdxHook.isContractReady) {
+      setError('Contract not ready')
+      setLoading(false)
+      return { success: false, error: 'Contract not ready' }
+    }
     try {
       const orderId_num = parseInt(orderId)
       const receipt = await pdxHook.cancelOrder(orderId_num)
-
       setLoading(false)
       return { success: true, txHash: receipt?.transactionHash || 'success' }
     } catch (err: any) {
@@ -377,8 +389,10 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
 
   // Get Order Info
   const getOrderInfo = useCallback(async (orderId: string): Promise<OrderInfo | null> => {
+    if (!pdxHook.isContractReady) {
+      return null;
+    }
     try {
-      const orderId_num = parseInt(orderId)
       // PDX hook might not have getOrderInfo, so we'll return a placeholder
       console.warn('PDX getOrderInfo not yet implemented')
       return null
@@ -390,10 +404,12 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
 
   // Check Order Trigger
   const checkOrderTrigger = useCallback(async (orderId: string): Promise<OrderTriggerStatus | null> => {
+    if (!pdxHook.isContractReady) {
+      return null
+    }
     try {
       const orderId_num = parseInt(orderId)
       const triggered = await pdxHook.checkOrderTrigger(orderId_num)
-
       return {
         shouldExecute: triggered,
         currentPrice: '0',
@@ -405,11 +421,14 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
     }
   }, [pdxHook])
 
-  // Get User Orders
+  // Get User Orders (Key patch)
   const getUserOrders = useCallback(async (userAddress: string): Promise<OrderInfo[]> => {
+    if (!pdxHook.isContractReady) {
+      // Fix: return an empty orders list instead of throwing
+      return []
+    }
     try {
       const orderIds = await pdxHook.getUserOrders(userAddress)
-      
       const orders: OrderInfo[] = []
       for (const orderId of orderIds) {
         const orderInfo = await getOrderInfo(orderId.toString())
@@ -417,7 +436,6 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
           orders.push(orderInfo)
         }
       }
-
       return orders
     } catch (err: any) {
       console.error('Error getting PDX user orders:', err)
@@ -427,26 +445,24 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
 
   // Get Active Orders
   const getActiveOrders = useCallback(async (userAddress: string): Promise<OrderInfo[]> => {
-    try {
-      const allOrders = await getUserOrders(userAddress)
-      return allOrders.filter(order => order.isActive)
-    } catch (err: any) {
-      console.error('Error getting PDX active orders:', err)
-      return []
-    }
+    const allOrders = await getUserOrders(userAddress)
+    return allOrders.filter(order => order.isActive)
   }, [getUserOrders])
 
   // Refresh Orders
   const refreshOrders = useCallback(async () => {
     if (!userAddress) return
-
+    if (!pdxHook.isContractReady) {
+      setUserOrders([])
+      setActiveOrders([])
+      return
+    }
     try {
       setLoading(true)
       const [allOrders, active] = await Promise.all([
         getUserOrders(userAddress),
         getActiveOrders(userAddress)
       ])
-
       setUserOrders(allOrders)
       setActiveOrders(active)
       setLoading(false)
@@ -454,7 +470,7 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
       console.error('Error refreshing PDX orders:', err)
       setLoading(false)
     }
-  }, [userAddress, getUserOrders, getActiveOrders])
+  }, [userAddress, getUserOrders, getActiveOrders, pdxHook.isContractReady])
 
   // Auto-refresh orders when user address changes
   useEffect(() => {
@@ -487,6 +503,7 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
     clearError
   }
 }
+
 
 // ==================== UNIFIED HOOK (AUTO-DETECT TOKEN) ====================
 
