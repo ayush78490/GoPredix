@@ -14,12 +14,12 @@ const networks: Record<string, any> = {
     allowUnlimitedContractSize: true,
   },
   bnbTestnet: {
-    url: RPC_URL || "https://data-seed-prebsc-1-b.binance.org:8545",
+    url: RPC_URL || "https://bsc-testnet.infura.io/v3/e9e8495ff6db41b49acc14fd59a0a0c3",
     accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     chainId: 97,
   },
   bscTestnet: {
-    url: "https://bsc-testnet-rpc.publicnode.com",
+    url: "https://bsc-testnet.infura.io/v3/e9e8495ff6db41b49acc14fd59a0a0c3",
     accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     chainId: 97,
   },
