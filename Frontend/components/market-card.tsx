@@ -124,7 +124,7 @@ export default function MarketCard({ market, disabled = false, isLoading = false
       "PDX": { 
         label: "PDX", 
         color: "bg-purple-500/20 border-purple-600/50 text-purple-400",
-        icon: "💜"
+        icon: ""
       }
     }
 

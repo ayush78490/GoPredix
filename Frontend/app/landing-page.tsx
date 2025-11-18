@@ -9,6 +9,9 @@ import { useWeb3Context } from "@/lib/wallet-context"
 import Footer from "@/components/footer"
 import { useRouter } from "next/navigation"
 import LightRays from "@/components/LightRays"
+import Particles from '@/components/particles';
+import Shuffle from '@/components/Shuffle';
+import AnimatedParagraphs from "@/components/animateParagraph";
 
 export default function LandingPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -20,8 +23,8 @@ export default function LandingPage() {
     router.push("/markets")
   }
 
-  const handleLeaderboardClick = () => {
-    router.push("/leaderboard")
+  const getPDX = () => {
+    router.push("/faucetPDX")
   }
 
   return (
@@ -42,36 +45,87 @@ export default function LandingPage() {
         />
       </div>
 
+
+      <div className="fixed inset-0 z-5">
+        <Particles
+          particleColors={['#ffffff', '#ffffff']}
+          particleCount={200}
+          particleSpread={10}
+          speed={0.1}
+          particleBaseSize={100}
+          moveParticlesOnHover={true}
+          alphaParticles={false}
+          disableRotation={false}
+        />
+      </div>
+
       {/* Content Overlay */}
-      <div className="relative z-10 bg-black/80 min-h-screen">
+      <div className="relative z-10 bg-black/50 min-h-screen">
         <Header />
 
         <div className="max-w-7xl mx-auto px-4 py-8">
 
           {/* Web3 Initialization */}
           {!isInitialized && (
-            <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
+            <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg mt-[10vh]">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Initializing Web3...</span>
+              <span className="ml-2 text-muted-foreground">Initializing Gopredix...</span>
             </div>
           )}
 
           {/* HERO SECTION */}
           {isInitialized && (
-            <section className="flex flex-col items-center justify-center text-center min-h-[70vh]">
+            <section className="flex flex-col items-center justify-center text-center min-h-[70vh] mt-[10vh]">
 
-              <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-widest text-white drop-shadow-lg">
+              <button
+                className="
+                  px-8 py-3 rounded-full bg-cyan-300/15 text-white font-medium text-lg
+                  hover:bg-[#ECFEFF] hover:text-black transition mb-[10%]
+                  border border-cyan-300 glow-border
+                "
+                onClick={getPDX}
+              >
+                Get PDX
+              </button>
+
+
+              {/* <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-widest text-white drop-shadow-lg">
                 GOPREDIX
-              </h1>
+              </h1> */}
 
-              <p className="text-base md:text-lg text-white/80 max-w-2xl mb-10 font-mono">
+              <div className="mb-7">
+                <Shuffle
+              text="GOPREDIX"
+              shuffleDirection="right"
+              duration={0.35}
+              animationMode="evenodd"
+              shuffleTimes={1}
+              ease="power3.out"
+              stagger={0.03}
+              threshold={0.1}
+              triggerOnce={true}
+              triggerOnHover={true}
+              respectReducedMotion={true}
+            />
+              </div>
+
+              {/* <p className="text-base md:text-lg text-white/80 max-w-2xl mb-10 font-mono">
                 Predict the outcome of future events, trade your beliefs, and earn rewards for your accuracy.
-              </p>
+              </p> */}
+
+              <AnimatedParagraphs
+                paragraphs={[
+                  "Betting on the future so you can brag about it later.",
+                  "Markets powered by science, sarcasm, and questionable optimism.",
+                  "If your predictions flop, dont worry. We were obviously hacked.",
+                  "Fortune favors the bold, but true gains belong to the absolutely reckless.",
+                ]}
+              />
 
               {/* Hero Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center mt-10">
                 <button
-                  className="px-8 py-3 rounded-full bg-[#ECFEFF]/50 text-white font-medium text-lg shadow hover:bg-[#ECFEFF] hover:text-black transition"
+                  className="px-8 py-3 rounded-full bg-cyan-300/15 text-white font-medium text-lg shadow hover:bg-[#ECFEFF] hover:text-black transition border border-cyan-50"
                   onClick={handleExplore}
                 >
                   Explore Markets
@@ -81,7 +135,7 @@ export default function LandingPage() {
                   className="px-8 py-3 rounded-full border border-[#ECFEFF] font-medium text-lg text-white bg-transparent hover:bg-[#ECFEFF] hover:text-black transition"
                   onClick={() => connectWallet()}
                 >
-                  Create Market
+                  Login
                 </button>
               </div>
             </section>

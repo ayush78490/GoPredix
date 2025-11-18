@@ -343,7 +343,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <Card className="w-full max-w-2xl p-6 relative my-8">
+      <Card className="w-full h-[90vh] overflow-scroll max-w-2xl p-6 relative my-8">
         <button 
           onClick={onClose} 
           className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
@@ -382,7 +382,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 }`}
                 disabled={isProcessing}
               >
-                <div className="font-semibold">💜 PDX</div>
+                <div className="font-semibold">PDX</div>
                 <div className="text-xs text-muted-foreground">ERC-20 Token</div>
               </button>
             </div>
@@ -632,6 +632,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <Button 
                 disabled 
                 className="flex-1"
+                variant="outline"
               >
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Loading Contract...
@@ -639,7 +640,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
             ) : (
               <Button 
                 onClick={handleCreate} 
-                className="flex-1" 
+                className="flex-1 bg-white text-black" 
                 disabled={Boolean(isProcessing || isLoading || (validationResult && !validationResult.valid))}
               >
                 {isProcessing || isLoading ? (

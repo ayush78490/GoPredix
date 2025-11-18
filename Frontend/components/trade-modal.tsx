@@ -699,7 +699,7 @@ export default function TradeModal({
     return value.toFixed(4)
   }
 
-  const getTokenSymbol = () => paymentToken === "BNB" ? "🔶 BNB" : "💜 PDX"
+  const getTokenSymbol = () => paymentToken === "BNB" ? "🔶 BNB" : "PDX"
 
   // ============================================
   // RENDER
@@ -806,7 +806,7 @@ export default function TradeModal({
                   <Button
                     key={preset}
                     type="button"
-                    variant={slippage === preset ? "default" : "outline"}
+                    variant={slippage === preset ? "outline" : "outline"}
                     size="sm"
                     onClick={() => setSlippage(preset)}
                     disabled={isProcessing}
@@ -816,7 +816,7 @@ export default function TradeModal({
                   </Button>
                 ))}
               </div>
-              <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
+              {/* <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
                 <div className="flex items-start gap-2">
                   <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-blue-800 dark:text-blue-300">
@@ -826,7 +826,7 @@ export default function TradeModal({
                     {slippage >= 40 && " ✅ Good protection level."}
                   </p>
                 </div>
-              </div>
+              </div> */}
             </div>
 
             {/* Trade Preview */}
@@ -896,7 +896,7 @@ export default function TradeModal({
 
                         <div className="pt-2 border-t border-yellow-300 dark:border-yellow-700">
                           <p className="text-xs text-yellow-800 dark:text-yellow-300">
-                            📊 <strong>Python Formula:</strong> min_tokens = {expectedPayout.toFixed(6)} × (1 - {slippage/100}) = {minPayout?.toFixed(6)}<br/>
+                             min_tokens = {expectedPayout.toFixed(6)} × (1 - {slippage/100}) = {minPayout?.toFixed(6)}<br/>
                             Your transaction will automatically fail if prices move more than {slippage}% worse.
                           </p>
                         </div>
@@ -938,7 +938,7 @@ export default function TradeModal({
 
             {/* Trade Button */}
             <Button
-              className="w-full h-12 text-lg font-semibold"
+              className="w-full h-12 text-black bg-white"
               onClick={handleTrade}
               disabled={
                 isProcessing || 
@@ -999,7 +999,7 @@ export default function TradeModal({
             </div>
 
             {/* Debug Info (only in development) */}
-            {process.env.NODE_ENV === 'development' && expectedOut && (
+            {/* {process.env.NODE_ENV === 'development' && expectedOut && (
               <div className="p-2 bg-gray-100 dark:bg-gray-900 rounded text-xs font-mono space-y-1">
                 <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">🔧 Debug Info:</div>
                 <div className="text-gray-600 dark:text-gray-400">Expected: {parseFloat(expectedOut).toFixed(6)}</div>
@@ -1015,7 +1015,7 @@ export default function TradeModal({
                   {actualSlippagePercent && Math.abs(actualSlippagePercent - slippage) < 0.1 ? ' ✅' : ' ⚠️'}
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         </div>
       </Card>

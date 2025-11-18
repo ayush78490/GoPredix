@@ -20,9 +20,22 @@ interface Web3ContextType {
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
-// ✅ FIXED: Add fallback RPC provider
-const BSC_TESTNET_RPC = "https://data-seed-prebsc-1-s1.binance.org:8545"
+// ✅ UPDATED: Official BSC Testnet RPC URL
+const BSC_TESTNET_RPC = "https://bsc-testnet.publicnode.com"
 const BSC_TESTNET_CHAIN_ID = 97
+
+// ✅ UPDATED: Official BSC Testnet configuration
+const BSC_TESTNET_CONFIG = {
+  chainId: "0x61", // 97 in hex
+  chainName: "BNB Smart Chain Testnet",
+  rpcUrls: ["https://bsc-testnet.publicnode.com"],
+  nativeCurrency: {
+    name: "tBNB",
+    symbol: "tBNB",
+    decimals: 18,
+  },
+  blockExplorerUrls: ["https://testnet.bscscan.com"],
+}
 
 export function Web3Provider({ children }: { children: ReactNode }) {
   const web3 = useWeb3()
@@ -48,12 +61,193 @@ export function useWeb3Context() {
   return context
 }
 
+// ✅ UPDATED: Enhanced connectWallet function with automatic network checking
+export const connectWalletWithNetworkCheck = async (): Promise<{
+  success: boolean
+  account?: string
+  error?: string
+}> => {
+  try {
+    if (typeof window === "undefined" || !window.ethereum) {
+      return { success: false, error: "MetaMask not installed" }
+    }
+
+    const provider = getProvider()
+    
+    // 1. Request accounts first
+    console.log("🔍 Requesting accounts...")
+    const accounts = await provider.request({
+      method: "eth_requestAccounts",
+    })
+
+    if (!accounts || accounts.length === 0) {
+      return { success: false, error: "No accounts found" }
+    }
+
+    const account = accounts[0]
+    console.log("✅ Connected account:", account)
+
+    // 2. Check current network
+    const chainId = await provider.request({ method: "eth_chainId" })
+    console.log("🌐 Current chain ID:", chainId)
+
+    const isCorrectNetwork = chainId === BSC_TESTNET_CONFIG.chainId
+
+    if (!isCorrectNetwork) {
+      console.log("🔄 Wrong network detected, prompting to switch...")
+      
+      // 3. If wrong network, prompt user to switch
+      const switchResult = await switchToBSCTestnet()
+      
+      if (!switchResult) {
+        return { 
+          success: false, 
+          error: "Please switch to BNB Smart Chain Testnet to continue" 
+        }
+      }
+    }
+
+    // 4. Double check network after potential switch
+    const finalChainId = await provider.request({ method: "eth_chainId" })
+    const finalIsCorrectNetwork = finalChainId === BSC_TESTNET_CONFIG.chainId
+
+    if (!finalIsCorrectNetwork) {
+      return { 
+        success: false, 
+        error: "Please switch to BNB Smart Chain Testnet to continue" 
+      }
+    }
+
+    console.log("🎉 Wallet connected successfully on BNB Smart Chain Testnet")
+    return { success: true, account }
+
+  } catch (error: any) {
+    console.error("❌ Connection failed:", error)
+    
+    if (error.code === 4001) {
+      return { success: false, error: "Connection rejected by user" }
+    } else if (error.code === -32002) {
+      return { success: false, error: "Connection request already pending" }
+    }
+    
+    return { success: false, error: error?.message || "Failed to connect wallet" }
+  }
+}
+
+// ✅ UPDATED: Enhanced network switching with official configuration
+export const switchToBSCTestnet = async (): Promise<boolean> => {
+  try {
+    if (typeof window === "undefined" || !window.ethereum) {
+      throw new Error("MetaMask not available")
+    }
+
+    const provider = getProvider()
+
+    console.log("🔄 Attempting to switch to BNB Smart Chain Testnet...")
+    
+    try {
+      // First try to switch
+      await provider.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: BSC_TESTNET_CONFIG.chainId }],
+      })
+
+      console.log("✅ Successfully switched to BNB Smart Chain Testnet")
+      return true
+    } catch (switchError: any) {
+      // If chain is not added, add it with official configuration
+      if (switchError.code === 4902) {
+        console.log("📝 Adding BNB Smart Chain Testnet to wallet...")
+        
+        try {
+          await provider.request({
+            method: "wallet_addEthereumChain",
+            params: [BSC_TESTNET_CONFIG],
+          })
+          
+          console.log("✅ Successfully added BNB Smart Chain Testnet")
+          return true
+        } catch (addError: any) {
+          console.error("❌ Failed to add network:", addError)
+          
+          if (addError.code === 4001) {
+            throw new Error("Network addition rejected by user")
+          }
+          
+          throw new Error(`Failed to add network: ${addError.message}`)
+        }
+      } else if (switchError.code === 4001) {
+        throw new Error("Network switch rejected by user")
+      } else {
+        throw new Error(`Failed to switch network: ${switchError.message}`)
+      }
+    }
+  } catch (error: any) {
+    console.error("❌ Network switch failed:", error)
+    throw error
+  }
+}
+
+// ✅ NEW: Function to manually check and prompt network switch
+export const ensureCorrectNetwork = async (): Promise<boolean> => {
+  try {
+    if (typeof window === "undefined" || !window.ethereum) {
+      return false
+    }
+
+    const provider = getProvider()
+    const chainId = await provider.request({ method: "eth_chainId" })
+    
+    console.log("🔍 Checking network...", { currentChainId: chainId, requiredChainId: BSC_TESTNET_CONFIG.chainId })
+    
+    if (chainId === BSC_TESTNET_CONFIG.chainId) {
+      console.log("✅ Already on BNB Smart Chain Testnet")
+      return true
+    }
+
+    // If wrong network, prompt to switch
+    console.log("🔄 Wrong network, prompting switch...")
+    const result = await switchToBSCTestnet()
+    return result
+    
+  } catch (error) {
+    console.error("❌ Network check failed:", error)
+    return false
+  }
+}
+
+// ✅ NEW: Function to get current network info
+export const getCurrentNetwork = async (): Promise<{
+  chainId: string
+  isCorrectNetwork: boolean
+  networkName?: string
+}> => {
+  try {
+    if (typeof window === "undefined" || !window.ethereum) {
+      return { chainId: "", isCorrectNetwork: false }
+    }
+
+    const provider = getProvider()
+    const chainId = await provider.request({ method: "eth_chainId" })
+    
+    return {
+      chainId,
+      isCorrectNetwork: chainId === BSC_TESTNET_CONFIG.chainId,
+      networkName: chainId === BSC_TESTNET_CONFIG.chainId ? "BNB Smart Chain Testnet" : "Unknown Network"
+    }
+  } catch (error) {
+    console.error("❌ Failed to get network info:", error)
+    return { chainId: "", isCorrectNetwork: false }
+  }
+}
+
 // Backward compatibility - if you still use useWallet somewhere
 export function useWallet() {
-  const { account, connectWallet, disconnectWallet } = useWeb3Context()
+  const { account, connectWallet, disconnectWallet, isCorrectNetwork } = useWeb3Context()
   return {
     account,
     isConnected: !!account,
+    isCorrectNetwork,
     connect: connectWallet,
     disconnect: disconnectWallet,
     balance: null,
@@ -68,20 +262,7 @@ export const getAccounts = async (): Promise<string[]> => {
   }
 
   try {
-    let provider = window.ethereum as any
-
-    // Handle multiple providers
-    if (provider.providers && Array.isArray(provider.providers)) {
-      const metamaskProvider = provider.providers.find(
-        (p: any) => p.isMetaMask
-      )
-      provider = metamaskProvider || provider.providers[0]
-    }
-
-    if (!provider) {
-      console.warn("⚠️ No Ethereum provider found")
-      return []
-    }
+    const provider = getProvider()
 
     console.log("🔍 Requesting accounts from provider...")
     const accounts = (await provider.request({
@@ -162,7 +343,7 @@ export const getSigner = async (provider: ethers.BrowserProvider | ethers.JsonRp
   }
 }
 
-// ✅ NEW: Helper to check if on correct network
+// ✅ UPDATED: Helper to check if on correct network
 export const checkNetwork = async (provider: ethers.BrowserProvider): Promise<boolean> => {
   try {
     const network = await provider.getNetwork()
@@ -172,63 +353,13 @@ export const checkNetwork = async (provider: ethers.BrowserProvider): Promise<bo
       chainId: network.chainId.toString(),
       name: network.name,
       isCorrect,
+      requiredChainId: BSC_TESTNET_CHAIN_ID
     })
 
     return isCorrect
   } catch (error) {
     console.error("❌ Failed to check network:", error)
     return false
-  }
-}
-
-// ✅ NEW: Helper to switch network
-export const switchToBSCTestnet = async (): Promise<boolean> => {
-  try {
-    if (typeof window === "undefined" || !window.ethereum) {
-      throw new Error("MetaMask not available")
-    }
-
-    const provider = getProvider()
-
-    await provider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: "0x61" }], // 0x61 = 97 in hex
-    })
-
-    console.log("✅ Switched to BSC Testnet")
-    return true
-  } catch (error: any) {
-    if (error.code === 4902) {
-      // Chain not added yet
-      console.log("📝 Adding BSC Testnet to wallet...")
-      try {
-        const provider = getProvider()
-        await provider.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: "0x61",
-              chainName: "BSC Testnet",
-              rpcUrls: [BSC_TESTNET_RPC],
-              nativeCurrency: {
-                name: "BNB",
-                symbol: "BNB",
-                decimals: 18,
-              },
-              blockExplorerUrls: ["https://testnet.bscscan.com"],
-            },
-          ],
-        })
-        console.log("✅ Added BSC Testnet")
-        return true
-      } catch (addError) {
-        console.error("❌ Failed to add network:", addError)
-        return false
-      }
-    } else {
-      console.error("❌ Failed to switch network:", error?.message)
-      return false
-    }
   }
 }
 
