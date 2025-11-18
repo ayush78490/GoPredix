@@ -148,6 +148,7 @@ export default function MarketsPage() {
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [selectedPaymentToken, setSelectedPaymentToken] = useState<"BNB" | "PDX" | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<"active" | "ended" | "resolved" | null>(null)
+  const [loadingMarketId, setLoadingMarketId] = useState<string | null>(null)
 
   const router = useRouter()
   const { account, connectWallet, isCorrectNetwork } = useWeb3Context()
@@ -210,6 +211,18 @@ export default function MarketsPage() {
   const handleHowItWorks = () => {
     router.push("/leaderboard")
   }
+
+  const handleMarketClick = (market: any) => {
+    if (!account || !isCorrectNetwork) return;
+    
+    // Set loading state for this specific market
+    const marketKey = `${market.paymentToken}-${market.id}`;
+    setLoadingMarketId(marketKey);
+    
+    // Navigate to market detail page
+    router.push(`/markets/${marketKey}`);
+  }
+
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
@@ -317,8 +330,6 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          
-
           {/* Categories */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-10">
             <div className="flex flex-wrap gap-2">
@@ -390,13 +401,20 @@ export default function MarketsPage() {
                     Showing {filteredMarkets.length} of {stats.totalMarkets} markets
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredMarkets.map((market) => (
-                      <MarketCard
-                        key={`${market.paymentToken}-${market.id}`}
-                        market={market}
-                        disabled={!account || !isCorrectNetwork}
-                      />
-                    ))}
+                    {filteredMarkets.map((market) => {
+                      const marketKey = `${market.paymentToken}-${market.id}`;
+                      const isLoadingMarket = loadingMarketId === marketKey;
+                      
+                      return (
+                        <MarketCard
+                          key={marketKey}
+                          market={market}
+                          disabled={!account || !isCorrectNetwork || isLoadingMarket}
+                          isLoading={isLoadingMarket}
+                          onClick={() => handleMarketClick(market)}
+                        />
+                      );
+                    })}
                   </div>
                 </>
               ) : (
