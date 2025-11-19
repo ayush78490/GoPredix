@@ -75,12 +75,12 @@ export default function LandingPage() {
 
           {/* HERO SECTION */}
           {isInitialized && (
-            <section className="flex flex-col items-center justify-center text-center min-h-[70vh] mt-[10vh]">
+            <section className="flex flex-col items-center justify-center text-center min-h-[70vh] mt-[8vh]">
 
               <button
                 className="
-                  px-8 py-3 rounded-full bg-cyan-300/15 text-white font-medium text-lg
-                  hover:bg-[#ECFEFF] hover:text-black transition mb-[10%]
+                  px-8 py-2 rounded-full bg-cyan-300/15 text-white font-medium text-lg
+                  hover:bg-[#ECFEFF] hover:text-black transition mb-[20%]
                   border border-cyan-300 glow-border
                 "
                 onClick={getPDX}
@@ -93,7 +93,7 @@ export default function LandingPage() {
                 GOPREDIX
               </h1> */}
 
-              <div className="mb-7">
+              <div className="mb-[2%]">
                 <Shuffle
               text="GOPREDIX"
               shuffleDirection="right"
@@ -113,7 +113,8 @@ export default function LandingPage() {
                 Predict the outcome of future events, trade your beliefs, and earn rewards for your accuracy.
               </p> */}
 
-              <AnimatedParagraphs
+              <div className="">
+                <AnimatedParagraphs
                 paragraphs={[
                   "Betting on the future so you can brag about it later.",
                   "Markets powered by science, sarcasm, and questionable optimism.",
@@ -121,6 +122,7 @@ export default function LandingPage() {
                   "Fortune favors the bold, but true gains belong to the absolutely reckless.",
                 ]}
               />
+              </div>
 
               {/* Hero Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 w-full justify-center mt-10">
