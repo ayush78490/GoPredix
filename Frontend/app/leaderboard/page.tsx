@@ -565,7 +565,7 @@ export default function Leaderboard() {
   // Main data fetching
   const fetchLeaderboardData = useCallback(async () => {
     if (!BNB_MARKET_ADDRESS || !BNB_HELPER_ADDRESS || !PDX_ADAPTER_ADDRESS) {
-      setError("Contract addresses not configured. Please check environment variables.")
+      setError("Something went wrong.")
       return
     }
 
