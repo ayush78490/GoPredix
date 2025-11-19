@@ -60,7 +60,7 @@ export default function LandingPage() {
       </div>
 
       {/* Content Overlay */}
-      <div className="relative z-10 bg-black/50 min-h-screen">
+      <div className="relative z-10 bg-black/70 min-h-screen">
         <Header />
 
         <div className="max-w-7xl mx-auto px-4 py-8">
