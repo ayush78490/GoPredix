@@ -611,7 +611,7 @@ export default function Leaderboard() {
       )
       
       activeTraders.sort((a, b) => b.totalPnl - a.totalPnl)
-      console.log(`✅ Active traders with positions: ${activeTraders.length}`)
+      console.log(` Active traders with positions: ${activeTraders.length}`)
 
       setUserStats(activeTraders)
 
@@ -772,7 +772,7 @@ export default function Leaderboard() {
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   🔶 {bnbMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} BNB • 
-                  💜 {pdxMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} PDX
+                   {pdxMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} PDX
                 </div>
               </CardContent>
             </Card>
@@ -868,7 +868,7 @@ export default function Leaderboard() {
                             🔶 {parseFloat(user.bnbInvestment).toFixed(4)} BNB
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            💜 {parseFloat(user.pdxInvestment).toFixed(4)} PDX
+                             {parseFloat(user.pdxInvestment).toFixed(4)} PDX
                           </div>
                         </div>
                       </div>
@@ -910,7 +910,7 @@ export default function Leaderboard() {
                                       variant="secondary" 
                                       className="ml-1 mr-1 backdrop-blur-sm"
                                     >
-                                      {position.paymentToken === "BNB" ? "🔶 BNB" : "💜 PDX"}
+                                      {position.paymentToken === "BNB" ? "🔶 BNB" : " PDX"}
                                     </Badge>
                                     <Badge 
                                       variant="secondary" 
@@ -953,10 +953,10 @@ export default function Leaderboard() {
                     Be the first to trade prediction markets and appear on the leaderboard!
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <Button onClick={() => router.push("/")} variant="outline" className="backdrop-blur-sm bg-card/80">
+                    <Button onClick={() => router.push("/markets")} variant="outline" className="backdrop-blur-sm bg-card/80">
                       View Markets
                     </Button>
-                    <Button onClick={() => router.push("/")} className="backdrop-blur-sm bg-card/80">
+                    <Button onClick={() => router.push("/markets")} className="backdrop-blur-sm bg-card/80">
                       Start Trading
                     </Button>
                   </div>
@@ -967,7 +967,7 @@ export default function Leaderboard() {
 
           {!isLoading && !error && (
             <div className="mt-4 text-center text-sm text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg">
-              <p>Live data from GoPredix BNB & PDX contracts</p>
+              <p>Live data from GoPredix</p>
             </div>
           )}
         </div>

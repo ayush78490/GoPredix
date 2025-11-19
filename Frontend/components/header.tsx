@@ -4,14 +4,25 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, Bell } from "lucide-react"
 import Link from "next/link"
-import { useWeb3Context } from "@/lib/wallet-context"
+import { useWeb3Context, MobileWalletSelector } from "@/lib/wallet-context"
 import MyImage from '@/public/logo.png' // or your actual logo import
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false)
-  const { account, connectWallet, disconnectWallet } = useWeb3Context()
+  const { 
+    account, 
+    connectWallet, 
+    disconnectWallet, 
+    isMobile,
+    showWalletSelector,
+    setShowWalletSelector
+  } = useWeb3Context()
 
   const displayAddress = account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"
+
+  const handleConnect = async () => {
+    await connectWallet()
+  }
 
   const handleDisconnect = () => {
     disconnectWallet()
@@ -19,74 +30,78 @@ export default function Header() {
   }
 
   return (
-    <header className="w-full py-5 fixed top-0 left-0 right-0 z-50 ">
-      <div className="max-w-7xl mx-auto px-2">
-        <div className="flex items-center justify-between bg-black/50 rounded-full px-6 py-4 shadow-sm border border-cyan-300">
-          {/* Left: Logo and nav */}
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition">
-              <div className="w-8 h-8 rounded-xl overflow-hidden flex items-center justify-center">
-                <img
-                  src={MyImage.src || "/logo.png"}
-                  alt="Project Logo"
-                  className="w-6 h-6 object-contain scale-[1.5]"
-                />
-              </div>
-            </Link>
-            <Link href="/">
-              <nav className="hidden md:flex items-center gap-2">
+    <>
+      <header className="w-full py-5 fixed top-0 left-0 right-0 z-50 ">
+        <div className="max-w-7xl mx-auto px-2">
+          <div className="flex items-center justify-between bg-black/50 rounded-full px-6 py-4 shadow-sm border border-cyan-300">
+            {/* Left: Logo and nav */}
+            <div className="flex items-center gap-8">
+              <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition">
+                <div className="w-8 h-8 rounded-xl overflow-hidden flex items-center justify-center">
+                  <img
+                    src={MyImage.src || "/logo.png"}
+                    alt="Project Logo"
+                    className="w-6 h-6 object-contain scale-[1.5]"
+                  />
+                </div>
+              </Link>
+              <Link href="/">
+                <nav className="hidden md:flex items-center gap-2">
+                  <button
+                    className="text-white mr-8 text-2xl px-0 py-2 rounded-2xl bg-transparent hover:text-white"
+                  >
+                    GOPREDIX
+                  </button>
+                </nav>
+              </Link>
+            </div>
+            
+            {/* Right: Bell + Portfolio/Wallet */}
+            <div className="flex items-center gap-3">
+              <Link href="/profile">
+                <Button
+                  variant="ghost"
+                  size="sm" 
+                  className="text-white bg-transparent hover:text-black rounded-full px-5"
+                >
+                  Portfolio
+                </Button>
+              </Link>
+              {account ? (
+                <div className="flex items-center gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="rounded-full px-5 bg-[#271f40] text-white border-none cursor-default" 
+                    disabled
+                  >
+                    {displayAddress}
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="secondary" 
+                    className="rounded-full px-5" 
+                    onClick={handleDisconnect}
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              ) : (
                 <Button
                   size="sm"
-                  className="text-white mr-8 text-2xl px-0 py-2 rounded-2xl bg-transparent "
+                  className="rounded-full px-7 py-2 font-semibold text-black bg-[#ECFEFF]/70 hover:bg-[#ECFEFF] transition"
+                  onClick={handleConnect}
                 >
-                  GOPREDIX
+                  {isMobile && !window.ethereum ? "Choose Wallet" : "Login"}
                 </Button>
-              </nav>
-            </Link>
-          </div>
-          
-          {/* Right: Bell + Portfolio/Wallet */}
-          <div className="flex items-center gap-3">
-            <Link href="/profile">
-              <Button
-                variant="ghost"
-                size="sm" 
-                className="text-white bg-transparent hover:text-black rounded-full px-5"
-              >
-                Portfolio
-              </Button>
-            </Link>
-            {account ? (
-              <div className="flex items-center gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="rounded-full px-5 bg-[#271f40] text-white border-none cursor-default" 
-                  disabled
-                >
-                  {displayAddress}
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="secondary" 
-                  className="rounded-full px-5" 
-                  onClick={handleDisconnect}
-                >
-                  Disconnect
-                </Button>
-              </div>
-            ) : (
-              <Button
-                size="sm"
-                className="rounded-full px-7 py-2 font-semibold text-black bg-[#ECFEFF]/70 hover:bg-[#ECFEFF] transition"
-                onClick={connectWallet}
-              >
-                Login
-              </Button>
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Mobile Wallet Selector Modal */}
+      <MobileWalletSelector />
+    </>
   )
 }
