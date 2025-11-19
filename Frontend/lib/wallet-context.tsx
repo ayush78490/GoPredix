@@ -147,7 +147,7 @@ const MOBILE_WALLETS = {
 } as const
 
 // Set your local development IP and port here for deep linking in mobile
-const LOCAL_DEV_IP_PORT = "192.168.0.117:3000";
+const LOCAL_DEV_IP_PORT = "www.gopredix.xyz";
 
 export function Web3Provider({ children }: { children: ReactNode }) {
   const web3 = useWeb3()
