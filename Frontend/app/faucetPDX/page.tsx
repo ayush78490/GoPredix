@@ -205,35 +205,33 @@ export default function FaucetPage() {
   }
 
   const addTokenToWallet = async () => {
+    const tokenAddress = "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8"
+    const tokenSymbol = "PDX"
+    const tokenDecimals = 18
+    const tokenImage = "" // Optional: add your token logo URL here
+
     try {
-      const ethereum = getEthereumProvider()
-      if (!ethereum) return
-      const wasAdded = await ethereum.request({
-        method: 'wallet_watchAsset',
-        params: [
-          {
-            type: 'ERC20',
-            options: {
-              address: PDX_TOKEN_ADDRESS,
-              symbol: 'PDX',
-              decimals: 18,
-              image: '',
-            },
-          }
-        ] as any,
+      // @ts-ignore if TypeScript complains about window.ethereum
+      const wasAdded = await window.ethereum.request({
+        method: "wallet_watchAsset",
+        params: {
+          type: "ERC20",
+          options: {
+            address: tokenAddress,
+            symbol: tokenSymbol,
+            decimals: tokenDecimals,
+            image: tokenImage,
+          },
+        },
       })
       if (wasAdded) {
-        setTokenAdded(true)
-        console.log('PDX token added to wallet')
+        alert("PDX token added to your wallet!")
+      } else {
+        alert("PDX token was not added.")
       }
-    } catch (error: any) {
-      console.error('Error adding token to wallet:', error)
-      if (error.code === 4001) {
-        console.log('User rejected adding token')
-      } else if (error.code === -32601 || error.code === -32602) {
-        console.log('This wallet does not support automatic token addition')
-        setTokenAdded(true)
-      }
+    } catch (error) {
+      console.error(error)
+      alert("Error adding the token. Please try again.")
     }
   }
 
