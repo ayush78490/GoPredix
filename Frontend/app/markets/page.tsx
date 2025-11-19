@@ -385,7 +385,7 @@ export default function MarketsPage() {
           {error && !isLoading && (
             <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6 backdrop-blur-sm">
               <p className="text-destructive font-medium"> Error loading markets</p>
-              <p className="text-destructive/80 text-sm mt-1">{error}</p>
+              <p className="text-destructive/80 text-sm mt-1">something went wrong</p>
               <Button onClick={refreshMarkets} variant="outline" size="sm" className="mt-2 bg-card/80">
                 Try Again
               </Button>
@@ -421,8 +421,8 @@ export default function MarketsPage() {
                 <div className="text-center py-16 bg-card/50 rounded-lg backdrop-blur-sm">
                   <p className="text-muted-foreground text-lg mb-2">
                     {stats.totalMarkets === 0 
-                      ? "🚀 No markets yet. Be the first to create one!" 
-                      : "🔍 No markets match your filters."}
+                      ? " No markets yet. Be the first to create one!" 
+                      : " No markets match your filters."}
                   </p>
                   {stats.totalMarkets > 0 && (
                     <Button 

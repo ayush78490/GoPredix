@@ -415,13 +415,22 @@ export default function FaucetPage() {
                 <strong>Important:</strong> Make sure you're connected to <strong>BNB Testnet</strong>not BNB Mainnet!
                 The faucet will automatically prompt you to switch networks.
                 <strong>Get tBNB</strong>
-                Whitelist your wallet on our DISCORD to get tBNB
+                {/* Whitelist your wallet on our DISCORD to get tBNB
 
                 <Button variant="outline" size="icon" asChild>
                   <a href="https://discord.gg/predix" target="_blank" rel="noopener noreferrer">
                     <SiDiscord className="w-4 h-4 " />
                   </a>
-                </Button>
+                </Button> */}
+
+                <a
+                      href="https://hackathon-faucet.vercel.app/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-yellow-300 hover:underline flex items-center gap-1"
+                    >
+                      Get Testnet BNB <ExternalLink className="w-3 h-3" />
+                    </a>
               </AlertDescription>
             </Alert>
           </div>
@@ -698,7 +707,7 @@ export default function FaucetPage() {
                   <div>• You need BNB for gas fees</div>
                   <div className="pt-2 mt-2 border-t border-yellow-500/30">
                     <a
-                      href="https://testnet.bnbchain.org/faucet-smart"
+                      href="https://hackathon-faucet.vercel.app/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-yellow-300 hover:underline flex items-center gap-1"
