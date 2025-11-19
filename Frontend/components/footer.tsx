@@ -10,12 +10,12 @@ export default function Footer() {
   return (
     <footer className="border-t border-border bg-background/0">
       <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+        <div className="flex flex-row flex-wrap items-center justify-center gap-8 mb-8">
           {/* Brand Section */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 flex-1 w-[33vw]">
             <div className="mb-4">
               <h3 className="text-xl font-bold">Prediction Markets</h3>
-              <p className="text-muted-foreground mt-2 text-sm">
+              <p className="text-muted-foreground mt-2 text-sm w-[25vw]">
                 Trade your predictions on major events. Buy YES or NO tokens based on your beliefs about the future.
               </p>
             </div>
@@ -82,7 +82,7 @@ export default function Footer() {
                   <ArrowUpRight className="w-3 h-3 ml-1" />
                 </Link>
               </li>
-              <li>
+              {/* <li>
                 <a 
                   href="/faq" 
                   className="text-muted-foreground hover:text-foreground transition-colors flex items-center"
@@ -90,7 +90,7 @@ export default function Footer() {
                   FAQ
                   <ArrowUpRight className="w-3 h-3 ml-1" />
                 </a>
-              </li>
+              </li> */}
               <li>
                 <a 
                   href="/how-to-trade" 
@@ -104,7 +104,7 @@ export default function Footer() {
           </div>
 
           {/* Legal */}
-          <div>
+          {/* <div>
             <h4 className="font-semibold mb-4">Legal</h4>
             <ul className="space-y-3 text-sm">
               <li>
@@ -132,7 +132,7 @@ export default function Footer() {
                 </a>
               </li>
             </ul>
-          </div>
+          </div> */}
         </div>
 
         {/* Bottom Bar */}

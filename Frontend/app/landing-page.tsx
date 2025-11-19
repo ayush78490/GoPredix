@@ -80,7 +80,7 @@ export default function LandingPage() {
               <button
                 className="
                   px-8 py-2 rounded-full bg-cyan-300/15 text-white font-medium text-lg
-                  hover:bg-[#ECFEFF] hover:text-black transition mb-[20%]
+                  hover:bg-[#ECFEFF] hover:text-black transition mb-[20vh]
                   border border-cyan-300 glow-border
                 "
                 onClick={getPDX}
