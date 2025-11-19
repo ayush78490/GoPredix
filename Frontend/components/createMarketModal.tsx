@@ -10,6 +10,18 @@ import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 
+const TWITTER_HANDLE = "your_twitter_handle"; // update to your team's handle
+
+const createTweetMessage = (question: string, marketUrl: string) => {
+  return `Predict on: "${question}"\nCheck it out at ${marketUrl}\nTagging @${TWITTER_HANDLE}`;
+};
+
+const handleTweet = (question: string, marketUrl: string) => {
+  const tweetText = encodeURIComponent(createTweetMessage(question, marketUrl));
+  const tweetIntentUrl = `https://twitter.com/intent/tweet?text=${tweetText}`;
+  window.open(tweetIntentUrl, "_blank"); // opens Twitter in a new tab
+};
+
 interface CreateMarketModalProps {
   onClose: () => void
   onSuccess?: (marketId: number) => void
@@ -36,6 +48,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [marketUrl, setMarketUrl] = useState<string | null>(null)
+  const [showTweetPopup, setShowTweetPopup] = useState(false)
 
   // Get Web3 context
   const { account, connectWallet, isConnecting, isCorrectNetwork, switchNetwork } = useWeb3Context()
@@ -306,14 +320,14 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         })
       }
 
+      // Construct the market URL. Assuming your markets are at: /markets/{marketId}
+      const newMarketUrl = `https://www.gopredix.xyz/markets/${marketId}`;
+      setMarketUrl(newMarketUrl);
+      setShowTweetPopup(true);
+
       if (onSuccess) {
         onSuccess(marketId)
       }
-
-      // Close modal after 2 seconds
-      setTimeout(() => {
-        onClose()
-      }, 2000)
     } catch (err: any) {
       console.error("❌ Market creation error:", err)
       setError(err.reason || err.message || "Failed to create market")
@@ -665,6 +679,43 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           )}
         </div>
       </Card>
+
+      {/* Tweet Popup - Outside Card to prevent unmounting */}
+      {showTweetPopup && marketUrl && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[999]">
+          <div className="bg-white dark:bg-slate-950 rounded-xl shadow-xl p-8 w-full max-w-md flex flex-col items-center">
+            <h3 className="text-xl font-bold mb-4 text-center text-black dark:text-white">🎉 Market Created!</h3>
+            <div className="bg-gray-100 dark:bg-slate-800 rounded-md p-4 w-full mb-4">
+              <p className="text-sm font-semibold mb-2 text-black dark:text-white">Market Question:</p>
+              <p className="mb-2 text-black dark:text-gray-300">{question}</p>
+              <a
+                href={marketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline text-xs"
+              >
+                {marketUrl}
+              </a>
+            </div>
+            <Button
+              onClick={() => {
+                handleTweet(question, marketUrl)
+                setShowTweetPopup(false)
+              }}
+              className="w-full mb-2"
+            >
+              📢 Share on Twitter
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowTweetPopup(false)}
+              className="w-full"
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
