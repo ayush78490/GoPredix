@@ -5,12 +5,12 @@ import Header from "@/components/header"
 import MarketCard from "@/components/market-card"
 import CreateMarketModal from "@/components/createMarketModal"
 import { Button } from "@/components/ui/button"
-import { Search, Loader2, Plus, Trophy, Info, Droplets, Coins } from "lucide-react"
-import { useWeb3Context } from "@/lib/wallet-context"
+import { Search, Loader2, Plus, Trophy, Info, Droplets } from "lucide-react"
 import { useAllMarkets } from "@/hooks/getAllMarkets"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { useRouter } from "next/navigation"
+import { useAccount, useChainId, useConfig } from "wagmi"
 
 const CATEGORIES = [
   "All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy", "General"
@@ -29,7 +29,6 @@ const STATUS_FILTERS = [
   { label: "✅ Resolved", value: "resolved" }
 ]
 
-// Helper: Extract category from question
 const extractCategory = (question: string): string => {
   const lower = question.toLowerCase()
   if (lower.includes("bitcoin") || lower.includes("crypto")) return "Crypto"
@@ -41,7 +40,6 @@ const extractCategory = (question: string): string => {
   return "General"
 }
 
-// Helper: Calculate prices from pools
 const calculatePrices = (yesPool: string, noPool: string) => {
   const yes = parseFloat(yesPool) || 0
   const no = parseFloat(noPool) || 0
@@ -53,13 +51,11 @@ const calculatePrices = (yesPool: string, noPool: string) => {
   }
 }
 
-// Helper: Determine market status
 const getMarketStatus = (market: any) => {
   const nowInSeconds = Math.floor(Date.now() / 1000)
   const endTimeInSeconds = Number(market.endTime)
   const contractStatus = Number(market.status)
   
-  // Resolved
   if (contractStatus === 3) {
     return {
       isActive: false,
@@ -70,7 +66,6 @@ const getMarketStatus = (market: any) => {
     }
   }
   
-  // Disputed
   if (contractStatus === 4) {
     return {
       isActive: false,
@@ -81,7 +76,6 @@ const getMarketStatus = (market: any) => {
     }
   }
   
-  // Resolution requested
   if (contractStatus === 2) {
     return {
       isActive: false,
@@ -92,7 +86,6 @@ const getMarketStatus = (market: any) => {
     }
   }
   
-  // Time expired
   if (nowInSeconds >= endTimeInSeconds) {
     return {
       isActive: false,
@@ -103,7 +96,6 @@ const getMarketStatus = (market: any) => {
     }
   }
   
-  // Active
   if (contractStatus === 0) {
     return {
       isActive: true,
@@ -114,7 +106,6 @@ const getMarketStatus = (market: any) => {
     }
   }
   
-  // Closed
   return {
     isActive: false,
     isEnded: true,
@@ -124,7 +115,6 @@ const getMarketStatus = (market: any) => {
   }
 }
 
-// Helper: Convert raw market to frontend format
 const convertToFrontendMarket = (market: any) => {
   const prices = calculatePrices(market.yesPool, market.noPool)
   const statusInfo = getMarketStatus(market)
@@ -136,7 +126,7 @@ const convertToFrontendMarket = (market: any) => {
     noPrice: prices.noPrice,
     yesMultiplier: prices.yesPrice > 0 ? 100 / prices.yesPrice : 0,
     noMultiplier: prices.noPrice > 0 ? 100 / prices.noPrice : 0,
-    paymentToken: market.paymentToken || "BNB", // Ensure payment token is set
+    paymentToken: market.paymentToken || "BNB",
     ...statusInfo
   }
 }
@@ -145,13 +135,18 @@ export default function MarketsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Markets")
   const [searchQuery, setSearchQuery] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [selectedPaymentToken, setSelectedPaymentToken] = useState<"BNB" | "PDX" | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<"active" | "ended" | "resolved" | null>(null)
   const [loadingMarketId, setLoadingMarketId] = useState<string | null>(null)
 
   const router = useRouter()
-  const { account, connectWallet, isCorrectNetwork } = useWeb3Context()
+  const { address: account, isConnected } = useAccount()
+  const chainId = useChainId()
+  const config = useConfig()
+  
+  // Check if connected to BSC Testnet (chainId 97)
+  const isCorrectNetwork = chainId === 97
+  
   const { 
     markets, 
     isLoading, 
@@ -159,12 +154,10 @@ export default function MarketsPage() {
     refreshMarkets,
   } = useAllMarkets()
 
-  // Format markets with proper payment token info
   const formattedMarkets = useMemo(() => {
     return markets.map(m => convertToFrontendMarket(m))
   }, [markets])
 
-  // Filter markets
   const filteredMarkets = useMemo(() => {
     return formattedMarkets.filter((market) => {
       const cat = (market.category || "general").toLowerCase()
@@ -186,7 +179,6 @@ export default function MarketsPage() {
     })
   }, [formattedMarkets, selectedCategory, searchQuery, selectedPaymentToken, selectedStatus])
 
-  // Calculate statistics
   const stats = useMemo(() => {
     const bnbCount = formattedMarkets.filter(m => m.paymentToken === "BNB").length
     const pdxCount = formattedMarkets.filter(m => m.paymentToken === "PDX").length
@@ -213,20 +205,23 @@ export default function MarketsPage() {
   }
 
   const handleMarketClick = (market: any) => {
-    if (!account || !isCorrectNetwork) return;
-    
-    // Set loading state for this specific market
+    if (!isConnected || !isCorrectNetwork) {
+      console.log("Wallet not connected or wrong network - preventing navigation")
+      if (!isConnected) {
+        alert("Please connect your wallet first")
+      } else if (!isCorrectNetwork) {
+        alert("Please switch to BSC Testnet")
+      }
+      return;
+    }
+  
     const marketKey = `${market.paymentToken}-${market.id}`;
     setLoadingMarketId(marketKey);
-    
-    // Navigate to market detail page
     router.push(`/markets/${marketKey}`);
   }
 
-
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
-      {/* Light background animation */}
       <div className="fixed inset-0 z-0">
         <LightRays
           raysOrigin="top-center"
@@ -240,12 +235,10 @@ export default function MarketsPage() {
         />
       </div>
 
-      {/* Content */}
       <div className="relative z-10 bg-black/80 min-h-screen">
         <Header />
 
         <div className="max-w-7xl mx-auto px-4 py-8 ">
-          {/* Top section */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 mt-[10vh]">
             <div>
               <h1 className="text-4xl font-bold mb-2 text-white">All Markets</h1>
@@ -288,23 +281,16 @@ export default function MarketsPage() {
               </Button>
 
               <Button
-                onClick={() => {
-                  if (!account) {
-                    connectWallet()
-                  } else {
-                    setShowCreateModal(true)
-                  }
-                }}
+                onClick={() => setShowCreateModal(true)}
                 className="bg-primary text-black hover:bg-primary/90 font-semibold"
-                disabled={!account}
+                disabled={!isConnected}
               >
                 <Plus className="w-5 h-5 mr-2" /> Create Market
               </Button>
             </div>
           </div>
 
-          {/* Network Warning */}
-          {account && !isCorrectNetwork && (
+          {isConnected && !isCorrectNetwork && (
             <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-4 mb-6 backdrop-blur-sm">
               <div className="flex items-center">
                 <Trophy className="w-5 h-5 text-yellow-500 mr-2" />
@@ -316,7 +302,6 @@ export default function MarketsPage() {
             </div>
           )}
 
-          {/* Search Bar */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -330,7 +315,6 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* Categories */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-10">
             <div className="flex flex-wrap gap-2">
               {CATEGORIES.map((cat) => (
@@ -373,7 +357,6 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {/* Loading State */}
           {isLoading && (
             <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -381,7 +364,6 @@ export default function MarketsPage() {
             </div>
           )}
 
-          {/* Error State */}
           {error && !isLoading && (
             <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6 backdrop-blur-sm">
               <p className="text-destructive font-medium"> Error loading markets</p>
@@ -392,7 +374,6 @@ export default function MarketsPage() {
             </div>
           )}
 
-          {/* Market Grid */}
           {!isLoading && !error && (
             <>
               {filteredMarkets.length > 0 ? (
@@ -409,7 +390,7 @@ export default function MarketsPage() {
                         <MarketCard
                           key={marketKey}
                           market={market}
-                          disabled={!account || !isCorrectNetwork || isLoadingMarket}
+                          disabled={!isConnected || !isCorrectNetwork || isLoadingMarket}
                           isLoading={isLoadingMarket}
                           onClick={() => handleMarketClick(market)}
                         />
@@ -447,7 +428,6 @@ export default function MarketsPage() {
 
         <Footer />
 
-        {/* Create Market Modal */}
         {showCreateModal && (
           <CreateMarketModal
             onClose={() => setShowCreateModal(false)}

@@ -11,11 +11,10 @@ import { ArrowLeft, Volume2, TrendingUp, Loader2, Calendar, User, Coins } from "
 import { useAllMarkets } from "@/hooks/getAllMarkets"
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
-import { useWeb3Context } from "@/lib/wallet-context"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
+import { useAccount, useChainId } from "wagmi"
 
-// Helper: Safe BigInt serialization for localStorage
 const safeStringify = (obj: any): string => {
   return JSON.stringify(obj, (_, value) => {
     if (typeof value === 'bigint') {
@@ -25,7 +24,6 @@ const safeStringify = (obj: any): string => {
   })
 }
 
-// Helper: Generate slug from question
 export const generateSlug = (question: string, id: number | string): string => {
   const baseSlug = question
     .toLowerCase()
@@ -38,7 +36,6 @@ export const generateSlug = (question: string, id: number | string): string => {
   return `${baseSlug}-${id}` || `market-${id}`
 }
 
-// Helper: Extract ID from slug
 export const extractIdFromSlug = (slug: string): number | null => {
   if (!slug) return null
   if (/^\d+$/.test(slug)) return parseInt(slug)
@@ -47,7 +44,6 @@ export const extractIdFromSlug = (slug: string): number | null => {
   return null
 }
 
-// Helper: Extract category from question
 const extractCategory = (question = ""): string => {
   const lowerQuestion = question.toLowerCase()
   if (lowerQuestion.includes("bitcoin") || lowerQuestion.includes("crypto") || lowerQuestion.includes("ethereum") || lowerQuestion.includes("blockchain"))
@@ -69,7 +65,6 @@ const extractCategory = (question = ""): string => {
   return "General"
 }
 
-// Helper: Convert on-chain market to frontend format
 const convertToFrontendMarket = (m: any, id: number | string) => {
   const question = m?.question ?? m?.title ?? `Market ${id}`
   const category = m?.category ? m.category.toUpperCase() : extractCategory(question)
@@ -105,11 +100,10 @@ const convertToFrontendMarket = (m: any, id: number | string) => {
     daysLeft: Math.max(0, Math.ceil((resolutionDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))),
     creator: m?.creator || "Unknown",
     totalLiquidity: totalPool,
-    paymentToken // BNB or PDX
+    paymentToken
   }
 }
 
-// Helper: Generate synthetic price history
 const generatePriceHistory = (market: any, days: number = 7) => {
   const history = []
   const now = Date.now()
@@ -130,7 +124,6 @@ const generatePriceHistory = (market: any, days: number = 7) => {
   return history
 }
 
-// Helper: Get payment token badge
 const getPaymentTokenBadge = (token: string) => {
   const tokenConfig: Record<string, any> = {
     "BNB": { 
@@ -168,23 +161,20 @@ export default function MarketPage() {
   const [isChartLoading, setIsChartLoading] = useState(true)
   const [isNavigatingBack, setIsNavigatingBack] = useState(false)
 
-  // Use ref to track if market was found to prevent further searches
   const marketFoundRef = useRef(false)
   const searchAttemptedRef = useRef(false)
 
+  const { address: account, isConnected } = useAccount()
+  const chainId = useChainId()
+  const isCorrectNetwork = chainId === 97
+
   const { markets: allMarkets, isLoading: marketsLoading, getAllMarkets, isContractReady } = useAllMarkets()
   
-  // Get account from Web3 context
-  const { account } = useWeb3Context()
-  
-  // Initialize both hooks
   const bnbHook = usePredictionMarketBNB()
   const pdxHook = usePredictionMarketPDX()
 
-  // Safe user investment fetch with error handling
   const safeGetUserInvestment = useCallback(async (marketId: number, account: string) => {
     try {
-      // Only fetch user investment if we have an account and valid market ID
       if (!account || marketId < 0) {
         return {
           totalInvested: "0",
@@ -200,7 +190,7 @@ export default function MarketPage() {
         noBalance: "0"
       }
     } catch (error) {
-      console.warn("⚠️ Could not fetch user investment:", error)
+      console.warn("Could not fetch user investment:", error)
       return {
         totalInvested: "0",
         yesBalance: "0",
@@ -209,11 +199,9 @@ export default function MarketPage() {
     }
   }, [pdxHook])
 
-  // Load market data with proper payment token detection
   const loadMarketData = useCallback(async () => {
-    // If market was already found, don't search again
     if (marketFoundRef.current) {
-      console.log("✅ Market already found, skipping search")
+      console.log("Market already found, skipping search")
       return
     }
 
@@ -223,7 +211,6 @@ export default function MarketPage() {
       return
     }
 
-    // Mark that we're attempting a search
     searchAttemptedRef.current = true
     setIsLoading(true)
     setIsChartLoading(true)
@@ -231,13 +218,12 @@ export default function MarketPage() {
     try {
       let marketsToSearch = allMarkets
       
-      // Fetch markets if not already loaded
       if (allMarkets.length === 0 && !marketsLoading && isContractReady) {
-        console.log("📋 No markets in cache, fetching from blockchain...")
+        console.log("No markets in cache, fetching from blockchain...")
         try {
           marketsToSearch = await getAllMarkets()
         } catch (fetchError) {
-          console.warn("⚠️ Could not fetch markets, using empty array:", fetchError)
+          console.warn("Could not fetch markets, using empty array:", fetchError)
           marketsToSearch = []
         }
       }
@@ -245,9 +231,8 @@ export default function MarketPage() {
       let foundMarket: any = null
       const extractedId = extractIdFromSlug(marketSlug)
 
-      console.log(`🔍 Looking for market with slug: "${marketSlug}", extracted ID: ${extractedId}`)
+      console.log(`Looking for market with slug: "${marketSlug}", extracted ID: ${extractedId}`)
 
-      // Strategy 1: Try direct ID match first (handles URLs like /markets/0, /markets/1)
       if (extractedId !== null && extractedId >= 0) {
         const market = marketsToSearch.find((m: any) => {
           const marketId = typeof m.id === 'string' ? parseInt(m.id) : Number(m.id)
@@ -255,12 +240,11 @@ export default function MarketPage() {
         })
         
         if (market) {
-          console.log(`✅ Found market by ID: ${extractedId}`)
+          console.log(`Found market by ID: ${extractedId}`)
           foundMarket = convertToFrontendMarket(market, extractedId)
         }
       }
 
-      // Strategy 2: If slug is a pure number, treat it as direct ID
       if (!foundMarket && /^\d+$/.test(marketSlug)) {
         const directId = parseInt(marketSlug)
         const market = marketsToSearch.find((m: any) => {
@@ -269,21 +253,19 @@ export default function MarketPage() {
         })
         
         if (market) {
-          console.log(`✅ Found market by direct ID: ${directId}`)
+          console.log(`Found market by direct ID: ${directId}`)
           foundMarket = convertToFrontendMarket(market, directId)
         }
       }
 
-      // Strategy 3: Search by slug match (improved logic)
       if (!foundMarket) {
         for (let i = 0; i < marketsToSearch.length; i++) {
           const marketData = marketsToSearch[i]
           const marketId = typeof marketData.id === 'string' ? parseInt(marketData.id) : Number(marketData.id)
           const formatted = convertToFrontendMarket(marketData, marketId)
           
-          // Check both exact slug match and ID match from slug
           if (formatted.slug === marketSlug || formatted.id === marketSlug) {
-            console.log(`✅ Found market by slug match: ${marketSlug}`)
+            console.log(`Found market by slug match: ${marketSlug}`)
             foundMarket = formatted
             break
           }
@@ -291,94 +273,84 @@ export default function MarketPage() {
       }
 
       if (foundMarket) {
-        // ✅ CRITICAL: Mark that market was found to prevent future searches
         marketFoundRef.current = true
         
-        // ✅ CRITICAL: Detect payment token and fetch additional data from correct hook
         const paymentToken = foundMarket.paymentToken || "BNB"
         const marketId = typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id)
         
-        console.log(`🔍 Market ${marketId} uses payment token: ${paymentToken}`)
+        console.log(`Market ${marketId} uses payment token: ${paymentToken}`)
         
         try {
           if (paymentToken === "PDX" && pdxHook.isContractReady) {
-            console.log("📊 Fetching PDX market details...")
+            console.log("Fetching PDX market details...")
             const pdxMarket = await pdxHook.getPDXMarket(marketId)
             
-            // Safe user investment fetch
             const userInvestment = await safeGetUserInvestment(marketId, account || "")
             
             foundMarket = {
               ...foundMarket,
               ...pdxMarket,
-              id: marketId.toString(), // Ensure consistent ID format
+              id: marketId.toString(),
               paymentToken: "PDX",
               userInvestment
             }
-            console.log("✅ PDX market data loaded")
+            console.log("PDX market data loaded")
           } else if (paymentToken === "BNB" && bnbHook.isContractReady) {
-            console.log("📊 Fetching BNB market details...")
+            console.log("Fetching BNB market details...")
             const bnbMarket = await bnbHook.getMarket(marketId)
             
             foundMarket = {
               ...foundMarket,
               ...bnbMarket,
-              id: marketId.toString(), // Ensure consistent ID format
+              id: marketId.toString(),
               paymentToken: "BNB"
             }
-            console.log("✅ BNB market data loaded")
+            console.log("BNB market data loaded")
           }
         } catch (hookError) {
-          console.warn("⚠️ Could not fetch additional market data:", hookError)
-          // Continue with basic market data - don't fail the entire load
+          console.warn("Could not fetch additional market data:", hookError)
         }
         
         setMarket(foundMarket)
         
-        // Generate chart data
         const priceHistory = generatePriceHistory(foundMarket)
         setChartData(priceHistory)
         
-        // Set loading states to false after all data is ready
         setTimeout(() => {
           setIsChartLoading(false)
           setIsLoading(false)
-        }, 300) // Small delay for smooth transition
+        }, 300)
         
-        console.log(`✅ Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
+        console.log(`Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
         return;
         
       } else {
-        // If market not found, retry after a delay but with limits
-        console.warn(`❌ Market not found with slug: ${marketSlug}, retrying... (attempt ${retryCount + 1})`)
+        console.warn(`Market not found with slug: ${marketSlug}, retrying... (attempt ${retryCount + 1})`)
         
-        // Stop retrying after 5 attempts to prevent infinite loops
         if (retryCount < 5) {
           setTimeout(() => {
             setRetryCount(prev => prev + 1)
-          }, 2000) // Retry after 2 seconds
+          }, 2000)
         } else {
-          console.error(`❌ Giving up after ${retryCount} attempts for market: ${marketSlug}`)
+          console.error(`Giving up after ${retryCount} attempts for market: ${marketSlug}`)
           setIsLoading(false)
           setIsChartLoading(false)
         }
       }
     } catch (err: any) {
-      console.error("❌ Failed to load market:", err)
-      // Retry on error after a delay but with limits
+      console.error("Failed to load market:", err)
       if (retryCount < 5) {
         setTimeout(() => {
           setRetryCount(prev => prev + 1)
-        }, 2000) // Retry after 2 seconds
+        }, 2000)
       } else {
-        console.error(`❌ Giving up after ${retryCount} attempts due to errors`)
+        console.error(`Giving up after ${retryCount} attempts due to errors`)
         setIsLoading(false)
         setIsChartLoading(false)
       }
     } 
   }, [marketSlug, allMarkets, marketsLoading, isContractReady, bnbHook.isContractReady, pdxHook.isContractReady, account, safeGetUserInvestment, retryCount, getAllMarkets])
 
-  // Execute load on mount and when dependencies change
   useEffect(() => {
     let cancelled = false
 
@@ -395,23 +367,20 @@ export default function MarketPage() {
     }
   }, [loadMarketData])
 
-  // Auto-retry when retryCount changes - but only if market not found
   useEffect(() => {
     if (retryCount > 0 && retryCount <= 5 && !marketFoundRef.current) {
-      console.log(`🔄 Retry attempt ${retryCount} for market: ${marketSlug}`)
+      console.log(`Retry attempt ${retryCount} for market: ${marketSlug}`)
       loadMarketData()
     }
   }, [retryCount, marketSlug, loadMarketData])
 
-  // Also reload when allMarkets updates - but only if market not found
   useEffect(() => {
     if (allMarkets.length > 0 && !market && isLoading && !marketFoundRef.current) {
-      console.log("🔄 Markets data updated, retrying search...")
+      console.log("Markets data updated, retrying search...")
       loadMarketData()
     }
   }, [allMarkets.length, market, isLoading, loadMarketData])
 
-  // Update chart when market changes
   useEffect(() => {
     if (market && !isChartLoading) {
       const newChartData = generatePriceHistory(market)
@@ -419,7 +388,6 @@ export default function MarketPage() {
     }
   }, [market?.yesOdds, market?.id, isChartLoading])
 
-  // Reset market found state when slug changes
   useEffect(() => {
     marketFoundRef.current = false
     searchAttemptedRef.current = false
@@ -430,13 +398,11 @@ export default function MarketPage() {
     setIsNavigatingBack(false)
   }, [marketSlug])
 
-  // Handle back navigation with loading state
   const handleBackNavigation = () => {
     setIsNavigatingBack(true)
     router.push("/markets")
   }
 
-  // UI helpers
   const formatVolume = (vol: number) => {
     if (vol >= 1000000) return `$${(vol / 1000000).toFixed(1)}m`
     if (vol >= 1000) return `$${(vol / 1000).toFixed(1)}k`
@@ -469,7 +435,6 @@ export default function MarketPage() {
 
   const statusBadge = getStatusBadge()
 
-  // Memoized derived data
   const memoizedMarketData = useMemo(() => {
     if (!market) return null
     
@@ -483,10 +448,8 @@ export default function MarketPage() {
     }
   }, [market])
 
-  // Check if all data is loaded
   const isDataFullyLoaded = market && !isLoading && !isChartLoading
 
-  // Show loading spinner when data is not fully loaded
   if (!isDataFullyLoaded) {
     return (
       <main className="min-h-screen bg-black/80 relative overflow-hidden">
@@ -527,10 +490,8 @@ export default function MarketPage() {
               </Button>
             </div>
 
-            {/* Loading skeleton for market content */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-[10vh]">
               <div className="lg:col-span-2 space-y-6">
-                {/* Header skeleton */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-20 h-6 bg-gray-700 rounded-full animate-pulse"></div>
@@ -539,13 +500,10 @@ export default function MarketPage() {
                   <div className="w-24 h-6 bg-gray-700 rounded-lg animate-pulse"></div>
                 </div>
 
-                {/* Description skeleton */}
                 <div className="w-full h-20 bg-gray-700 rounded-lg animate-pulse"></div>
 
-                {/* Info skeleton */}
                 <div className="w-full h-16 bg-gray-700 rounded-lg animate-pulse"></div>
 
-                {/* Chart skeleton */}
                 <div className="w-full bg-card rounded-lg p-4 backdrop-blur-sm h-80">
                   <div className="h-full flex flex-col items-center justify-center gap-4">
                     <Loader2 className="w-12 h-12 animate-spin text-primary" />
@@ -553,7 +511,6 @@ export default function MarketPage() {
                   </div>
                 </div>
 
-                {/* Stats skeleton */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[1, 2, 3].map((i) => (
                     <div key={i} className="h-20 bg-gray-700 rounded-lg animate-pulse"></div>
@@ -583,7 +540,6 @@ export default function MarketPage() {
     )
   }
 
-  // Show not found state when not loading but no market (should not happen with above logic, but as fallback)
   if (!market) {
     return (
       <main className="min-h-screen bg-black/80 relative overflow-hidden">
@@ -683,7 +639,7 @@ export default function MarketPage() {
           {!isContractReady && (
             <div className="mb-6 p-3 bg-yellow-950/30 border border-yellow-600/50 rounded-lg backdrop-blur-sm text-yellow-400">
               <p className="text-sm">
-                ⚠️ Not connected to blockchain. Some features may be limited.
+                Not connected to blockchain. Some features may be limited.
               </p>
             </div>
           )}

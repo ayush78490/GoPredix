@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { X, Loader2, AlertTriangle, Info } from "lucide-react"
+import { X, Loader2, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { useWeb3Context } from "@/lib/wallet-context"
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 import { ethers } from "ethers"
+import { useAccount, useChainId, useWalletClient } from "wagmi"
 
 interface TradeModalProps {
   market: any
@@ -16,6 +16,11 @@ interface TradeModalProps {
   outcome: "YES" | "NO" | null
   onOutcomeChange: (o: "YES" | "NO") => void
   onClose: () => void
+}
+
+// Define the EIP-1193 provider interface
+interface EIP1193Provider {
+  request(args: { method: string; params?: any[] }): Promise<any>
 }
 
 export default function TradeModal({
@@ -33,23 +38,27 @@ export default function TradeModal({
   const [noPrice, setNoPrice] = useState<number | null>(null)
   const [expectedOut, setExpectedOut] = useState<string | null>(null)
   const [feeEstimated, setFeeEstimated] = useState<string | null>(null)
-  const [slippage, setSlippage] = useState(40) // ✅ Start with 40% based on your logs
+  const [slippage, setSlippage] = useState(40)
   const [isEstimating, setIsEstimating] = useState(false)
   const [showSlippageWarning, setShowSlippageWarning] = useState(false)
 
-  const { account, connectWallet, isCorrectNetwork, switchNetwork, signer, provider } = useWeb3Context()
+  const { address: account, isConnected } = useAccount()
+  const chainId = useChainId()
+  const { data: walletClient } = useWalletClient()
+  
+  const isCorrectNetwork = chainId === 97
+  const canTransact = isConnected && isCorrectNetwork && !!walletClient
+
   const bnbHook = usePredictionMarketBNB()
   const pdxHook = usePredictionMarketPDX()
 
-  // Use the correct hook based on payment token
   const currentHook = paymentToken === "BNB" ? bnbHook : pdxHook
-  const isContractReady = currentHook?.isContractReady === true
+  const isContractReady = currentHook?.isContractReady === true && canTransact
 
   const numAmount = parseFloat(amount) || 0
   const hasAmount = numAmount >= 0.001
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Helper to validate market ID (allow 0 as valid starting ID)
   const validateMarketId = (id: any): number => {
     if (id == null || id === '') throw new Error("Market ID not found")
     const idNum = Number(id)
@@ -57,7 +66,6 @@ export default function TradeModal({
     return idNum
   }
 
-  // Early check for invalid market on mount
   useEffect(() => {
     try {
       validateMarketId(market?.id)
@@ -67,18 +75,6 @@ export default function TradeModal({
     }
   }, [market?.id, onClose])
 
-  // ============================================
-  // ✅ FIXED SLIPPAGE CALCULATION USING PYTHON FORMULA
-  // ============================================
-
-  /**
-   * Calculate minimum output with proper slippage tolerance
-   * Using the Python formula: min_tokens = int(amount_out * (1 - (slippage / 100)))
-   * 
-   * @param expectedOutput - The expected output amount as string
-   * @param slippagePercent - Slippage percentage (e.g., 40 for 40%)
-   * @returns Minimum output as string with 18 decimals
-   */
   const calculateMinimumOutput = (expectedOutput: string, slippagePercent: number): string => {
     try {
       const expectedNum = parseFloat(expectedOutput)
@@ -86,11 +82,10 @@ export default function TradeModal({
         throw new Error("Invalid expected output")
       }
 
-      // ✅ Apply the Python formula: amount_out * (1 - (slippage / 100))
       const slippageMultiplier = 1 - (slippagePercent / 100)
       const minOut = expectedNum * slippageMultiplier
       
-      console.log("📊 Slippage Calculation:", {
+      console.log("Slippage Calculation:", {
         expectedOutput,
         slippagePercent: `${slippagePercent}%`,
         multiplier: slippageMultiplier,
@@ -98,17 +93,13 @@ export default function TradeModal({
         difference: `${slippagePercent}%`
       })
 
-      // Return with 18 decimals for contract precision
       return minOut.toFixed(18)
     } catch (error) {
-      console.error("❌ Slippage calculation error:", error)
+      console.error("Slippage calculation error:", error)
       throw new Error("Failed to calculate minimum output")
     }
   }
 
-  /**
-   * Validate slippage calculation matches intended slippage
-   */
   const validateSlippageCalculation = (
     expectedOut: string, 
     minOut: string, 
@@ -122,13 +113,10 @@ export default function TradeModal({
       if (minimum <= 0) return false
       if (minimum > expected) return false
       
-      // Calculate actual slippage percentage
       const actualSlippage = ((expected - minimum) / expected) * 100
-      
-      // Allow small rounding tolerance
       const isValid = Math.abs(actualSlippage - slippagePercent) < 0.01
       
-      console.log("🔍 Validation:", {
+      console.log("Validation:", {
         expected,
         minimum,
         intendedSlippage: `${slippagePercent}%`,
@@ -138,22 +126,17 @@ export default function TradeModal({
       
       return isValid
     } catch (error) {
-      console.error("❌ Validation error:", error)
+      console.error("Validation error:", error)
       return false
     }
   }
 
-  // ============================================
-  // CALCULATION FUNCTIONS
-  // ============================================
-
-  // Load market prices
   const loadMarketPrices = async () => {
     if (!market?.id || !isContractReady) return
 
     try {
       const marketId = validateMarketId(market.id)
-      console.log(`📊 Loading ${paymentToken} market prices for ID ${marketId}...`)
+      console.log(`Loading ${paymentToken} market prices for ID ${marketId}...`)
       
       let priceData
       if (paymentToken === "BNB") {
@@ -166,16 +149,15 @@ export default function TradeModal({
         setNoPrice(priceData.noPrice)
       }
       
-      console.log("✅ Prices loaded:", priceData)
+      console.log("Prices loaded:", priceData)
     } catch (err: any) {
-      console.error("❌ Price fetch error:", err)
+      console.error("Price fetch error:", err)
       if (err.message.includes("Market ID")) {
         setError(err.message)
       }
     }
   }
 
-  // Calculate expected outcome with fresh data
   const calculateExpectedOutcome = async () => {
     try {
       const marketId = validateMarketId(market?.id)
@@ -198,7 +180,7 @@ export default function TradeModal({
     setError(null)
 
     try {
-      console.log(`🔍 Calculating ${paymentToken} outcome...`)
+      console.log(`Calculating ${paymentToken} outcome...`)
       
       const marketId = validateMarketId(market.id)
       let result
@@ -221,16 +203,15 @@ export default function TradeModal({
         setExpectedOut(result.totalOut)
         setFeeEstimated(result.totalFee)
         
-        // ✅ Always validate our slippage calculation
         const minOut = calculateMinimumOutput(result.totalOut, slippage)
         const isValid = validateSlippageCalculation(result.totalOut, minOut, slippage)
         
         if (!isValid) {
-          console.warn("⚠️ Slippage calculation validation failed")
+          console.warn("Slippage calculation validation failed")
           setError("Slippage calculation error. Please adjust slippage and try again.")
         }
         
-        console.log("✅ Calculation complete:", { 
+        console.log("Calculation complete:", { 
           ...result, 
           calculatedMinOut: parseFloat(minOut).toFixed(6),
           slippageValid: isValid 
@@ -239,7 +220,7 @@ export default function TradeModal({
         throw new Error("No payout available - market may lack liquidity or be closed")
       }
     } catch (err: any) {
-      console.error("❌ Calculation failed:", err)
+      console.error("Calculation failed:", err)
       setExpectedOut(null)
       setFeeEstimated(null)
       if (!error) {
@@ -250,17 +231,24 @@ export default function TradeModal({
     }
   }
 
-  // ============================================
-  // BALANCE CHECK HELPERS
-  // ============================================
   const BNB_GAS_BUFFER = ethers.parseEther("0.01")
 
   const ensureSufficientBNBBalance = async (valueWei: bigint) => {
-    if (!signer || !provider) throw new Error("Wallet not connected")
+    if (!walletClient) throw new Error("Wallet not connected")
 
     try {
-      const userAddress = await signer.getAddress()
-      const balance: bigint = await provider.getBalance(userAddress)
+      const provider = walletClient.transport as EIP1193Provider
+      const userAddress = account
+      if (!userAddress) throw new Error("No account address")
+      
+      // Use proper typing for the provider request
+      const balanceHex: string = await provider.request({ 
+        method: 'eth_getBalance', 
+        params: [userAddress, 'latest'] 
+      })
+      
+      // Convert hex balance to BigInt
+      const balance = BigInt(balanceHex)
       const required = valueWei + BNB_GAS_BUFFER
 
       if (balance < required) {
@@ -297,37 +285,28 @@ export default function TradeModal({
     }
   }
 
-  // ============================================
-  // ✅ FIXED TRADE EXECUTION WITH PYTHON FORMULA
-  // ============================================
-
   const executeBNBTrade = async () => {
     const marketId = validateMarketId(market?.id)
     if (!bnbHook?.buyYesWithBNB || !bnbHook?.buyNoWithBNB) {
       throw new Error("BNB trade functions not available")
     }
-    if (!signer) throw new Error("Wallet not connected")
+    if (!account || !walletClient) throw new Error("Wallet not connected")
     if (!expectedOut || parseFloat(expectedOut) <= 0) {
       throw new Error("Invalid expected payout")
     }
 
-    // ✅ Use the displayed expectedOut (what user saw)
     const userExpectedOut = expectedOut
-
-    // ✅ Apply Python formula: min_tokens = amount_out * (1 - (slippage / 100))
     const minOut = calculateMinimumOutput(userExpectedOut, slippage)
     
-    // Validate the calculation
     const isValid = validateSlippageCalculation(userExpectedOut, minOut, slippage)
     if (!isValid) {
       throw new Error("Slippage calculation error. Please try again.")
     }
 
-    // Ensure sufficient balance
     const valueWei: bigint = ethers.parseEther(amount)
     await ensureSufficientBNBBalance(valueWei)
 
-    console.log(`📤 Executing BNB trade:`, {
+    console.log(`Executing BNB trade:`, {
       marketId,
       outcome,
       amount,
@@ -339,7 +318,6 @@ export default function TradeModal({
       validationPassed: isValid
     })
 
-    // Execute trade with validated minimum
     if (outcome === "YES") {
       return await bnbHook.buyYesWithBNB(marketId, minOut, amount)
     } else {
@@ -348,69 +326,62 @@ export default function TradeModal({
   }
 
   const executePDXTrade = async () => {
-  const marketId = validateMarketId(market?.id)
-  if (!pdxHook?.buyYesWithPDX || !pdxHook?.buyNoWithPDX) {
-    throw new Error("PDX trade functions not available")
-  }
-  if (!signer || !account) throw new Error("Wallet not connected")
-
-  // Ensure sufficient balance
-  const pdxAmountWei = ethers.parseEther(amount)
-  await ensureSufficientPDXBalance(pdxAmountWei)
-
-  // ✅ FIX: Get FRESH prices right before transaction
-  console.log("🔄 Refreshing prices before transaction...")
-  let freshResult
-  try {
-    if (outcome === "YES") {
-      freshResult = await pdxHook.getBuyYesMultiplier(marketId, amount)
-    } else {
-      freshResult = await pdxHook.getBuyNoMultiplier(marketId, amount)
+    const marketId = validateMarketId(market?.id)
+    if (!pdxHook?.buyYesWithPDX || !pdxHook?.buyNoWithPDX) {
+      throw new Error("PDX trade functions not available")
     }
-  } catch (err) {
-    console.error("❌ Failed to get fresh prices:", err)
-    throw new Error("Failed to recalculate prices. Market may have changed. Try again.")
+    if (!account || !walletClient) throw new Error("Wallet not connected")
+
+    const pdxAmountWei = ethers.parseEther(amount)
+    await ensureSufficientPDXBalance(pdxAmountWei)
+
+    console.log("Refreshing prices before transaction...")
+    let freshResult
+    try {
+      if (outcome === "YES") {
+        freshResult = await pdxHook.getBuyYesMultiplier(marketId, amount)
+      } else {
+        freshResult = await pdxHook.getBuyNoMultiplier(marketId, amount)
+      }
+    } catch (err) {
+      console.error("Failed to get fresh prices:", err)
+      throw new Error("Failed to recalculate prices. Market may have changed. Try again.")
+    }
+
+    if (!freshResult || parseFloat(freshResult.totalOut || "0") <= 0) {
+      throw new Error("No payout available - market conditions changed. Try again.")
+    }
+
+    const freshExpectedOut = freshResult.totalOut
+    console.log("Fresh calculation:", {
+      oldExpectedOut: expectedOut,
+      freshExpectedOut,
+      difference: expectedOut ? ((parseFloat(freshExpectedOut) - parseFloat(expectedOut)) / parseFloat(expectedOut) * 100).toFixed(2) + "%" : "N/A"
+    })
+
+    const minOut = calculateMinimumOutput(freshExpectedOut, slippage)
+    
+    console.log(`Executing PDX trade with FRESH prices:`, {
+      marketId,
+      outcome,
+      amount,
+      freshExpectedOut,
+      slippageTolerance: `${slippage}%`,
+      minOut,
+      minOutFormatted: parseFloat(minOut).toFixed(6)
+    })
+
+    if (outcome === "YES") {
+      return await pdxHook.buyYesWithPDX(marketId, minOut, amount)
+    } else {
+      return await pdxHook.buyNoWithPDX(marketId, minOut, amount)
+    }
   }
-
-  if (!freshResult || parseFloat(freshResult.totalOut || "0") <= 0) {
-    throw new Error("No payout available - market conditions changed. Try again.")
-  }
-
-  // ✅ Use FRESH expectedOut (not the old one from UI)
-  const freshExpectedOut = freshResult.totalOut
-  console.log("📊 Fresh calculation:", {
-    oldExpectedOut: expectedOut,
-    freshExpectedOut,
-    difference: expectedOut ? ((parseFloat(freshExpectedOut) - parseFloat(expectedOut)) / parseFloat(expectedOut) * 100).toFixed(2) + "%" : "N/A"
-  })
-
-  // ✅ Calculate minOut from FRESH prices
-  const minOut = calculateMinimumOutput(freshExpectedOut, slippage)
-  
-  console.log(`📤 Executing PDX trade with FRESH prices:`, {
-    marketId,
-    outcome,
-    amount,
-    freshExpectedOut,  // ✅ Using fresh, not old
-    slippageTolerance: `${slippage}%`,
-    minOut,
-    minOutFormatted: parseFloat(minOut).toFixed(6)
-  })
-
-  // ✅ FIXED: minOut FIRST, then amount (same as BNB)
-  if (outcome === "YES") {
-    return await pdxHook.buyYesWithPDX(marketId, minOut, amount)
-  } else {
-    return await pdxHook.buyNoWithPDX(marketId, minOut, amount)
-  }
-}
-
 
   const executeTrade = async () => {
-    console.log(`🚀 Executing ${paymentToken} trade...`)
+    console.log(`Executing ${paymentToken} trade...`)
 
-    // Pre-flight validation
-    if (!signer) throw new Error("Wallet not connected")
+    if (!account || !walletClient) throw new Error("Wallet not connected")
     validateMarketId(market?.id)
     if (!expectedOut || parseFloat(expectedOut) <= 0) {
       throw new Error("Invalid expected payout")
@@ -430,16 +401,10 @@ export default function TradeModal({
     return receipt
   }
 
-  // ============================================
-  // LIFECYCLE HOOKS
-  // ============================================
-
-  // Load prices on mount
   useEffect(() => {
     loadMarketPrices()
   }, [market?.id, isContractReady, paymentToken])
 
-  // Calculate outcome when inputs change (with debounce)
   useEffect(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
@@ -463,12 +428,10 @@ export default function TradeModal({
     }
   }, [amount, outcome, hasAmount, isContractReady, market?.id, paymentToken, slippage])
 
-  // Show warning for low slippage
   useEffect(() => {
-    setShowSlippageWarning(slippage < 35) // Warn if below 35% based on your logs
+    setShowSlippageWarning(slippage < 35)
   }, [slippage])
 
-  // Early return for invalid market ID
   if (market?.id != null) {
     try {
       validateMarketId(market.id)
@@ -486,20 +449,19 @@ export default function TradeModal({
     }
   }
 
-  // ============================================
-  // EVENT HANDLERS
-  // ============================================
-
   const handleTrade = async () => {
     setError(null)
 
-    // Comprehensive validation
-    if (!account) {
-      connectWallet()
+    if (!isConnected) {
+      setError("Please connect your wallet first")
       return
     }
     if (!isCorrectNetwork) {
-      switchNetwork()
+      setError("Please switch to BSC Testnet")
+      return
+    }
+    if (!walletClient) {
+      setError("Wallet provider not ready. Please try reconnecting.")
       return
     }
     if (!amount || numAmount <= 0) {
@@ -512,10 +474,6 @@ export default function TradeModal({
     }
     if (!outcome) {
       setError("Please select YES or NO")
-      return
-    }
-    if (!signer) {
-      setError("Wallet provider not ready")
       return
     }
     if (!isContractReady) {
@@ -557,16 +515,15 @@ export default function TradeModal({
       const receipt = await executeTrade()
       
       setTxHash(receipt?.transactionHash || "success")
-      console.log("✅ Trade successful:", receipt)
+      console.log("Trade successful:", receipt)
 
-      // Reset and close
       setAmount("")
       setExpectedOut(null)
       setFeeEstimated(null)
       setTimeout(() => onClose(), 2500)
 
     } catch (err: any) {
-      console.error("❌ Trade failed:", err)
+      console.error("Trade failed:", err)
       handleTradeError(err)
     } finally {
       setIsProcessing(false)
@@ -574,45 +531,25 @@ export default function TradeModal({
   }
 
   const handleTradeError = (err: any): void => {
-    console.error("❌ Trade error details:", {
+    console.error("Trade error details:", {
       message: err?.message,
       code: err?.code,
       reason: err?.reason,
       data: err?.data
     })
 
-    // Handle slippage exceeded error
     if ((err?.message && err.message.includes("Slippage exceeded")) || 
         (err?.reason && err.reason.includes("Slippage exceeded"))) {
-      const suggestedSlippage = Math.min(slippage + 15, 70) // More aggressive increase
+      const suggestedSlippage = Math.min(slippage + 15, 70)
       setError(
-        `⚠️ SLIPPAGE EXCEEDED\n\n` +
-        `The price moved more than ${slippage}% between calculation and execution.\n\n` +
-        `Current slippage: ${slippage}%\n` +
-        `Suggested: ${suggestedSlippage}%\n\n` +
-        `Try:\n` +
-        `• Increase slippage to ${suggestedSlippage}%\n` +
-        `• Wait 10-30 seconds and retry\n` +
-        `• Use smaller trade amounts\n` +
-        `• Trade during less volatile periods`
+        `Slippage exceeded. The price moved more than ${slippage}% between calculation and execution. Try increasing slippage to ${suggestedSlippage}% or using a smaller amount.`
       )
       setSlippage(suggestedSlippage)
       return
     }
 
-    // Handle other errors
     if (err?.code === "CALL_EXCEPTION" && !err?.reason && !err?.data) {
-      setError(
-        `Transaction simulation failed.\n\n` +
-        `Possible causes:\n` +
-        `• Market closed or paused\n` +
-        `• Insufficient liquidity\n` +
-        `• Network congestion\n\n` +
-        `Try:\n` +
-        `• Refresh the market\n` +
-        `• Reduce trade amount\n` +
-        `• Increase slippage to ${Math.min(slippage + 15, 70)}%`
-      )
+      setError("Transaction simulation failed. Market may be closed or have insufficient liquidity.")
       return
     }
 
@@ -620,7 +557,7 @@ export default function TradeModal({
         (err?.message && err.message.toLowerCase().includes("insufficient funds"))) {
       setError(err.message || `Insufficient ${paymentToken} balance for trade + gas fees.`)
     } else if (err?.message?.includes("insufficient liquidity")) {
-      setError(`Insufficient liquidity in the market.\n\nTry reducing your trade size or increasing slippage.`)
+      setError("Insufficient liquidity in the market. Try reducing your trade size or increasing slippage.")
     } else if (err?.code === "ACTION_REJECTED") {
       setError("Transaction was cancelled by user")
     } else if (err?.message?.includes("market not open") || err?.message?.includes("market ended")) {
@@ -633,17 +570,15 @@ export default function TradeModal({
       setError("Transaction failed with no revert reason. Try a smaller amount or increase slippage.")
     } else if (err?.message?.includes("Unable to get current price")) {
       setError(err.message)
+    } else if (err?.message?.includes("Wallet not connected")) {
+      setError("Wallet connection lost. Please reconnect your wallet and try again.")
     } else {
       setError(
         err?.message || 
-        `Transaction failed. Try:\n• Increase slippage to ${Math.min(slippage + 15, 70)}%\n• Use smaller amount\n• Wait and retry`
+        `Transaction failed. Try increasing slippage to ${Math.min(slippage + 15, 70)}% or using a smaller amount.`
       )
     }
   }
-
-  // ============================================
-  // COMPUTED VALUES
-  // ============================================
 
   const normalizedYes = useMemo(() => yesPrice !== null ? yesPrice / 100 : null, [yesPrice])
   const normalizedNo = useMemo(() => noPrice !== null ? noPrice / 100 : null, [noPrice])
@@ -661,23 +596,16 @@ export default function TradeModal({
     return expectedPayout / numAmount
   }, [numAmount, expectedPayout])
 
-  // Calculate minimum payout using Python formula
   const minPayout = useMemo(() => {
     if (!expectedPayout) return null
-    // ✅ Python formula: amount_out * (1 - (slippage / 100))
     const multiplier = 1 - (slippage / 100)
     return expectedPayout * multiplier
   }, [expectedPayout, slippage])
 
-  // Calculate actual slippage percentage for display
   const actualSlippagePercent = useMemo(() => {
     if (!expectedPayout || !minPayout) return null
     return ((expectedPayout - minPayout) / expectedPayout) * 100
   }, [expectedPayout, minPayout])
-
-  // ============================================
-  // FORMATTING UTILITIES
-  // ============================================
 
   const formatMultiplier = (multiplier: number | null) => {
     if (!multiplier) return "-"
@@ -701,17 +629,12 @@ export default function TradeModal({
 
   const getTokenSymbol = () => paymentToken === "BNB" ? "🔶 BNB" : "PDX"
 
-  // ============================================
-  // RENDER
-  // ============================================
-
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={onClose} />
       
       <Card className="relative w-full max-w-md sm:max-w-lg rounded-lg shadow-xl overflow-auto max-h-[90vh]">
         <div className="p-4 sm:p-6">
-          {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <h3 className="text-lg font-semibold line-clamp-2">{market?.question || "Trade"}</h3>
@@ -728,34 +651,28 @@ export default function TradeModal({
             </Button>
           </div>
 
-          {/* Connection Alerts */}
           {!isContractReady && (
             <div className="mb-4 p-3 bg-blue-100 dark:bg-blue-950 border border-blue-300 dark:border-blue-700 rounded-md text-blue-800 dark:text-blue-400 text-center">
               <div className="flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Initializing {paymentToken} contracts...
+                {!canTransact ? "Checking wallet connection..." : `Initializing ${paymentToken} contracts...`}
               </div>
             </div>
           )}
 
-          {!account && isContractReady && (
+          {!isConnected && isContractReady && (
             <div className="mb-4 p-3 bg-yellow-100 dark:bg-yellow-950 border border-yellow-300 dark:border-yellow-700 rounded-md text-yellow-800 dark:text-yellow-400 text-center">
-              <Button onClick={connectWallet} disabled={isProcessing}>
-                Connect Wallet
-              </Button>
+              <p className="text-sm">Please connect your wallet to trade</p>
             </div>
           )}
 
           {!isCorrectNetwork && account && isContractReady && (
             <div className="mb-4 p-3 bg-yellow-100 dark:bg-yellow-950 border border-yellow-300 dark:border-yellow-700 rounded-md text-yellow-800 dark:text-yellow-400 text-center">
-              <Button onClick={switchNetwork} disabled={isProcessing}>
-                Switch to BSC Testnet
-              </Button>
+              <p className="text-sm">Please switch to BSC Testnet to trade</p>
             </div>
           )}
 
           <div className="space-y-4">
-            {/* Outcome Selection */}
             <div className="flex gap-2">
               <Button
                 className={`flex-1 ${outcome === "YES" ? "bg-green-600 text-white" : "bg-gray-200 dark:bg-gray-800"}`}
@@ -773,7 +690,6 @@ export default function TradeModal({
               </Button>
             </div>
 
-            {/* Amount Input */}
             <div>
               <label className="block text-sm font-medium mb-2">Amount ({getTokenSymbol()})</label>
               <Input
@@ -788,7 +704,6 @@ export default function TradeModal({
               <p className="text-xs text-muted-foreground mt-1">Minimum: 0.001 {paymentToken}</p>
             </div>
 
-            {/* Slippage Control */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-sm font-medium">
@@ -816,20 +731,8 @@ export default function TradeModal({
                   </Button>
                 ))}
               </div>
-              {/* <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
-                <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-blue-800 dark:text-blue-300">
-                    <strong>Python Formula Applied:</strong> min_tokens = expected_output × (1 - {slippage/100})<br/>
-                    Your transaction will succeed if price moves ≤{slippage}% worse. 
-                    {slippage < 40 && " ⚠️ 40%+ recommended for volatile markets."}
-                    {slippage >= 40 && " ✅ Good protection level."}
-                  </p>
-                </div>
-              </div> */}
             </div>
 
-            {/* Trade Preview */}
             {hasAmount && outcome && (
               <div className="space-y-3">
                 {isEstimating ? (
@@ -839,7 +742,6 @@ export default function TradeModal({
                   </div>
                 ) : expectedPayout && payoutMultiplier ? (
                   <div className="space-y-3">
-                    {/* Main Payout Info */}
                     <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 rounded-lg border-2 border-blue-300 dark:border-blue-700">
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
@@ -870,7 +772,6 @@ export default function TradeModal({
                       </div>
                     </div>
 
-                    {/* Slippage Protection Details */}
                     <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg border border-yellow-300 dark:border-yellow-700">
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 mb-2">
@@ -903,10 +804,9 @@ export default function TradeModal({
                       </div>
                     </div>
 
-                    {/* Price Movement Warning */}
                     <div className="p-2 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
                       <p className="text-xs text-muted-foreground text-center">
-                        ⏱️ Prices update every second. Your transaction uses the latest price at execution time.
+                        Prices update every second. Your transaction uses the latest price at execution time.
                       </p>
                     </div>
                   </div>
@@ -914,7 +814,6 @@ export default function TradeModal({
               </div>
             )}
 
-            {/* Error Message */}
             {error && (
               <div className="p-4 bg-red-50 dark:bg-red-950 border-2 border-red-300 dark:border-red-700 rounded-lg">
                 <div className="flex items-start gap-2">
@@ -924,11 +823,10 @@ export default function TradeModal({
               </div>
             )}
 
-            {/* Success Message */}
             {txHash && (
               <div className="p-4 bg-green-50 dark:bg-green-950 border-2 border-green-300 dark:border-green-700 rounded-lg">
                 <p className="text-sm text-green-800 dark:text-green-300 font-semibold text-center">
-                  ✅ Transaction Successful!
+                  Transaction Successful!
                 </p>
                 <p className="text-xs text-green-700 dark:text-green-400 text-center mt-1">
                   Your trade has been executed. Closing in a moment...
@@ -936,7 +834,6 @@ export default function TradeModal({
               </div>
             )}
 
-            {/* Trade Button */}
             <Button
               className="w-full h-12 text-black bg-white"
               onClick={handleTrade}
@@ -948,8 +845,7 @@ export default function TradeModal({
                 !expectedOut || 
                 parseFloat(expectedOut || "0") <= 0 ||
                 !isContractReady ||
-                !account ||
-                !isCorrectNetwork
+                !canTransact
               }
             >
               {isProcessing ? (
@@ -957,10 +853,8 @@ export default function TradeModal({
                   <Loader2 className="h-5 w-5 animate-spin mr-2" />
                   Processing Transaction...
                 </>
-              ) : !account ? (
-                "Connect Wallet First"
-              ) : !isCorrectNetwork ? (
-                "Switch to BSC Testnet"
+              ) : !canTransact ? (
+                !isConnected ? "Connect Wallet First" : "Switch to BSC Testnet"
               ) : !isContractReady ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -978,44 +872,26 @@ export default function TradeModal({
               )}
             </Button>
 
-            {/* Status Text */}
             <div className="text-center space-y-1">
               <p className="text-xs text-muted-foreground">
-                {!isContractReady 
-                  ? `🔄 Connecting to ${paymentToken} contracts...`
+                {!canTransact 
+                  ? `Wallet ${!isConnected ? 'not connected' : 'on wrong network'}`
+                  : !isContractReady 
+                  ? `Connecting to ${paymentToken} contracts...`
                   : !expectedOut && hasAmount && outcome 
-                  ? "⏳ Calculating your expected payout..."
+                  ? "Calculating your expected payout..."
                   : hasAmount && outcome && expectedPayout 
-                  ? `📈 Best: ${formatTokenAmount(expectedPayout)} ${paymentToken} | 🛡️ Minimum: ${formatTokenAmount(minPayout)} ${paymentToken}`
-                  : "👆 Enter amount and select YES or NO to see payout"
+                  ? `Best: ${formatTokenAmount(expectedPayout)} ${paymentToken} | Minimum: ${formatTokenAmount(minPayout)} ${paymentToken}`
+                  : "Enter amount and select YES or NO to see payout"
                 }
               </p>
               
               {expectedPayout && minPayout && (
                 <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                  💡 Formula: {expectedPayout.toFixed(6)} × (1 - {slippage/100}) = {minPayout?.toFixed(6)} {paymentToken}
+                  Formula: {expectedPayout.toFixed(6)} × (1 - {slippage/100}) = {minPayout?.toFixed(6)} {paymentToken}
                 </p>
               )}
             </div>
-
-            {/* Debug Info (only in development) */}
-            {/* {process.env.NODE_ENV === 'development' && expectedOut && (
-              <div className="p-2 bg-gray-100 dark:bg-gray-900 rounded text-xs font-mono space-y-1">
-                <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">🔧 Debug Info:</div>
-                <div className="text-gray-600 dark:text-gray-400">Expected: {parseFloat(expectedOut).toFixed(6)}</div>
-                <div className="text-gray-600 dark:text-gray-400">
-                  MinOut: {minPayout ? minPayout.toFixed(6) : 'N/A'} 
-                  (Python formula: ×{1 - (slippage/100)})
-                </div>
-                <div className="text-gray-600 dark:text-gray-400">
-                  Calculation: {expectedOut} × (1 - {slippage / 100}) = {minPayout?.toFixed(6)}
-                </div>
-                <div className="text-gray-600 dark:text-gray-400">
-                  Validation: {actualSlippagePercent?.toFixed(2)}% ≈ {slippage}% 
-                  {actualSlippagePercent && Math.abs(actualSlippagePercent - slippage) < 0.1 ? ' ✅' : ' ⚠️'}
-                </div>
-              </div>
-            )} */}
           </div>
         </div>
       </Card>

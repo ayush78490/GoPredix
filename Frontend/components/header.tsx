@@ -4,17 +4,17 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, Bell, Wifi, WifiOff, AlertCircle } from "lucide-react"
 import Link from "next/link"
-import { useWeb3Context, MobileWalletSelector, NetworkSelector } from "@/lib/wallet-context"
+import { useWeb3Context, MobileWalletSelector } from "@/lib/wallet-context"
+import { CustomConnectButton } from "./custom-connect-button"
+import { useAccount, useDisconnect } from "wagmi"
 import MyImage from '@/public/logo.png'
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false)
   const [showNetworkAlert, setShowNetworkAlert] = useState(false)
-  const [hasProvider, setHasProvider] = useState(false)
   
   const { 
     account, 
-    connectWallet, 
     disconnectWallet, 
     isMobile,
     showWalletSelector,
@@ -25,20 +25,18 @@ export default function Header() {
     networkError
   } = useWeb3Context()
 
-  const displayAddress = account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"
+  // Use wagmi hooks for account and disconnect
+  const { address: wagmiAddress, isConnected } = useAccount()
+  const { disconnect } = useDisconnect()
 
-  // ✅ FIX: Check for provider safely (avoid SSR issues)
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setHasProvider(!!window.ethereum)
-    }
-  }, [])
+  // Use wagmi address if available, otherwise use custom context address
+  const displayAccount = wagmiAddress || account
+  const displayAddress = displayAccount ? `${displayAccount.slice(0, 6)}...${displayAccount.slice(-4)}` : "Connect Wallet"
 
   // Show network alert when there's a network error
   useEffect(() => {
-    if (networkError && account) {
+    if (networkError && displayAccount) {
       setShowNetworkAlert(true)
-      // Auto-hide after 5 seconds
       const timer = setTimeout(() => {
         setShowNetworkAlert(false)
       }, 5000)
@@ -46,32 +44,18 @@ export default function Header() {
     } else {
       setShowNetworkAlert(false)
     }
-  }, [networkError, account])
-
-  const handleConnect = async () => {
-    console.log("🔘 Connect button clicked", { isMobile, hasProvider })
-    await connectWallet()
-  }
+  }, [networkError, displayAccount])
 
   const handleDisconnect = () => {
-    console.log("🔌 Disconnecting wallet")
-    disconnectWallet()
+    if (isConnected) {
+      disconnect() // wagmi disconnect
+    }
+    disconnectWallet() // custom context disconnect
   }
 
   const handleSwitchNetwork = () => {
     console.log("🔄 Switch network clicked")
     switchNetwork()
-  }
-
-  // ✅ Better button text logic
-  const getConnectButtonText = () => {
-    if (isMobile && !hasProvider) {
-      return "Choose Wallet"
-    }
-    if (isMobile && hasProvider) {
-      return "Connect"
-    }
-    return "Login"
   }
 
   return (
@@ -120,36 +104,6 @@ export default function Header() {
             
             {/* Right: Network Status + Portfolio/Wallet */}
             <div className="flex items-center gap-3">
-              {/* Network Status Indicator (Optional - Currently Commented) */}
-              {account && (
-                <div className="flex items-center gap-2">
-                  {/* Uncomment if you want to show network status button */}
-                  {/* <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleSwitchNetwork}
-                    className={`flex items-center gap-2 rounded-full px-4 border transition-all ${
-                      isCorrectNetwork 
-                        ? "text-green-400 hover:text-green-300 border-green-400/50 hover:border-green-300/50" 
-                        : "text-red-400 hover:text-red-300 border-red-400/50 hover:border-red-300/50 animate-pulse"
-                    }`}
-                  >
-                    {isCorrectNetwork ? <Wifi size={16} /> : <WifiOff size={16} />}
-                    <span className="hidden sm:inline">
-                      {isCorrectNetwork ? "Correct Network" : "Wrong Network"}
-                    </span>
-                    <ChevronDown size={14} />
-                  </Button> */}
-                  
-                  {/* Current Network Badge (Optional - Currently Commented) */}
-                  {/* {currentNetwork && (
-                    <div className="hidden md:block px-3 py-1 bg-cyan-900/50 border border-cyan-400/50 rounded-full">
-                      <span className="text-cyan-200 text-xs">{currentNetwork}</span>
-                    </div>
-                  )} */}
-                </div>
-              )}
-              
               <Link href="/profile">
                 <Button
                   variant="ghost"
@@ -160,7 +114,8 @@ export default function Header() {
                 </Button>
               </Link>
               
-              {account ? (
+              {/* Updated connection section */}
+              {displayAccount ? (
                 <div className="flex items-center gap-2">
                   <Button 
                     size="sm" 
@@ -180,13 +135,7 @@ export default function Header() {
                   </Button>
                 </div>
               ) : (
-                <Button
-                  size="sm"
-                  className="rounded-full px-7 py-2 font-semibold text-black bg-[#ECFEFF]/70 hover:bg-[#ECFEFF] transition-all duration-200 shadow-lg hover:shadow-cyan-500/25"
-                  onClick={handleConnect}
-                >
-                  {getConnectButtonText()}
-                </Button>
+                <CustomConnectButton />
               )}
             </div>
           </div>
@@ -195,9 +144,6 @@ export default function Header() {
 
       {/* Mobile Wallet Selector Modal */}
       <MobileWalletSelector />
-      
-      {/* Network Selector Modal */}
-      <NetworkSelector />
     </>
   )
 }

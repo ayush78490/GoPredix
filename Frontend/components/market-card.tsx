@@ -3,9 +3,10 @@
 import { Card } from "@/components/ui/card"
 import { TrendingUp, Volume2, Clock, User, AlertCircle, Coins, Loader2 } from "lucide-react"
 import Link from "next/link"
-import { MarketStatus, Outcome } from "@/hooks/use-predection-market"  // FIXED: Removed PaymentToken
+import { MarketStatus, Outcome } from "@/hooks/use-predection-market"
 import { useState } from "react"
 import CustomAlertDialog from "@/components/customAlert"
+import { useAccount, useChainId } from "wagmi"
 
 interface FrontendMarket {
   id: string
@@ -38,7 +39,7 @@ interface FrontendMarket {
   noOdds?: number
   volume?: number
   liquidity?: number
-  paymentToken?: string  // FIXED: Changed from PaymentToken to string
+  paymentToken?: string
 }
 
 interface MarketCardProps {
@@ -48,8 +49,21 @@ interface MarketCardProps {
   onClick?: () => void
 }
 
-export default function MarketCard({ market, disabled = false, isLoading = false, onClick }: MarketCardProps) {
+export default function MarketCard({ 
+  market, 
+  disabled = false, 
+  isLoading = false, 
+  onClick
+}: MarketCardProps) {
   const [showAlert, setShowAlert] = useState(false)
+  
+  // Get wallet connection status from wagmi
+  const { isConnected } = useAccount()
+  const chainId = useChainId()
+  
+  // Check if connected to BSC Testnet (chainId 97)
+  const isCorrectNetwork = chainId === 97
+  const canTransact = isConnected && isCorrectNetwork
   
   const marketTitle = market.title || market.question || `Market ${market.id}`
   const marketDescription = market.description || market.question || "Prediction market"
@@ -57,7 +71,6 @@ export default function MarketCard({ market, disabled = false, isLoading = false
   const marketCreator = market.creator || "0x0000000000000000000000000000000000000000"
   const marketEndTime = market.endTime || Math.floor(Date.now() / 1000)
   
-  // ✅ USE IT HERE - Determine token symbol based on paymentToken
   const tokenSymbol = market.paymentToken === "PDX" ? "PDX" : "BNB"
 
   const yesOdds = market.yesOdds !== undefined ? market.yesOdds : market.yesPrice || 50
@@ -113,7 +126,6 @@ export default function MarketCard({ market, disabled = false, isLoading = false
     )
   }
 
-  // ✅ USE IT HERE - Get payment token badge with token symbol
   const getPaymentTokenBadge = (token: string) => {
     const tokenConfig: Record<string, any> = {
       "BNB": { 
@@ -124,7 +136,7 @@ export default function MarketCard({ market, disabled = false, isLoading = false
       "PDX": { 
         label: "PDX", 
         color: "bg-purple-500/20 border-purple-600/50 text-purple-400",
-        icon: ""
+        icon: "💜"
       }
     }
 
@@ -168,10 +180,13 @@ export default function MarketCard({ market, disabled = false, isLoading = false
   const volume = market.volume || 0
   const isDataValid = Boolean(market.question || market.title)
 
+  // Determine if the card should be disabled for trading
+  const shouldDisableTrading = disabled || !canTransact || isLoading || !isMarketActive
+
   const handleClick = (e: React.MouseEvent) => {
-    if (disabled || isLoading) {
+    if (shouldDisableTrading && isMarketActive) {
       e.preventDefault()
-      if (disabled) {
+      if (!canTransact) {
         setShowAlert(true)
       }
       return
@@ -181,26 +196,50 @@ export default function MarketCard({ market, disabled = false, isLoading = false
       e.preventDefault()
       onClick()
     }
-    // If no onClick handler is provided, the Link will handle navigation normally
+  }
+
+  const getAlertMessage = () => {
+    if (!isConnected) {
+      return "Please connect your wallet to trade on this market."
+    }
+    if (!isCorrectNetwork) {
+      return "Please switch to BSC Testnet to trade on this market."
+    }
+    return "Trading is currently disabled for this market."
+  }
+
+  const getConnectionStatusText = () => {
+    if (!isConnected) return "Connect Wallet"
+    if (!isCorrectNetwork) return "Wrong Network"
+    return ""
   }
 
   return (
     <div className="relative">
       <Link
-        href={disabled || isLoading ? "#" : `/markets/${market.slug || market.id}`}
+        href={shouldDisableTrading && isMarketActive ? "#" : `/markets/${market.slug || market.id}`}
         onClick={handleClick}
         className="block"
       >
         <Card
           className={`overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50 ${
             !isMarketActive ? "" : ""
-          } ${disabled || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+          } ${shouldDisableTrading && isMarketActive ? "opacity-50 cursor-not-allowed" : ""}`}
         >
           {/* Loading Overlay */}
           {isLoading && (
             <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg z-10">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
               <span className="ml-2 text-sm">Loading...</span>
+            </div>
+          )}
+
+          {/* Connection Status Badge */}
+          {!canTransact && isMarketActive && (
+            <div className="absolute top-2 right-2 z-5">
+              <div className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-xs px-2 py-1 rounded-full">
+                {getConnectionStatusText()}
+              </div>
             </div>
           )}
 
@@ -211,7 +250,6 @@ export default function MarketCard({ market, disabled = false, isLoading = false
                 {marketCategory}
               </div>
               
-              {/* ✅ USE IT HERE - Payment Token Badge */}
               {getPaymentTokenBadge(tokenSymbol)}
               
               {getStatusBadge(market.status, isMarketActive)}
@@ -291,7 +329,6 @@ export default function MarketCard({ market, disabled = false, isLoading = false
                 >
                   {yesMultiplier}x return
                 </div>
-                {/* ✅ USE IT HERE - Show token symbol in pool */}
                 <div className="text-xs text-muted-foreground mt-1">
                   Pool: {yesPool.toFixed(2)} {tokenSymbol}
                 </div>
@@ -320,7 +357,6 @@ export default function MarketCard({ market, disabled = false, isLoading = false
                 >
                   {noMultiplier}x return
                 </div>
-                {/* ✅ USE IT HERE - Show token symbol in pool */}
                 <div className="text-xs text-muted-foreground mt-1">
                   Pool: {noPool.toFixed(2)} {tokenSymbol}
                 </div>
@@ -358,7 +394,6 @@ export default function MarketCard({ market, disabled = false, isLoading = false
             <div className="mt-2 text-xs text-muted-foreground">
               <div className="flex items-center justify-between">
                 <span>Total Liquidity:</span>
-                {/* ✅ USE IT HERE - Show token symbol in total liquidity */}
                 <span className="font-semibold">{totalBacking.toFixed(2)} {tokenSymbol}</span>
               </div>
             </div>
@@ -393,6 +428,8 @@ export default function MarketCard({ market, disabled = false, isLoading = false
                   ? "Loading market..." 
                   : !isMarketActive
                   ? "Market inactive"
+                  : !canTransact
+                  ? "Connect wallet to trade"
                   : market.status === 0
                   ? "Click to trade"
                   : market.status === 3
@@ -408,8 +445,8 @@ export default function MarketCard({ market, disabled = false, isLoading = false
       <CustomAlertDialog
         open={showAlert}
         onClose={() => setShowAlert(false)}
-        title="Connect Wallet Required"
-        description="Please connect your wallet to trade on this market."
+        title={!isConnected ? "Connect Wallet Required" : "Wrong Network"}
+        description={getAlertMessage()}
       />
     </div>
   )

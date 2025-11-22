@@ -4,7 +4,8 @@ import type React from "react"
 import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
-import { Providers } from "@/components/providers"
+import { Providers } from "./provider" // ✅ Changed from "@/components/providers"
+import "@rainbow-me/rainbowkit/styles.css"
 
 const inter = Inter({ 
   subsets: ["latin"],
