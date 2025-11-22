@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
-import { ethers } from 'ethers'
-import { useWeb3Context } from '@/lib/wallet-context'
+import { ethers, BrowserProvider, JsonRpcSigner } from 'ethers'
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import DUAL_TOKEN_ADAPTER_ABI from '../contracts/dualtokenadapterABI.json'
 import VIEWS_ADAPTER_ABI from '../contracts/dualtokenadapterviewerABI.json'
 import RESOLUTION_ABI from '../contracts/resolutionpdxABI.json'
@@ -10,7 +10,10 @@ import ERC20_ABI from '../contracts/erc20ABI.json'
 const DUAL_TOKEN_ADAPTER_ADDRESS = process.env.NEXT_PUBLIC_DUAL_TOKEN_ADAPTER_ADDRESS || '0xb356a469387EE9DE6d6BeceDa975Af7Df69b7e06'
 const VIEWS_ADAPTER_ADDRESS = process.env.NEXT_PUBLIC_VIEWS_ADAPTER_ADDRESS || '0xfACd4d853d1CC37A624F5aB20De5C553371b1Da1'
 const RESOLUTION_ADDRESS = process.env.NEXT_PUBLIC_RESOLUTION_ADDRESS || '0xF3943cA8bEa0E5c147C5E626d0a3A3164c5B889f'
-const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS || '0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8'
+// Convert to proper checksum - ethers v6 is strict about this
+const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS 
+  ? ethers.getAddress(process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS)
+  : ethers.getAddress('0xee943accaa07ed556dfac9d3a76015050fa78bc8')
 
 // Market Status enum
 export enum MarketStatus {
@@ -123,13 +126,64 @@ async function validatePDXMarketWithPerplexity(params: MarketCreationParams): Pr
 }
 
 export function usePredictionMarketPDX() {
-  const { account, provider, signer, isCorrectNetwork } = useWeb3Context()
+  const { address: account, isConnected } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
+
   const [isLoading, setIsLoading] = useState(false)
   const [adapterContract, setAdapterContract] = useState<ethers.Contract | null>(null)
   const [viewsContract, setViewsContract] = useState<ethers.Contract | null>(null)
   const [resolutionContract, setResolutionContract] = useState<ethers.Contract | null>(null)
   const [pdxTokenContract, setPdxTokenContract] = useState<ethers.Contract | null>(null)
   const [isContractReady, setIsContractReady] = useState(false)
+  const [provider, setProvider] = useState<BrowserProvider | null>(null)
+  const [signer, setSigner] = useState<JsonRpcSigner | null>(null)
+
+  const isCorrectNetwork = publicClient?.chain?.id === 97
+
+  // Initialize provider from publicClient
+  useEffect(() => {
+    const initProvider = async () => {
+      if (publicClient) {
+        try {
+          const ethersProvider = new BrowserProvider(publicClient.transport as any)
+          setProvider(ethersProvider)
+          console.log('✅ PDX Provider initialized from Wagmi')
+        } catch (error) {
+          console.error('❌ Error initializing PDX provider:', error)
+        }
+      } else {
+        setProvider(null)
+      }
+    }
+    initProvider()
+  }, [publicClient])
+
+  // Initialize signer from walletClient
+  useEffect(() => {
+    const initSigner = async () => {
+      if (walletClient && account) {
+        try {
+          const { chain, transport } = walletClient
+          const network = {
+            chainId: chain.id,
+            name: chain.name,
+            ensAddress: chain.contracts?.ensRegistry?.address
+          }
+          const ethersProvider = new ethers.BrowserProvider(transport, network)
+          const ethersSigner = await ethersProvider.getSigner(account)
+          setSigner(ethersSigner)
+          console.log('✅ PDX Signer initialized from Wagmi')
+        } catch (error) {
+          console.error('❌ Error initializing PDX signer:', error)
+          setSigner(null)
+        }
+      } else {
+        setSigner(null)
+      }
+    }
+    initSigner()
+  }, [walletClient, account])
 
   // Initialize contracts
   useEffect(() => {
@@ -220,13 +274,10 @@ export function usePredictionMarketPDX() {
     initializeContracts()
   }, [provider])
 
-  // ==================== ✅ FIXED: USER INVESTMENT (READ FROM MAIN ADAPTER) ====================
-
   const getUserInvestment = useCallback(async (marketId: number, userAddress: string): Promise<UserInvestment> => {
     if (!adapterContract) throw new Error('Adapter contract not available')
     
     try {
-      // ✅ Read directly from pdxUserInvestments mapping in main adapter
       const investment = await (adapterContract as any).pdxUserInvestments(BigInt(marketId), userAddress)
       
       return {
@@ -243,8 +294,6 @@ export function usePredictionMarketPDX() {
       }
     }
   }, [adapterContract])
-
-  // ==================== RESOLUTION FUNCTIONS ====================
 
   const getResolutionStatus = useCallback(async (marketId: number): Promise<ResolutionState> => {
     if (!resolutionContract) throw new Error('Resolution contract not available')
@@ -323,13 +372,10 @@ export function usePredictionMarketPDX() {
     }
   }, [resolutionContract])
 
-  // ==================== ✅ FIXED: GET PDX MARKET (READ FROM MAIN ADAPTER) ====================
-
   const getPDXMarket = useCallback(async (marketId: number): Promise<PDXMarket> => {
     if (!adapterContract) throw new Error('Adapter contract not available')
 
     try {
-      // ✅ Read directly from pdxMarkets mapping in main adapter
       const marketData = await (adapterContract as any).pdxMarkets(BigInt(marketId))
       
       if (!marketData || !marketData.creator || marketData.creator === "0x0000000000000000000000000000000000000000") {
@@ -341,7 +387,6 @@ export function usePredictionMarketPDX() {
         question = question.slice(1, -1)
       }
 
-      // Calculate prices from pools
       const yesPoolNum = parseFloat(ethers.formatEther(marketData.yesPool))
       const noPoolNum = parseFloat(ethers.formatEther(marketData.noPool))
       const totalPool = yesPoolNum + noPoolNum
@@ -382,13 +427,10 @@ export function usePredictionMarketPDX() {
     }
   }, [adapterContract])
 
-  // ==================== ✅ FIXED: USER POSITIONS (READ FROM MAIN ADAPTER) ====================
-
   const getPDXMarketIds = useCallback(async (): Promise<number[]> => {
     if (!adapterContract) throw new Error('Adapter contract not available')
     
     try {
-      // ✅ Read nextPDXMarketId from main adapter
       const nextMarketId = await (adapterContract as any).nextPDXMarketId()
       const marketIds: number[] = []
       
@@ -409,13 +451,11 @@ export function usePredictionMarketPDX() {
     try {
       const markets: any[] = []
       
-      // ✅ Get all PDX markets from main adapter
       const nextId = await (adapterContract as any).nextPDXMarketId()
       const marketCount = Number(nextId)
       
       for (let marketId = 0; marketId < marketCount; marketId++) {
         try {
-          // ✅ Read from pdxUserInvestments mapping
           const investment = await (adapterContract as any).pdxUserInvestments(marketId, userAddress)
           
           if (investment && investment.totalInvested > BigInt(0)) {
@@ -426,7 +466,7 @@ export function usePredictionMarketPDX() {
               market,
               yesBalance: ethers.formatEther(investment.yesBalance || BigInt(0)),
               noBalance: ethers.formatEther(investment.noBalance || BigInt(0)),
-              bnbInvested: ethers.formatEther(investment.totalInvested),  // Using totalInvested as bnbInvested for compatibility
+              bnbInvested: ethers.formatEther(investment.totalInvested),
               paymentToken: "PDX"
             })
           }
@@ -442,8 +482,6 @@ export function usePredictionMarketPDX() {
       return []
     }
   }, [adapterContract, getPDXMarket])
-
-  // ==================== ESTIMATION FUNCTIONS (Keep using views contract for calculations) ====================
 
   const getBuyYesMultiplier = useCallback(async (
     marketId: number,
@@ -540,8 +578,6 @@ export function usePredictionMarketPDX() {
     }
   }, [viewsContract])
 
-  // ==================== TRADING FUNCTIONS (PDX ONLY) ====================
-
   const createMarketWithPDX = useCallback(async (
     params: MarketCreationParams
   ): Promise<number> => {
@@ -627,6 +663,7 @@ export function usePredictionMarketPDX() {
     if (!signer || !isCorrectNetwork || !adapterContract || !pdxTokenContract) {
       throw new Error('Wallet not connected or wrong network')
     }
+    if (!account) throw new Error('No account connected')
     
     const pdxWithSigner = new ethers.Contract(
       PDX_TOKEN_ADDRESS,
@@ -665,6 +702,7 @@ export function usePredictionMarketPDX() {
     if (!signer || !isCorrectNetwork || !adapterContract || !pdxTokenContract) {
       throw new Error('Wallet not connected or wrong network')
     }
+    if (!account) throw new Error('No account connected')
     
     const pdxWithSigner = new ethers.Contract(
       PDX_TOKEN_ADDRESS,
@@ -745,8 +783,6 @@ export function usePredictionMarketPDX() {
     return await tx.wait()
   }, [signer, isCorrectNetwork, adapterContract])
 
-  // ==================== LIQUIDITY FUNCTIONS ====================
-
   const addPDXLiquidity = useCallback(async (
     marketId: number,
     yesAmount: string,
@@ -806,8 +842,6 @@ export function usePredictionMarketPDX() {
     
     return await tx.wait()
   }, [signer, isCorrectNetwork, adapterContract])
-
-  // ==================== ORDER MANAGEMENT ====================
 
   const createStopLossOrder = useCallback(async (
     marketId: number,
@@ -913,8 +947,6 @@ export function usePredictionMarketPDX() {
       return false
     }
   }, [adapterContract])
-
-  // ==================== RESOLUTION FUNCTIONS ====================
 
   const requestResolution = useCallback(async (marketId: number) => {
     if (!signer || !isCorrectNetwork || !resolutionContract) {

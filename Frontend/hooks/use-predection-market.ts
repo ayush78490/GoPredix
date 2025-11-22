@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
-import { ethers } from 'ethers'
-import { useWeb3Context } from '@/lib/wallet-context'
+import { ethers, BrowserProvider, JsonRpcSigner } from 'ethers'
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import PREDICTION_MARKET_JSON from '../contracts/abi.json'
 import HELPER_JSON from '../contracts/helperABI.json'
 
@@ -142,16 +142,61 @@ async function validateMarketWithPerplexity(params: MarketCreationParams): Promi
 }
 
 export function usePredictionMarketBNB() {
-  const { account, provider, signer, isCorrectNetwork } = useWeb3Context()
+  const { address: account, isConnected } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
+
   const [isLoading, setIsLoading] = useState(false)
   const [marketContract, setMarketContract] = useState<ethers.Contract | null>(null)
   const [helperContract, setHelperContract] = useState<ethers.Contract | null>(null)
   const [isContractReady, setIsContractReady] = useState(false)
+  const [provider, setProvider] = useState<BrowserProvider | null>(null)
+  const [signer, setSigner] = useState<JsonRpcSigner | null>(null)
+
+  const isCorrectNetwork = publicClient?.chain?.id === 97
+
+  // Initialize provider from publicClient
+  useEffect(() => {
+    const initProvider = async () => {
+      if (publicClient) {
+        try {
+          const ethersProvider = new BrowserProvider(publicClient.transport as any)
+          setProvider(ethersProvider)
+          console.log('✅ Provider initialized from Wagmi')
+        } catch (error) {
+          console.error('❌ Error initializing provider:', error)
+        }
+      } else {
+        setProvider(null)
+      }
+    }
+    initProvider()
+  }, [publicClient])
+
+  // Initialize signer from walletClient
+  useEffect(() => {
+    const initSigner = async () => {
+      if (walletClient && account) {
+        try {
+          // Convert Wagmi's walletClient to ethers signer
+          const ethersSigner = new ethers.BrowserProvider(walletClient.transport as any).getSigner(account)
+          setSigner(await ethersSigner)
+          console.log('✅ Signer initialized from Wagmi')
+        } catch (error) {
+          console.error('❌ Error initializing signer:', error)
+          setSigner(null)
+        }
+      } else {
+        setSigner(null)
+      }
+    }
+    initSigner()
+  }, [walletClient, account])
 
   // Initialize contracts
   useEffect(() => {
     const initializeContracts = async () => {
-      console.log('🔍 useWeb3Context - Provider:', !!provider)
+      console.log('🔍 Wagmi - Provider:', !!provider, 'Account:', !!account)
       
       if (!provider) {
         console.warn('⚠️ No provider available')
@@ -165,8 +210,7 @@ export function usePredictionMarketBNB() {
         const network = await provider.getNetwork()
         console.log('🌐 Network check:', { chainId: network.chainId.toString(), expected: '97' })
         
-        // BSC Testnet chain ID is 97
-        if (network.chainId !== BigInt(97)) {
+        if (Number(network.chainId) !== 97) {
           console.warn("⚠️ Not on BSC Testnet. Current chain:", network.chainId.toString())
           setMarketContract(null)
           setHelperContract(null)
@@ -195,7 +239,6 @@ export function usePredictionMarketBNB() {
           console.log('✅ Prediction Market contract connected. Next market ID:', nextId.toString())
           
           console.log('📝 Testing Helper contract...')
-          // ✅ BUG FIX: Use helperContractInstance instead of marketContract
           const feeBps = await (helperContractInstance as any).feeBps?.() || 0
           console.log('✅ Helper contract connected. Fee BPS:', feeBps.toString())
           
@@ -219,7 +262,7 @@ export function usePredictionMarketBNB() {
     }
 
     initializeContracts()
-  }, [provider])
+  }, [provider, account])
 
   // ==================== MARKET CREATION (BNB ONLY) ====================
 
@@ -235,7 +278,6 @@ export function usePredictionMarketBNB() {
 
     setIsLoading(true)
     try {
-      // ✅ BUG FIX: Validation with fallback
       let validation: { valid: boolean; reason?: string; category?: string }
       try {
         validation = await validateMarketWithPerplexity(params)
@@ -260,7 +302,6 @@ export function usePredictionMarketBNB() {
 
       console.log('📝 Creating BNB market...', { question: params.question })
 
-      // Create market with BNB
       const tx = await (marketWithSigner as any).createMarket(
         params.question,
         validation.category || params.category || 'General',
@@ -273,7 +314,6 @@ export function usePredictionMarketBNB() {
       const receipt = await tx.wait()
       let marketId: number
 
-      // Find MarketCreated event
       const marketCreatedTopic = ethers.id('MarketCreated(uint256,string,string,address,address,uint256)')
       const event = receipt?.logs.find((log: any) => log.topics[0] === marketCreatedTopic)
 
@@ -305,13 +345,11 @@ export function usePredictionMarketBNB() {
     try {
       const marketData = await (marketContract as any).markets(BigInt(marketId))
 
-      // Remove quotes from question
       let question = marketData.question || `Market ${marketId}`
       if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
         question = question.slice(1, -1)
       }
 
-      // Get trading info from helper contract
       const tradingInfo = await (helperContract as any).getTradingInfo(BigInt(marketId))
       
       const market: BNBMarket = {
@@ -553,6 +591,42 @@ export function usePredictionMarketBNB() {
     }
   }, [helperContract])
 
+  const getBuyOutcomeOut = useCallback(async (
+    marketId: number,
+    bnbAmount: string,
+    outcome: "YES" | "NO"
+  ): Promise<{ amountOut: string; fee: string }> => {
+    const contract = helperContract || marketContract
+    if (!contract) {
+      throw new Error('Contracts not available')
+    }
+
+    try {
+      const amountInWei = ethers.parseEther(bnbAmount)
+
+      if (outcome === "YES") {
+        const res: any = await (contract as any).getBuyYesOut(BigInt(marketId), amountInWei)
+        const yesOut = res?.[0] ?? res?.yesOut ?? res
+        const fee = res?.[1] ?? res?.fee ?? BigInt(0)
+        return {
+          amountOut: ethers.formatEther(yesOut),
+          fee: ethers.formatEther(fee)
+        }
+      } else {
+        const res: any = await (contract as any).getBuyNoOut(BigInt(marketId), amountInWei)
+        const noOut = res?.[0] ?? res?.noOut ?? res
+        const fee = res?.[1] ?? res?.fee ?? BigInt(0)
+        return {
+          amountOut: ethers.formatEther(noOut),
+          fee: ethers.formatEther(fee)
+        }
+      }
+    } catch (error) {
+      console.error('getBuyOutcomeOut error:', error)
+      return { amountOut: "0", fee: "0" }
+    }
+  }, [helperContract, marketContract])
+
   // ==================== STATUS CHECKS ====================
 
   const canRequestResolution = useCallback(async (marketId: number): Promise<boolean> => {
@@ -585,6 +659,7 @@ export function usePredictionMarketBNB() {
     amountIn: string
   ) => {
     if (!signer || !isCorrectNetwork || !marketContract) throw new Error('Wallet not connected or wrong network')
+    if (!account) throw new Error('No account connected')
     
     const marketWithSigner = new ethers.Contract(
       PREDICTION_MARKET_ADDRESS,
@@ -611,6 +686,7 @@ export function usePredictionMarketBNB() {
     amountIn: string
   ) => {
     if (!signer || !isCorrectNetwork || !marketContract) throw new Error('Wallet not connected or wrong network')
+    if (!account) throw new Error('No account connected')
     
     const marketWithSigner = new ethers.Contract(
       PREDICTION_MARKET_ADDRESS,
@@ -929,6 +1005,7 @@ export function usePredictionMarketBNB() {
     getSwapMultiplier,
     getYesPrice,
     getNoPrice,
+    getBuyOutcomeOut,
     
     // Trading functions (BNB ONLY)
     buyYesWithBNB,
