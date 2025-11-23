@@ -1,5 +1,3 @@
-
-
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { usePredictionMarketBNB } from './use-predection-market'
 import { usePredictionMarketPDX } from './use-prediction-market-pdx'
@@ -155,33 +153,23 @@ export function useAllMarkets() {
     try {
       console.log("💜 Fetching all PDX markets...")
       
-      if (!pdxHook.adapterContract) {
+      if (!pdxHook.isContractReady) {
         console.warn("⚠️ PDX adapter contract not ready yet")
         return []
       }
 
       try {
-        let totalMarkets = 0
-        try {
-          const nextPDXMarketId = await pdxHook.adapterContract.nextPDXMarketId()
-          totalMarkets = Number(nextPDXMarketId)
-        } catch {
-          console.warn("⚠️ Could not get PDX market count")
-          return []
-        }
+        const marketIds = await pdxHook.getPDXMarketIds()
         
-        console.log(`📊 Found ${totalMarkets} PDX markets on chain`)
+        console.log(`📊 Found ${marketIds.length} PDX markets on chain`)
         
-        if (totalMarkets === 0) {
+        if (marketIds.length === 0) {
           console.log("ℹ️ No PDX markets found")
           return []
         }
 
-        const marketPromises: Promise<UnifiedMarket | null>[] = []
-        for (let i = 0; i < totalMarkets; i++) {
-          marketPromises.push(fetchPDXMarket(i))
-        }
-
+        // Fetch all markets in parallel using the IDs
+        const marketPromises = marketIds.map(id => fetchPDXMarket(id))
         const results = await Promise.all(marketPromises)
         const validMarkets = results.filter((m): m is UnifiedMarket => m !== null)
         
@@ -402,5 +390,3 @@ export function useAllMarkets() {
     isPDXReady: pdxHook.isContractReady,
   }
 }
-
-

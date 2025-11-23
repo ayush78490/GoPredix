@@ -12,9 +12,10 @@ import { ethers } from "ethers"
 import LightRays from "@/components/LightRays"
 
 // Import ABIs
-import PREDICTION_MARKET_ARTIFACT from "@/contracts/abi.json"
-import HELPER_CONTRACT_ARTIFACT from "@/contracts/helperABI.json"
-// import PDX_ADAPTER_ARTIFACT from "@/contracts/dualtokenadapterABI.json"  // ✅ Main PDX adapter ABI
+import BNB_MARKET_ARTIFACT from "@/contracts/abi.json"
+import BNB_HELPER_ARTIFACT from "@/contracts/helperABI.json"
+import PDX_MARKET_ARTIFACT from "@/contracts/pdxabi.json"
+import PDX_HELPER_ARTIFACT from "@/contracts/pdxhelperabi.json"
 
 // Helper function to extract ABI
 const extractABI = (artifact: any): ethers.InterfaceAbi => {
@@ -22,14 +23,16 @@ const extractABI = (artifact: any): ethers.InterfaceAbi => {
 }
 
 // Extract ABIs
-const PREDICTION_MARKET_ABI = extractABI(PREDICTION_MARKET_ARTIFACT)
-const HELPER_CONTRACT_ABI = extractABI(HELPER_CONTRACT_ARTIFACT)
-// const PDX_ADAPTER_ABI = extractABI(PDX_ADAPTER_ARTIFACT)  // ✅ Use main adapter ABI
+const BNB_MARKET_ABI = extractABI(BNB_MARKET_ARTIFACT)
+const BNB_HELPER_ABI = extractABI(BNB_HELPER_ARTIFACT)
+const PDX_MARKET_ABI = extractABI(PDX_MARKET_ARTIFACT)
+const PDX_HELPER_ABI = extractABI(PDX_HELPER_ARTIFACT)
 
 // Contract addresses
-const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS
+const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
 const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS
-const PDX_ADAPTER_ADDRESS = process.env.NEXT_PUBLIC_DUAL_TOKEN_ADAPTER_ADDRESS  // ✅ Main adapter address
+const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_PREDICTION_MARKET_ADDRESS || "0x275fa689f785fa232861a076aD4cc1955F88171A"
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || "0x02D4E1573ec5ade27eC852fBBf873d7073219E21"
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
 
 interface UserStats {
@@ -103,7 +106,7 @@ export default function Leaderboard() {
   // ============================================
   
   const getReadOnlyContracts = useCallback(() => {
-    if (!BNB_MARKET_ADDRESS || !BNB_HELPER_ADDRESS || !PDX_ADAPTER_ADDRESS) {
+    if (!BNB_MARKET_ADDRESS || !BNB_HELPER_ADDRESS || !PDX_MARKET_ADDRESS || !PDX_HELPER_ADDRESS) {
       throw new Error('Contract addresses not configured in environment variables')
     }
 
@@ -111,16 +114,18 @@ export default function Leaderboard() {
       const provider = new ethers.JsonRpcProvider(RPC_URL)
       
       // BNB Contracts
-      const bnbMarketContract = new ethers.Contract(BNB_MARKET_ADDRESS, PREDICTION_MARKET_ABI, provider)
-      const bnbHelperContract = new ethers.Contract(BNB_HELPER_ADDRESS, HELPER_CONTRACT_ABI, provider)
+      const bnbMarketContract = new ethers.Contract(BNB_MARKET_ADDRESS, BNB_MARKET_ABI, provider)
+      const bnbHelperContract = new ethers.Contract(BNB_HELPER_ADDRESS, BNB_HELPER_ABI, provider)
       
-      // ✅ PDX Adapter (main contract with all storage)
-      const pdxAdapterContract = new ethers.Contract(PDX_ADAPTER_ADDRESS, PDX_ADAPTER_ABI, provider)
+      // PDX Contracts
+      const pdxMarketContract = new ethers.Contract(PDX_MARKET_ADDRESS, PDX_MARKET_ABI, provider)
+      const pdxHelperContract = new ethers.Contract(PDX_HELPER_ADDRESS, PDX_HELPER_ABI, provider)
       
       return { 
         bnbMarketContract, 
         bnbHelperContract,
-        pdxAdapterContract,  // ✅ Main adapter
+        pdxMarketContract,
+        pdxHelperContract,
         provider 
       }
     } catch (error) {
@@ -164,16 +169,15 @@ export default function Leaderboard() {
   }, [getReadOnlyContracts])
 
   // ============================================
-  // ✅ FETCH PDX MARKETS (FROM MAIN ADAPTER)
+  // ✅ FETCH PDX MARKETS
   // ============================================
   
   const fetchPDXMarkets = useCallback(async (): Promise<Market[]> => {
     try {
-      console.log("📋 Fetching PDX markets from main adapter...")
-      const { pdxAdapterContract } = getReadOnlyContracts()
+      console.log("📋 Fetching PDX markets...")
+      const { pdxMarketContract } = getReadOnlyContracts()
       
-      // ✅ nextPDXMarketId is a PUBLIC STATE VARIABLE
-      const nextId = await pdxAdapterContract.nextPDXMarketId()
+      const nextId = await pdxMarketContract.nextMarketId()
       const marketCount = Number(nextId)
       console.log(`Found ${marketCount} PDX markets`)
       
@@ -238,47 +242,41 @@ export default function Leaderboard() {
     }
   }, [getReadOnlyContracts])
 
-  // ✅ Get individual PDX market (from main adapter)
+  // Get individual PDX market
   const getPDXMarket = useCallback(async (marketId: number): Promise<Market | null> => {
     try {
-      const { pdxAdapterContract } = getReadOnlyContracts()
+      const { pdxMarketContract } = getReadOnlyContracts()
+      const marketData = await pdxMarketContract.markets(marketId)
       
-      // ✅ Read directly from pdxMarkets mapping in main adapter
-      const marketData = await pdxAdapterContract.pdxMarkets(marketId)
-      
-      // Market structure from contract:
-      // (creator, question, category, endTime, yesToken, noToken, 
-      //  yesPool, noPool, totalBacking, status, outcome)
-      
-      if (!marketData || !marketData.creator || marketData.creator === "0x0000000000000000000000000000000000000000") {
+      if (!marketData || !marketData[0] || marketData[0] === "0x0000000000000000000000000000000000000000") {
         console.warn(`PDX Market ${marketId} is empty or not found`)
         return null
       }
 
-      let question = marketData.question || `PDX Market ${marketId}`
+      let question = marketData[1] || `PDX Market ${marketId}`
       if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
         question = question.slice(1, -1)
       }
 
       const market: Market = {
         id: marketId,
-        creator: marketData.creator,
+        creator: marketData[0],
         question: question,
-        category: marketData.category || "General",
-        endTime: Number(marketData.endTime || 0),
-        status: Number(marketData.status || 0),
-        outcome: Number(marketData.outcome || 255),
-        yesToken: marketData.yesToken,
-        noToken: marketData.noToken,
-        yesPool: ethers.formatEther(marketData.yesPool || 0),
-        noPool: ethers.formatEther(marketData.noPool || 0),
-        lpTotalSupply: ethers.formatEther(marketData.totalBacking || 0),
-        totalBacking: ethers.formatEther(marketData.totalBacking || 0),
-        platformFees: "0",
-        resolutionRequestedAt: 0,
-        disputeDeadline: 0,
-        resolutionReason: '',
-        resolutionConfidence: 0,
+        category: marketData[2] || "General",
+        endTime: Number(marketData[3] || 0),
+        status: Number(marketData[4] || 0),
+        outcome: Number(marketData[5] || 255),
+        yesToken: marketData[6] || "0x0000000000000000000000000000000000000000",
+        noToken: marketData[7] || "0x0000000000000000000000000000000000000000",
+        yesPool: ethers.formatEther(marketData[8] || 0),
+        noPool: ethers.formatEther(marketData[9] || 0),
+        lpTotalSupply: ethers.formatEther(marketData[10] || 0),
+        totalBacking: ethers.formatEther(marketData[11] || 0),
+        platformFees: ethers.formatEther(marketData[12] || 0),
+        resolutionRequestedAt: Number(marketData[13] || 0),
+        disputeDeadline: Number(marketData[17] || 0),
+        resolutionReason: marketData[15] || '',
+        resolutionConfidence: Number(marketData[16] || 0),
         paymentToken: "PDX"
       }
 
@@ -377,35 +375,27 @@ export default function Leaderboard() {
     }
   }, [getReadOnlyContracts, getBNBMarket])
 
-  // ✅ Get PDX positions (from main adapter)
+  // Get PDX positions
   const getUserPDXPositions = useCallback(async (address: string): Promise<any[]> => {
     try {
-      const { pdxAdapterContract } = getReadOnlyContracts()
-      const nextId = await pdxAdapterContract.nextPDXMarketId()
-      const marketCount = Number(nextId)
+      const { pdxHelperContract } = getReadOnlyContracts()
+      const positions = await pdxHelperContract.getUserPositions(address)
       const formattedPositions = []
 
-      for (let marketId = 0; marketId < marketCount; marketId++) {
+      for (const pos of positions) {
         try {
-          // ✅ Read user investments from pdxUserInvestments mapping
-          const userInvestment = await pdxAdapterContract.pdxUserInvestments(marketId, address)
-          
-          // Use string fallback and parse to determine if the user invested > 0
-          const investedEther = parseFloat(ethers.formatEther(userInvestment?.totalInvested ?? "0"))
-          if (userInvestment && investedEther > 0) {
-            const market = await getPDXMarket(marketId)
-            if (market) {
-              formattedPositions.push({
-                market,
-                yesBalance: ethers.formatEther(userInvestment?.yesBalance ?? "0"),
-                noBalance: ethers.formatEther(userInvestment?.noBalance ?? "0"),
-                pdxInvested: ethers.formatEther(userInvestment?.totalInvested ?? "0"),
-                paymentToken: "PDX"
-              })
-            }
+          const market = await getPDXMarket(Number(pos.marketId))
+          if (market) {
+            formattedPositions.push({
+              market,
+              yesBalance: ethers.formatEther(pos.yesBalance),
+              noBalance: ethers.formatEther(pos.noBalance),
+              pdxInvested: ethers.formatEther(pos.totalInvested),
+              paymentToken: "PDX"
+            })
           }
         } catch (error) {
-          console.warn(`Error processing PDX position for market ${marketId}:`, error)
+          console.warn(`Error processing PDX position for market ${pos.marketId}:`, error)
         }
       }
 
@@ -419,24 +409,14 @@ export default function Leaderboard() {
   // Get total investment
   const getTotalInvestment = useCallback(async (address: string): Promise<{bnb: string, pdx: string}> => {
     try {
-      const { bnbHelperContract, pdxAdapterContract } = getReadOnlyContracts()
+      const { bnbHelperContract, pdxHelperContract } = getReadOnlyContracts()
       
       const bnbInvestment = await bnbHelperContract.getUserTotalInvestment(address)
-      
-      // ✅ For PDX, calculate by iterating through markets (accumulate in ether as number)
-      const nextId = await pdxAdapterContract.nextPDXMarketId()
-      const marketCount = Number(nextId)
-      let pdxTotalEther = 0
-
-      for (let marketId = 0; marketId < marketCount; marketId++) {
-        const userInvestment = await pdxAdapterContract.pdxUserInvestments(marketId, address)
-        const invested = parseFloat(ethers.formatEther(userInvestment?.totalInvested ?? "0"))
-        pdxTotalEther += invested
-      }
+      const pdxInvestment = await pdxHelperContract.getUserTotalInvestment(address)
       
       return {
         bnb: ethers.formatEther(bnbInvestment),
-        pdx: pdxTotalEther.toString()
+        pdx: ethers.formatEther(pdxInvestment)
       }
     } catch (error) {
       console.error(`Error fetching total investment for ${address}:`, error)
@@ -564,7 +544,7 @@ export default function Leaderboard() {
 
   // Main data fetching
   const fetchLeaderboardData = useCallback(async () => {
-    if (!BNB_MARKET_ADDRESS || !BNB_HELPER_ADDRESS || !PDX_ADAPTER_ADDRESS) {
+    if (!BNB_MARKET_ADDRESS || !BNB_HELPER_ADDRESS || !PDX_MARKET_ADDRESS || !PDX_HELPER_ADDRESS) {
       setError("Something went wrong.")
       return
     }
@@ -611,7 +591,7 @@ export default function Leaderboard() {
       )
       
       activeTraders.sort((a, b) => b.totalPnl - a.totalPnl)
-      console.log(` Active traders with positions: ${activeTraders.length}`)
+      console.log(`✅ Active traders with positions: ${activeTraders.length}`)
 
       setUserStats(activeTraders)
 
@@ -772,7 +752,7 @@ export default function Leaderboard() {
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   🔶 {bnbMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} BNB • 
-                   {pdxMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} PDX
+                  💎 {pdxMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} PDX
                 </div>
               </CardContent>
             </Card>
@@ -868,7 +848,7 @@ export default function Leaderboard() {
                             🔶 {parseFloat(user.bnbInvestment).toFixed(4)} BNB
                           </div>
                           <div className="text-xs text-muted-foreground">
-                             {parseFloat(user.pdxInvestment).toFixed(4)} PDX
+                            💎 {parseFloat(user.pdxInvestment).toFixed(4)} PDX
                           </div>
                         </div>
                       </div>
@@ -910,7 +890,7 @@ export default function Leaderboard() {
                                       variant="secondary" 
                                       className="ml-1 mr-1 backdrop-blur-sm"
                                     >
-                                      {position.paymentToken === "BNB" ? "🔶 BNB" : " PDX"}
+                                      {position.paymentToken === "BNB" ? "🔶 BNB" : "💎 PDX"}
                                     </Badge>
                                     <Badge 
                                       variant="secondary" 
