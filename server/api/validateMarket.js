@@ -49,17 +49,21 @@ app.options('*', cors(corsOptions));
 
 app.use(bodyParser.json());
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPEN_AI_API_KEY,
-});
+// Initialize OpenAI client with proper error handling
+let openai;
+try {
+  if (!process.env.OPEN_AI_API_KEY) {
+    throw new Error('OPEN_AI_API_KEY environment variable is not set');
+  }
 
-if (!process.env.OPEN_AI_API_KEY) {
-  console.error('❌ No OpenAI API key found in environment variables');
+  openai = new OpenAI({
+    apiKey: process.env.OPEN_AI_API_KEY,
+  });
+  console.log('✅ OpenAI client initialized successfully');
+} catch (error) {
+  console.error('❌ Failed to initialize OpenAI client:', error.message);
   process.exit(1);
 }
-
-console.log('🔑 OpenAI client initialized');
 
 // API Health state tracking
 let apiHealth = {
@@ -213,15 +217,15 @@ DATE ANALYSIS:
 - If no specific date is mentioned, ensure the event type suggests it will be resolved by market end
 
 CATEGORIES:
-- Cryptocurrency & Blockchain: Bitcoin, Ethereum, crypto regulations, blockchain tech
-- Politics & Governance: Elections, policies, legislation, political events
-- Sports & Competitions: Sports outcomes, tournaments, player performances
-- Technology & AI: Tech launches, AI developments, software releases
-- Finance & Economics: Stock markets, economic indicators, company earnings
-- Entertainment & Media: Movie releases, awards, celebrity news
-- Science & Health: Scientific discoveries, medical breakthroughs, space events
-- World Events: Natural disasters, international conflicts, global summits
-- Other: Everything else
+- CRYPTO: Cryptocurrency & Blockchain
+- POLITICS: Politics & Governance
+- SPORTS: Sports & Competitions
+- TECHNOLOGY: Technology & AI
+- FINANCE: Finance & Economics
+- ENTERTAINMENT: Entertainment & Media
+- SCIENCE: Science & Health
+- WORLD: World Events
+- OTHER: Everything else
 
 Respond with JSON only: {
   "valid": boolean,
@@ -579,7 +583,7 @@ function analyzeResolutionText(aiText, question) {
   };
 }
 
-// ==================== BLOCKCHAIN RESOLUTION SERVICE ====================
+// ==================== ROBUST BLOCKCHAIN RESOLUTION SERVICE ====================
 
 class MarketResolutionService {
   constructor(provider, contractAddress, privateKey) {
@@ -596,22 +600,71 @@ class MarketResolutionService {
       ],
       this.wallet
     );
+    this.isMonitoring = false;
+    this.eventListener = null;
   }
 
-  startMonitoring() {
-    console.log('🚀 Starting blockchain event monitoring...');
-    
-    this.contract.on('ResolutionRequested', async (marketId, requester, requestedAt, event) => {
-      console.log(`📢 Resolution requested for market ${marketId.toString()} by ${requester}`);
+  async startMonitoring() {
+    try {
+      console.log('🚀 Starting blockchain event monitoring...');
+      
+      // Use polling instead of event listeners to avoid filter issues
+      this.isMonitoring = true;
+      
+      // Start polling for resolution requests
+      this.startPolling();
+      
+      console.log('✅ Blockchain polling service active');
+    } catch (error) {
+      console.error('❌ Failed to start blockchain monitoring:', error.message);
+      // Fall back to polling only
+      this.startPolling();
+    }
+  }
+
+  startPolling() {
+    // Poll every 30 seconds for resolution requests
+    setInterval(async () => {
+      if (!this.isMonitoring) return;
       
       try {
-        await this.resolveMarket(marketId.toString());
+        await this.checkForPendingResolutions();
       } catch (error) {
-        console.error(`Error resolving market ${marketId}:`, error);
+        console.error('❌ Error in polling cycle:', error.message);
       }
-    });
+    }, 30000); // 30 seconds
+    
+    console.log('🔍 Started polling for resolution requests (30s interval)');
+  }
 
-    console.log('✅ Blockchain event listener active');
+  async checkForPendingResolutions() {
+    try {
+      const nextId = await this.contract.nextMarketId();
+      const marketCount = parseInt(nextId);
+      
+      if (marketCount === 0) return;
+
+      console.log(`🔍 Polling: Checking ${marketCount} markets for resolution requests...`);
+
+      for (let i = 0; i < marketCount; i++) {
+        try {
+          const resolutionRequested = await this.contract.resolutionRequested(i);
+          
+          if (resolutionRequested) {
+            console.log(`📢 Found resolution request for market ${i}`);
+            await this.resolveMarket(i.toString());
+            
+            // Add delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        } catch (error) {
+          console.error(`❌ Failed to check market ${i}:`, error.message);
+          continue;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in checkForPendingResolutions:', error.message);
+    }
   }
 
   async resolveMarket(marketId) {
@@ -631,15 +684,14 @@ class MarketResolutionService {
       // Check if market has ended
       const currentTime = Math.floor(Date.now() / 1000);
       if (currentTime < parseInt(endTime)) {
-        console.log(`Market ${marketId} has not ended yet`);
+        console.log(`⏳ Market ${marketId} has not ended yet`);
         return { success: false, reason: 'Market not ended' };
       }
 
-      // Check if resolution was requested
-      const resolutionRequested = await this.contract.resolutionRequested(marketId);
-      if (!resolutionRequested) {
-        console.log(`Resolution not requested for market ${marketId}`);
-        return { success: false, reason: 'Resolution not requested' };
+      // Check if already resolved
+      if (status > 2) { // Assuming status 2 is "ResolutionRequested", >2 means resolved
+        console.log(`✅ Market ${marketId} already resolved`);
+        return { success: false, reason: 'Market already resolved' };
       }
 
       console.log(`✅ Market ${marketId} ready for resolution. Calling AI...`);
@@ -765,6 +817,14 @@ class MarketResolutionService {
     } catch (error) {
       console.error('Error in processAllPendingResolutions:', error);
     }
+  }
+
+  stopMonitoring() {
+    this.isMonitoring = false;
+    if (this.eventListener) {
+      this.eventListener.removeAllListeners();
+    }
+    console.log('🛑 Blockchain monitoring stopped');
   }
 }
 
@@ -1006,8 +1066,8 @@ const initializeServer = async () => {
         process.env.RESOLVER_PRIVATE_KEY
       );
       
-      // Start monitoring blockchain events
-      resolutionService.startMonitoring();
+      // Start monitoring blockchain events using polling instead of event listeners
+      await resolutionService.startMonitoring();
       
       // Start cron job for periodic resolution processing
       cron.schedule('*/10 * * * *', async () => {
@@ -1039,7 +1099,7 @@ const initializeServer = async () => {
       console.log(`🔑 AI Provider: OpenAI GPT-4`);
       console.log(`🔧 API Health: ${apiHealth.isHealthy ? 'HEALTHY ✅' : 'UNHEALTHY ❌'}`);
       if (resolutionService) {
-        console.log(`🔗 Blockchain: Monitoring ✅ | Auto-resolution ✅`);
+        console.log(`🔗 Blockchain: Polling ✅ | Auto-resolution ✅`);
       }
       console.log(`🌐 CORS enabled for: https://sigma-predection.vercel.app`);
     });
@@ -1062,5 +1122,22 @@ const CATEGORIES = {
   WORLD: "World Events",
   OTHER: "Other"
 };
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Shutting down gracefully...');
+  if (resolutionService) {
+    resolutionService.stopMonitoring();
+  }
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 Shutting down gracefully...');
+  if (resolutionService) {
+    resolutionService.stopMonitoring();
+  }
+  process.exit(0);
+});
 
 initializeServer();
