@@ -6,21 +6,24 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { useWeb3Context } from "@/lib/wallet-context"
+import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { useAccount, useChainId, useWalletClient } from "wagmi"
+
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 
-const TWITTER_HANDLE = "your_twitter_handle"; // update to your team's handle
+const TWITTER_HANDLE = "your_twitter_handle"
+const BSC_TESTNET_CHAIN_ID = 97
 
 const createTweetMessage = (question: string, marketUrl: string) => {
-  return `Predict on: "${question}"\nCheck it out at ${marketUrl}\nTagging @${TWITTER_HANDLE}`;
-};
+  return `Predict on: "${question}"\nCheck it out at ${marketUrl}\nTagging @${TWITTER_HANDLE}`
+}
 
 const handleTweet = (question: string, marketUrl: string) => {
-  const tweetText = encodeURIComponent(createTweetMessage(question, marketUrl));
-  const tweetIntentUrl = `https://twitter.com/intent/tweet?text=${tweetText}`;
-  window.open(tweetIntentUrl, "_blank"); // opens Twitter in a new tab
-};
+  const tweetText = encodeURIComponent(createTweetMessage(question, marketUrl))
+  const tweetIntentUrl = `https://twitter.com/intent/tweet?text=${tweetText}`
+  window.open(tweetIntentUrl, "_blank")
+}
 
 interface CreateMarketModalProps {
   onClose: () => void
@@ -51,9 +54,14 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   const [marketUrl, setMarketUrl] = useState<string | null>(null)
   const [showTweetPopup, setShowTweetPopup] = useState(false)
 
-  // Get Web3 context
-  const { account, connectWallet, isConnecting, isCorrectNetwork, switchNetwork } = useWeb3Context()
+  // Wagmi hooks for wallet state
+  const { address: account, isConnected } = useAccount()
+  const chainId = useChainId()
+  const { data: walletClient } = useWalletClient()
   
+  const isCorrectNetwork = chainId === BSC_TESTNET_CHAIN_ID
+  const canTransact = isConnected && isCorrectNetwork && !!walletClient
+
   // Get both hooks
   const bnbHook = usePredictionMarketBNB()
   const pdxHook = usePredictionMarketPDX()
@@ -61,6 +69,9 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   // Use appropriate hook based on payment token
   const currentHook = paymentToken === "BNB" ? bnbHook : pdxHook
   const { isLoading, isContractReady } = currentHook
+  
+  // Contract is ready only if wallet can transact
+  const isFullyReady = isContractReady && canTransact
 
   // Calculate liquidity preview
   const totalLiquidity = parseFloat(initialYes || "0") + parseFloat(initialNo || "0")
@@ -136,17 +147,17 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
     } catch (err: any) {
       console.error('❌ AI validation error:', err)
-      
+
       // Fallback to basic validation when AI service is unavailable
-      const basicValidation = performBasicValidation(question, endTimeUnix, initialYes, initialNo)
+      const basicValidation = performBasicValidation(question, Math.floor(new Date(`${endDate}T${endTime}`).getTime() / 1000), initialYes, initialNo)
       setValidationResult(basicValidation)
-      
+
       if (!basicValidation.valid) {
         setError(`AI validation unavailable. Basic validation: ${basicValidation.reason}`)
       } else {
         setError("AI validation service is temporarily unavailable. Using basic validation.")
       }
-      
+
       return basicValidation.valid
     } finally {
       setIsValidating(false)
@@ -162,7 +173,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         category: 'OTHER'
       }
     }
-    
+
     if (question.length < 10) {
       return {
         valid: false,
@@ -170,7 +181,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         category: 'OTHER'
       }
     }
-    
+
     if (question.length > 280) {
       return {
         valid: false,
@@ -178,14 +189,14 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         category: 'OTHER'
       }
     }
-    
+
     const invalidPatterns = [
       /\b(opinion|think|believe|feel|probably|maybe)\b/i,
       /\b(subjective|arbitrary|pointless)\b/i,
       /\?.*\?/,
       /\b(and|or)\b.*\?/
     ]
-    
+
     for (const pattern of invalidPatterns) {
       if (pattern.test(question)) {
         return {
@@ -195,9 +206,9 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         }
       }
     }
-    
+
     const category = determineCategory(question)
-    
+
     return {
       valid: true,
       reason: 'Passes basic validation checks (AI service unavailable)',
@@ -208,7 +219,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   // Determine category based on question content
   const determineCategory = (question: string): string => {
     const lowerQuestion = question.toLowerCase()
-    
+
     const categoryKeywords = {
       CRYPTO: ['bitcoin', 'ethereum', 'crypto', 'blockchain', 'btc', 'eth', 'defi', 'nft', 'token', 'pdx'],
       POLITICS: ['election', 'president', 'government', 'policy', 'senate', 'congress', 'vote'],
@@ -219,36 +230,40 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       SCIENCE: ['discovery', 'research', 'study', 'medical', 'health', 'space', 'nasa'],
       WORLD: ['earthquake', 'hurricane', 'summit', 'conference', 'international', 'global']
     }
-    
+
     for (const [category, keywords] of Object.entries(categoryKeywords)) {
       if (keywords.some(keyword => lowerQuestion.includes(keyword))) {
         return category
       }
     }
-    
+
     return 'OTHER'
   }
 
   const handleCreate = async () => {
-    // Step 1: Check if wallet is connected
-    if (!account) {
-      await connectWallet()
+    // Validation checks
+    if (!isConnected) {
+      setError("Please connect your wallet first")
       return
     }
 
-    // Step 2: Check if on correct network
     if (!isCorrectNetwork) {
-      await switchNetwork()
+      setError("Please switch to BSC Testnet (Chain ID 97)")
       return
     }
 
-    // Step 3: Check if contract is ready
-    if (!isContractReady) {
+    if (!walletClient) {
+      setError("Wallet provider not ready. Please try reconnecting.")
+      return
+    }
+
+    // Check contract readiness
+    if (!isFullyReady) {
       setError("Contract not ready. Please wait or refresh the page.")
       return
     }
 
-    // Step 4: Validate question with AI if not already done
+    // Validate question with AI if not already done
     if (!validationResult) {
       const isValid = await validateQuestion()
       if (!isValid) {
@@ -257,13 +272,11 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       }
     }
 
-    // Step 5: Check if validation passed
     if (validationResult && !validationResult.valid) {
       setError(`Question validation failed: ${validationResult.reason}`)
       return
     }
 
-    // Step 6: Validate end date/time
     if (!endDate || !endTime) {
       setError("Please set an end date and time")
       return
@@ -278,7 +291,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       return
     }
 
-    // Step 7: Validate liquidity amounts
     const yesAmount = parseFloat(initialYes)
     const noAmount = parseFloat(initialNo)
 
@@ -292,7 +304,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       return
     }
 
-    // Step 8: Proceed with market creation
     setIsProcessing(true)
     setError(null)
     setTxHash(null)
@@ -311,6 +322,20 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           initialNo,
         })
       } else {
+        // Check PDX balance before creating market
+        const totalRequired = (parseFloat(initialYes) + parseFloat(initialNo)).toFixed(4)
+        console.log('🔍 Checking PDX balance before market creation...')
+        
+        if (pdxHook.checkPDXBalance) {
+          const balanceCheck = await pdxHook.checkPDXBalance(totalRequired)
+          console.log('Balance check result:', balanceCheck)
+          
+          if (!balanceCheck.hasBalance) {
+            setError(`Insufficient PDX balance. You have ${balanceCheck.currentBalance} PDX but need ${balanceCheck.required} PDX to create this market.`)
+            return
+          }
+        }
+
         marketId = await pdxHook.createMarketWithPDX({
           question,
           category: validationResult?.category || "GENERAL",
@@ -320,10 +345,9 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         })
       }
 
-      // Construct the market URL. Assuming your markets are at: /markets/{marketId}
-      const newMarketUrl = `https://www.gopredix.xyz/markets/${marketId}`;
-      setMarketUrl(newMarketUrl);
-      setShowTweetPopup(true);
+      const newMarketUrl = `https://www.gopredix.xyz/markets/${marketId}`
+      setMarketUrl(newMarketUrl)
+      setShowTweetPopup(true)
 
       if (onSuccess) {
         onSuccess(marketId)
@@ -396,7 +420,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 }`}
                 disabled={isProcessing}
               >
-                <div className="font-semibold">PDX</div>
+                <div className="font-semibold">💜 PDX</div>
                 <div className="text-xs text-muted-foreground">ERC-20 Token</div>
               </button>
             </div>
@@ -591,6 +615,21 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
             </ul>
           </div>
 
+          {/* Connection Status Info */}
+          {!canTransact && (
+            <div className="p-3 bg-yellow-950/20 border border-yellow-600/50 rounded-lg text-sm text-yellow-300">
+              {!isConnected ? (
+                "⚠️ Please connect your wallet to create a market"
+              ) : !isCorrectNetwork ? (
+                "⚠️ Please switch to BSC Testnet to create a market"
+              ) : !walletClient ? (
+                "⚠️ Wallet provider not ready. Please try reconnecting."
+              ) : (
+                "⚠️ Connecting to contracts..."
+              )}
+            </div>
+          )}
+
           {/* Error Display */}
           {error && (
             <div className="p-3 bg-red-950/20 border border-red-500 rounded-lg text-red-400 text-sm">
@@ -605,7 +644,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
             </div>
           )}
 
-          {/* Action Buttons */}
+          {/* Action Buttons using RainbowKit ConnectButton.Custom */}
           <div className="flex gap-3">
             <Button 
               onClick={onClose} 
@@ -615,67 +654,104 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
             >
               Cancel
             </Button>
-            
-            {!account ? (
-              <Button 
-                onClick={connectWallet} 
-                className="flex-1" 
-                disabled={isConnecting}
-              >
-                {isConnecting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Connect Wallet
-                  </>
-                )}
-              </Button>
-            ) : !isCorrectNetwork ? (
-              <Button 
-                onClick={switchNetwork} 
-                className="flex-1" 
-                variant="destructive"
-              >
-                Switch to BSC Testnet
-              </Button>
-            ) : !isContractReady ? (
-              <Button 
-                disabled 
-                className="flex-1"
-                variant="outline"
-              >
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Loading Contract...
-              </Button>
-            ) : (
-              <Button 
-                onClick={handleCreate} 
-                className="flex-1 bg-white text-black" 
-                disabled={Boolean(isProcessing || isLoading || (validationResult && !validationResult.valid))}
-              >
-                {isProcessing || isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create {paymentToken} Market
-                  </>
-                )}
-              </Button>
-            )}
+
+            <ConnectButton.Custom>
+              {({
+                account: cbAccount,
+                chain,
+                openAccountModal,
+                openChainModal,
+                openConnectModal,
+                authenticationStatus,
+                mounted,
+              }) => {
+                const ready = mounted && authenticationStatus !== 'loading'
+                const connected = ready && cbAccount && chain && (!authenticationStatus || authenticationStatus === 'authenticated')
+                const wrongNetwork = connected && chain?.id !== BSC_TESTNET_CHAIN_ID
+
+                if (!connected) {
+                  return (
+                    <Button
+                      onClick={openConnectModal}
+                      className="flex-1"
+                      disabled={!ready}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Connect Wallet
+                    </Button>
+                  )
+                }
+
+                if (wrongNetwork) {
+                  return (
+                    <Button
+                      onClick={openChainModal}
+                      className="flex-1"
+                      variant="destructive"
+                    >
+                      Switch to BSC Testnet
+                    </Button>
+                  )
+                }
+
+                if (!isContractReady) {
+                  return (
+                    <Button 
+                      disabled 
+                      className="flex-1"
+                      variant="outline"
+                    >
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {!canTransact ? "Checking Wallet..." : "Loading Contract..."}
+                    </Button>
+                  )
+                }
+
+                return (
+                  <Button 
+                    onClick={handleCreate} 
+                    className="flex-1 bg-white text-black hover:bg-white/90" 
+                    disabled={Boolean(isProcessing || isLoading || (validationResult && !validationResult.valid) || !canTransact)}
+                  >
+                    {isProcessing || isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create {paymentToken} Market
+                      </>
+                    )}
+                  </Button>
+                )
+              }}
+            </ConnectButton.Custom>
           </div>
 
           {/* Wallet Info */}
-          {account && (
-            <div className="text-center text-xs text-muted-foreground">
-              Connected: {account.slice(0, 6)}...{account.slice(-4)}
+          {isConnected && account && (
+            <div className="text-center text-xs text-muted-foreground space-y-1">
+              <div>
+                Connected: {account.slice(0, 6)}...{account.slice(-4)}
+              </div>
+              {!isCorrectNetwork && (
+                <div className="text-red-400 font-semibold">
+                  ⚠️ Wrong Network - Switch to BSC Testnet
+                </div>
+              )}
+              {!walletClient && isCorrectNetwork && (
+                <div className="text-yellow-400">
+                  ⚠️ Wallet provider not ready
+                </div>
+              )}
+              {canTransact && !isFullyReady && (
+                <div className="text-blue-400">
+                  <Loader2 className="inline w-3 h-3 mr-1 animate-spin" />
+                  Initializing {paymentToken} contracts...
+                </div>
+              )}
             </div>
           )}
         </div>
