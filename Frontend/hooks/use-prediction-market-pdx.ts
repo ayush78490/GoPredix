@@ -1,19 +1,14 @@
 import { useState, useCallback, useEffect } from 'react'
-import { ethers, BrowserProvider, JsonRpcSigner } from 'ethers'
+import { ethers } from 'ethers'
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
-import DUAL_TOKEN_ADAPTER_ABI from '../contracts/dualtokenadapterABI.json'
-import VIEWS_ADAPTER_ABI from '../contracts/dualtokenadapterviewerABI.json'
-import RESOLUTION_ABI from '../contracts/resolutionpdxABI.json'
+import PDX_PREDICTION_MARKET_ABI from '../contracts/pdxabi.json'
+import PDX_HELPER_ABI from '../contracts/pdxhelperabi.json'
 import ERC20_ABI from '../contracts/erc20ABI.json'
 
-// Contract addresses - PDX only (from your 3 contracts)
-const DUAL_TOKEN_ADAPTER_ADDRESS = process.env.NEXT_PUBLIC_DUAL_TOKEN_ADAPTER_ADDRESS || '0xb356a469387EE9DE6d6BeceDa975Af7Df69b7e06'
-const VIEWS_ADAPTER_ADDRESS = process.env.NEXT_PUBLIC_VIEWS_ADAPTER_ADDRESS || '0xfACd4d853d1CC37A624F5aB20De5C553371b1Da1'
-const RESOLUTION_ADDRESS = process.env.NEXT_PUBLIC_RESOLUTION_ADDRESS || '0xF3943cA8bEa0E5c147C5E626d0a3A3164c5B889f'
-// Convert to proper checksum - ethers v6 is strict about this
-const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS 
-  ? ethers.getAddress(process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS)
-  : ethers.getAddress('0xee943accaa07ed556dfac9d3a76015050fa78bc8')
+// Contract addresses
+const PDX_PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x275fa689f785fa232861a076aD4cc1955F88171A'
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || '0x02D4E1573ec5ade27eC852fBBf873d7073219E21'
+const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS || '0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8'
 
 // Market Status enum
 export enum MarketStatus {
@@ -25,9 +20,9 @@ export enum MarketStatus {
 }
 
 export enum Outcome {
-  Undecided = 255,
+  Undecided = 0,
   Yes = 1,
-  No = 0
+  No = 2
 }
 
 export interface PDXMarket {
@@ -47,7 +42,7 @@ export interface PDXMarket {
   noPrice?: number
   yesMultiplier?: number
   noMultiplier?: number
-  paymentToken?: "BNB" | "PDX"
+  paymentToken: "PDX"
 }
 
 export interface MarketCreationParams {
@@ -76,26 +71,6 @@ export interface TradingInfo {
   yesPrice: number
   noPrice: number
   totalLiquidity: string
-}
-
-export interface ResolutionState {
-  requested: boolean
-  requestTime: number
-  requester: string
-  disputed: boolean
-  disputeTime: number
-  disputer: string
-  resolved: boolean
-  outcome: boolean
-}
-
-export interface Order {
-  marketId: number
-  user: string
-  triggerPrice: number
-  amount: string
-  orderType: number
-  isActive: boolean
 }
 
 // PDX Market Creation Validation
@@ -129,69 +104,42 @@ export function usePredictionMarketPDX() {
   const { address: account, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
-
+  
   const [isLoading, setIsLoading] = useState(false)
-  const [adapterContract, setAdapterContract] = useState<ethers.Contract | null>(null)
-  const [viewsContract, setViewsContract] = useState<ethers.Contract | null>(null)
-  const [resolutionContract, setResolutionContract] = useState<ethers.Contract | null>(null)
+  const [marketContract, setMarketContract] = useState<ethers.Contract | null>(null)
+  const [helperContract, setHelperContract] = useState<ethers.Contract | null>(null)
   const [pdxTokenContract, setPdxTokenContract] = useState<ethers.Contract | null>(null)
   const [isContractReady, setIsContractReady] = useState(false)
-  const [provider, setProvider] = useState<BrowserProvider | null>(null)
-  const [signer, setSigner] = useState<JsonRpcSigner | null>(null)
 
-  const isCorrectNetwork = publicClient?.chain?.id === 97
-
-  // Initialize provider from publicClient
-  useEffect(() => {
-    const initProvider = async () => {
-      if (publicClient) {
-        try {
-          const ethersProvider = new BrowserProvider(publicClient.transport as any)
-          setProvider(ethersProvider)
-          console.log('✅ PDX Provider initialized from Wagmi')
-        } catch (error) {
-          console.error('❌ Error initializing PDX provider:', error)
-        }
-      } else {
-        setProvider(null)
-      }
-    }
-    initProvider()
+  // Create ethers provider from wagmi public client (for read operations only)
+  const getProvider = useCallback(() => {
+    if (!publicClient) return null
+    
+    // Create a proper ethers provider from viem public client
+    return new ethers.JsonRpcProvider('https://data-seed-prebsc-1-s1.bnbchain.org:8545')
   }, [publicClient])
 
-  // Initialize signer from walletClient
-  useEffect(() => {
-    const initSigner = async () => {
-      if (walletClient && account) {
-        try {
-          const { chain, transport } = walletClient
-          const network = {
-            chainId: chain.id,
-            name: chain.name,
-            ensAddress: chain.contracts?.ensRegistry?.address
-          }
-          const ethersProvider = new ethers.BrowserProvider(transport, network)
-          const ethersSigner = await ethersProvider.getSigner(account)
-          setSigner(ethersSigner)
-          console.log('✅ PDX Signer initialized from Wagmi')
-        } catch (error) {
-          console.error('❌ Error initializing PDX signer:', error)
-          setSigner(null)
-        }
-      } else {
-        setSigner(null)
-      }
-    }
-    initSigner()
-  }, [walletClient, account])
+  // Get signer for write operations
+  const getSigner = useCallback(async () => {
+    if (!walletClient || !account) return null
+    
+    // Create ethers wallet from wagmi wallet client
+    const provider = getProvider()
+    if (!provider) return null
 
-  // Initialize contracts
+    // Use BrowserProvider with the wallet client's transport
+    const browserProvider = new ethers.BrowserProvider(walletClient as any)
+    return await browserProvider.getSigner(account)
+  }, [walletClient, account, getProvider])
+
+  // Initialize contracts when provider changes
   useEffect(() => {
     const initializeContracts = async () => {
+      const provider = getProvider()
+      
       if (!provider) {
-        setAdapterContract(null)
-        setViewsContract(null)
-        setResolutionContract(null)
+        setMarketContract(null)
+        setHelperContract(null)
         setPdxTokenContract(null)
         setIsContractReady(false)
         return
@@ -199,91 +147,183 @@ export function usePredictionMarketPDX() {
 
       try {
         const network = await provider.getNetwork()
-        
-        if (network.chainId !== BigInt(97)) {
-          console.warn("⚠️ Not on BSC Testnet. Current chain:", network.chainId)
-          setAdapterContract(null)
-          setViewsContract(null)
-          setResolutionContract(null)
+
+        // compare as number to avoid BigInt literal issues in TS targets < ES2020
+        if (Number(network.chainId) !== 97) {
+          console.warn("⚠️ Not on BSC Testnet. Current chain:", network.chainId?.toString?.() ?? network.chainId)
+          setMarketContract(null)
+          setHelperContract(null)
           setPdxTokenContract(null)
           setIsContractReady(false)
           return
         }
 
-        const adapterContractInstance = new ethers.Contract(
-          DUAL_TOKEN_ADAPTER_ADDRESS,
-          DUAL_TOKEN_ADAPTER_ABI,
+        const marketInstance = new ethers.Contract(
+          PDX_PREDICTION_MARKET_ADDRESS,
+          PDX_PREDICTION_MARKET_ABI,
           provider
         )
 
-        const viewsContractInstance = new ethers.Contract(
-          VIEWS_ADAPTER_ADDRESS,
-          VIEWS_ADAPTER_ABI,
+        const helperInstance = new ethers.Contract(
+          PDX_HELPER_ADDRESS,
+          PDX_HELPER_ABI,
           provider
         )
 
-        const resolutionContractInstance = new ethers.Contract(
-          RESOLUTION_ADDRESS,
-          RESOLUTION_ABI,
-          provider
-        )
-
-        const pdxTokenInstance = new ethers.Contract(
+        const pdxInstance = new ethers.Contract(
           PDX_TOKEN_ADDRESS,
           ERC20_ABI,
           provider
         )
-        
+
         try {
-          const adapterOwner = await (adapterContractInstance as any).owner()
-          console.log('✅ Dual Token Adapter contract connected. Owner:', adapterOwner)
-          
-          const verifyConnection = await (viewsContractInstance as any).verifyConnection()
-          console.log('✅ Views adapter contract connected:', verifyConnection)
-          
-          const mainAdapterAddress = await (resolutionContractInstance as any).mainAdapter()
-          console.log('✅ Resolution contract connected. Main adapter:', mainAdapterAddress)
-          
-          const pdxBalance = await (pdxTokenInstance as any).balanceOf(DUAL_TOKEN_ADAPTER_ADDRESS)
-          console.log('✅ PDX token contract connected. Adapter balance:', ethers.formatEther(pdxBalance))
-          
-          setAdapterContract(adapterContractInstance)
-          setViewsContract(viewsContractInstance)
-          setResolutionContract(resolutionContractInstance)
-          setPdxTokenContract(pdxTokenInstance)
+          const owner = await (marketInstance as any).owner()
+          console.log('✅ PDX Market contract connected. Owner:', owner)
+
+          const nextMarketId = await (marketInstance as any).nextMarketId()
+          console.log('✅ Total markets:', Number(nextMarketId))
+
+          const pdxBalance = await (pdxInstance as any).balanceOf(PDX_PREDICTION_MARKET_ADDRESS)
+          console.log('✅ PDX token contract connected. Market balance:', ethers.formatEther(pdxBalance))
+
+          setMarketContract(marketInstance)
+          setHelperContract(helperInstance)
+          setPdxTokenContract(pdxInstance)
           setIsContractReady(true)
         } catch (testError) {
           console.error('❌ PDX Contract initialization test failed:', testError)
-          setAdapterContract(null)
-          setViewsContract(null)
-          setResolutionContract(null)
+          setMarketContract(null)
+          setHelperContract(null)
           setPdxTokenContract(null)
           setIsContractReady(false)
         }
-        
+
       } catch (error) {
         console.error('❌ Error initializing PDX contracts:', error)
-        setAdapterContract(null)
-        setViewsContract(null)
-        setResolutionContract(null)
+        setMarketContract(null)
+        setHelperContract(null)
         setPdxTokenContract(null)
         setIsContractReady(false)
       }
     }
 
     initializeContracts()
-  }, [provider])
+  }, [getProvider])
+
+  // ==================== VIEW FUNCTIONS ====================
+
+  const getPDXMarket = useCallback(async (marketId: number): Promise<PDXMarket> => {
+    if (!marketContract) throw new Error('Market contract not available')
+
+    try {
+      const marketData = await (marketContract as any).markets(BigInt(marketId))
+
+      if (!marketData || !marketData.creator || marketData.creator === "0x0000000000000000000000000000000000000000") {
+        throw new Error(`Market ${marketId} not found`)
+      }
+
+      const yesPoolNum = parseFloat(ethers.formatEther(marketData.yesPool))
+      const noPoolNum = parseFloat(ethers.formatEther(marketData.noPool))
+      const totalPool = yesPoolNum + noPoolNum
+
+      let yesPrice = 50
+      let noPrice = 50
+
+      if (totalPool > 0) {
+        yesPrice = (yesPoolNum / totalPool) * 100
+        noPrice = (noPoolNum / totalPool) * 100
+      }
+
+      return {
+        id: marketId,
+        creator: marketData.creator,
+        question: marketData.question,
+        category: marketData.category,
+        endTime: Number(marketData.endTime),
+        status: Number(marketData.status),
+        outcome: Number(marketData.outcome),
+        yesToken: marketData.yesToken,
+        noToken: marketData.noToken,
+        yesPool: ethers.formatEther(marketData.yesPool),
+        noPool: ethers.formatEther(marketData.noPool),
+        totalBacking: ethers.formatEther(marketData.totalBacking),
+        yesPrice,
+        noPrice,
+        yesMultiplier: yesPrice > 0 ? 100 / yesPrice : 2,
+        noMultiplier: noPrice > 0 ? 100 / noPrice : 2,
+        paymentToken: "PDX"
+      }
+    } catch (error) {
+      console.error('❌ Error fetching market:', error)
+      throw error
+    }
+  }, [marketContract])
+
+  const getPDXMarketIds = useCallback(async (): Promise<number[]> => {
+    if (!marketContract) throw new Error('Market contract not available')
+
+    try {
+      const nextMarketId = await (marketContract as any).nextMarketId()
+      const totalMarkets = Number(nextMarketId)
+      
+      // Generate array of market IDs without loop
+      return Array.from({ length: totalMarkets }, (_, i) => i)
+    } catch (error) {
+      console.error('❌ Error fetching market IDs:', error)
+      return []
+    }
+  }, [marketContract])
+
+  const getPDXMarkets = useCallback(async (marketIds: number[]): Promise<PDXMarket[]> => {
+    if (!marketContract) throw new Error('Market contract not available')
+    if (marketIds.length === 0) return []
+
+    try {
+      // Batch fetch all markets in parallel
+      const marketPromises = marketIds.map(id => getPDXMarket(id))
+      const markets = await Promise.allSettled(marketPromises)
+      
+      // Filter out failed fetches and return successful ones
+      return markets
+        .filter((result): result is PromiseFulfilledResult<PDXMarket> => result.status === 'fulfilled')
+        .map(result => result.value)
+    } catch (error) {
+      console.error('❌ Error batch fetching markets:', error)
+      return []
+    }
+  }, [marketContract, getPDXMarket])
+
+  const getAllPDXMarkets = useCallback(async (): Promise<PDXMarket[]> => {
+    try {
+      const marketIds = await getPDXMarketIds()
+      return await getPDXMarkets(marketIds)
+    } catch (error) {
+      console.error('❌ Error fetching all markets:', error)
+      return []
+    }
+  }, [getPDXMarketIds, getPDXMarkets])
 
   const getUserInvestment = useCallback(async (marketId: number, userAddress: string): Promise<UserInvestment> => {
-    if (!adapterContract) throw new Error('Adapter contract not available')
-    
+    if (!helperContract) throw new Error('Helper contract not available')
+
     try {
-      const investment = await (adapterContract as any).pdxUserInvestments(BigInt(marketId), userAddress)
-      
+      const provider = getProvider()
+      if (!provider) throw new Error('Provider not available')
+
+      const investment = await (helperContract as any).getMarketInvestment(BigInt(marketId), userAddress)
+
+      // Get YES/NO token balances
+      const market = await getPDXMarket(marketId)
+      const yesTokenContract = new ethers.Contract(market.yesToken, ERC20_ABI, provider)
+      const noTokenContract = new ethers.Contract(market.noToken, ERC20_ABI, provider)
+
+      const yesBalance = await (yesTokenContract as any).balanceOf(userAddress)
+      const noBalance = await (noTokenContract as any).balanceOf(userAddress)
+
       return {
-        totalInvested: ethers.formatEther(investment.totalInvested || BigInt(0)),
-        yesBalance: ethers.formatEther(investment.yesBalance || BigInt(0)),
-        noBalance: ethers.formatEther(investment.noBalance || BigInt(0))
+        totalInvested: ethers.formatEther(investment),
+        yesBalance: ethers.formatEther(yesBalance),
+        noBalance: ethers.formatEther(noBalance)
       }
     } catch (error) {
       console.error('❌ Error fetching user investment:', error)
@@ -293,779 +333,469 @@ export function usePredictionMarketPDX() {
         noBalance: "0"
       }
     }
-  }, [adapterContract])
-
-  const getResolutionStatus = useCallback(async (marketId: number): Promise<ResolutionState> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      const resolution = await (resolutionContract as any).getResolution(BigInt(marketId))
-      return {
-        requested: resolution[0],
-        requestTime: Number(resolution[1]),
-        requester: resolution[2],
-        disputed: resolution[3],
-        disputeTime: Number(resolution[4]),
-        disputer: resolution[5],
-        resolved: resolution[6],
-        outcome: resolution[7]
-      }
-    } catch (error) {
-      console.error('❌ Error fetching resolution status:', error)
-      throw error
-    }
-  }, [resolutionContract])
-
-  const canRequestResolution = useCallback(async (marketId: number): Promise<boolean> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      return await (resolutionContract as any).canRequestResolution(BigInt(marketId))
-    } catch (error) {
-      console.error('❌ Error checking if can request resolution:', error)
-      return false
-    }
-  }, [resolutionContract])
-
-  const canDispute = useCallback(async (marketId: number): Promise<boolean> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      return await (resolutionContract as any).canDispute(BigInt(marketId))
-    } catch (error) {
-      console.error('❌ Error checking if can dispute:', error)
-      return false
-    }
-  }, [resolutionContract])
-
-  const getResolutionStatusString = useCallback(async (marketId: number): Promise<string> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      return await (resolutionContract as any).getResolutionStatus(BigInt(marketId))
-    } catch (error) {
-      console.error('❌ Error getting resolution status string:', error)
-      return 'Unknown'
-    }
-  }, [resolutionContract])
-
-  const getDisputeDeadline = useCallback(async (marketId: number): Promise<number> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      const deadline = await (resolutionContract as any).getDisputeDeadline(BigInt(marketId))
-      return Number(deadline)
-    } catch (error) {
-      console.error('❌ Error getting dispute deadline:', error)
-      return 0
-    }
-  }, [resolutionContract])
-
-  const getMarketOutcome = useCallback(async (marketId: number): Promise<boolean> => {
-    if (!resolutionContract) throw new Error('Resolution contract not available')
-    
-    try {
-      return await (resolutionContract as any).getMarketOutcome(BigInt(marketId))
-    } catch (error) {
-      console.error('❌ Error getting market outcome:', error)
-      throw error
-    }
-  }, [resolutionContract])
-
-  const getPDXMarket = useCallback(async (marketId: number): Promise<PDXMarket> => {
-    if (!adapterContract) throw new Error('Adapter contract not available')
-
-    try {
-      const marketData = await (adapterContract as any).pdxMarkets(BigInt(marketId))
-      
-      if (!marketData || !marketData.creator || marketData.creator === "0x0000000000000000000000000000000000000000") {
-        throw new Error(`PDX Market ${marketId} not found`)
-      }
-
-      let question = marketData.question || `PDX Market ${marketId}`
-      if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
-        question = question.slice(1, -1)
-      }
-
-      const yesPoolNum = parseFloat(ethers.formatEther(marketData.yesPool))
-      const noPoolNum = parseFloat(ethers.formatEther(marketData.noPool))
-      const totalPool = yesPoolNum + noPoolNum
-
-      let yesPrice = 50
-      let noPrice = 50
-      
-      if (totalPool > 0) {
-        yesPrice = (yesPoolNum / totalPool) * 100
-        noPrice = (noPoolNum / totalPool) * 100
-      }
-
-      const market: PDXMarket = {
-        id: marketId,
-        creator: marketData.creator,
-        question: question,
-        category: marketData.category || "General",
-        endTime: Number(marketData.endTime),
-        status: Number(marketData.status),
-        outcome: Number(marketData.outcome),
-        yesToken: marketData.yesToken,
-        noToken: marketData.noToken,
-        yesPool: ethers.formatEther(marketData.yesPool),
-        noPool: ethers.formatEther(marketData.noPool),
-        totalBacking: ethers.formatEther(marketData.totalBacking),
-        yesPrice: yesPrice,
-        noPrice: noPrice,
-        yesMultiplier: yesPrice > 0 ? 100 / yesPrice : 2,
-        noMultiplier: noPrice > 0 ? 100 / noPrice : 2,
-        paymentToken: "PDX"
-      }
-
-      return market
-
-    } catch (error) {
-      console.error('❌ Error fetching PDX market:', error)
-      throw error
-    }
-  }, [adapterContract])
-
-  const getPDXMarketIds = useCallback(async (): Promise<number[]> => {
-    if (!adapterContract) throw new Error('Adapter contract not available')
-    
-    try {
-      const nextMarketId = await (adapterContract as any).nextPDXMarketId()
-      const marketIds: number[] = []
-      
-      for (let i = 0; i < Number(nextMarketId); i++) {
-        marketIds.push(i)
-      }
-      
-      return marketIds
-    } catch (error) {
-      console.error('❌ Error fetching PDX market IDs:', error)
-      return []
-    }
-  }, [adapterContract])
+  }, [helperContract, getPDXMarket, getProvider])
 
   const getUserPositions = useCallback(async (userAddress: string): Promise<any[]> => {
-    if (!adapterContract) throw new Error('Adapter contract not available')
+    if (!helperContract) throw new Error('Helper contract not available')
 
     try {
-      const markets: any[] = []
-      
-      const nextId = await (adapterContract as any).nextPDXMarketId()
-      const marketCount = Number(nextId)
-      
-      for (let marketId = 0; marketId < marketCount; marketId++) {
-        try {
-          const investment = await (adapterContract as any).pdxUserInvestments(marketId, userAddress)
-          
-          if (investment && investment.totalInvested > BigInt(0)) {
-            const market = await getPDXMarket(marketId)
-            
-            markets.push({
-              marketId,
-              market,
-              yesBalance: ethers.formatEther(investment.yesBalance || BigInt(0)),
-              noBalance: ethers.formatEther(investment.noBalance || BigInt(0)),
-              bnbInvested: ethers.formatEther(investment.totalInvested),
-              paymentToken: "PDX"
-            })
+      const positions = await (helperContract as any).getUserPositions(userAddress)
+
+      const formattedPositions = await Promise.all(
+        positions.map(async (pos: any) => {
+          const market = await getPDXMarket(Number(pos.marketId))
+          return {
+            marketId: Number(pos.marketId),
+            market,
+            yesBalance: ethers.formatEther(pos.yesBalance),
+            noBalance: ethers.formatEther(pos.noBalance),
+            pdxInvested: ethers.formatEther(pos.pdxInvested),
+            paymentToken: "PDX"
           }
-        } catch (error) {
-          console.warn(`Error fetching PDX position for market ${marketId}:`, error)
-        }
-      }
-      
-      console.log(`✅ Found ${markets.length} PDX positions for ${userAddress}`)
-      return markets
+        })
+      )
+
+      return formattedPositions
     } catch (error) {
-      console.error('❌ Error fetching user PDX positions:', error)
+      console.error('❌ Error fetching user positions:', error)
       return []
     }
-  }, [adapterContract, getPDXMarket])
+  }, [helperContract, getPDXMarket])
+
+  // ==================== ESTIMATION FUNCTIONS ====================
 
   const getBuyYesMultiplier = useCallback(async (
     marketId: number,
     pdxAmount: string
   ): Promise<MultiplierInfo> => {
-    if (!viewsContract) throw new Error('Views contract not available')
-    
+    if (!marketContract) throw new Error('Market contract not available')
+
     try {
       const pdxAmountWei = ethers.parseEther(pdxAmount)
-      const result = await (viewsContract as any).getBuyYesMultiplier(
-        BigInt(marketId),
-        pdxAmountWei
-      )
-      
+      const result = await (marketContract as any).getBuyYesOutput(BigInt(marketId), pdxAmountWei)
+
+      const totalOut = ethers.formatEther(result[0])
+      const totalFee = ethers.formatEther(result[1])
+      const multiplier = parseFloat(totalOut) / parseFloat(pdxAmount)
+
       return {
-        multiplier: Number(result[0]) / 10000,
-        totalOut: ethers.formatEther(result[1]),
-        totalFee: ethers.formatEther(result[2])
+        multiplier,
+        totalOut,
+        totalFee
       }
     } catch (error) {
       console.error('❌ Error estimating YES purchase:', error)
       throw error
     }
-  }, [viewsContract])
+  }, [marketContract])
 
   const getBuyNoMultiplier = useCallback(async (
     marketId: number,
     pdxAmount: string
   ): Promise<MultiplierInfo> => {
-    if (!viewsContract) throw new Error('Views contract not available')
-    
+    if (!marketContract) throw new Error('Market contract not available')
+
     try {
       const pdxAmountWei = ethers.parseEther(pdxAmount)
-      const result = await (viewsContract as any).getBuyNoMultiplier(
-        BigInt(marketId),
-        pdxAmountWei
-      )
-      
+      const result = await (marketContract as any).getBuyNoOutput(BigInt(marketId), pdxAmountWei)
+
+      const totalOut = ethers.formatEther(result[0])
+      const totalFee = ethers.formatEther(result[1])
+      const multiplier = parseFloat(totalOut) / parseFloat(pdxAmount)
+
       return {
-        multiplier: Number(result[0]) / 10000,
-        totalOut: ethers.formatEther(result[1]),
-        totalFee: ethers.formatEther(result[2])
+        multiplier,
+        totalOut,
+        totalFee
       }
     } catch (error) {
       console.error('❌ Error estimating NO purchase:', error)
       throw error
     }
-  }, [viewsContract])
+  }, [marketContract])
 
   const getCurrentMultipliers = useCallback(async (marketId: number): Promise<TradingInfo> => {
-    if (!viewsContract) throw new Error('Views contract not available')
-    
+    if (!marketContract) throw new Error('Market contract not available')
+
     try {
-      const result = await (viewsContract as any).getTradingInfo(BigInt(marketId))
-      
+      const result = await (marketContract as any).getCurrentMultipliers(BigInt(marketId))
+
       return {
         yesMultiplier: Number(result[0]) / 10000,
         noMultiplier: Number(result[1]) / 10000,
         yesPrice: Number(result[2]),
         noPrice: Number(result[3]),
-        totalLiquidity: ethers.formatEther(result[4])
+        totalLiquidity: "0" // Calculate from market data if needed
       }
     } catch (error) {
       console.error('❌ Error fetching current multipliers:', error)
       throw error
     }
-  }, [viewsContract])
+  }, [marketContract])
 
   const getSellEstimatePDX = useCallback(async (
     marketId: number,
     tokenAmount: string,
     isYes: boolean
   ): Promise<{ pdxOut: string; fee: string }> => {
-    if (!viewsContract) throw new Error('Views contract not available')
-    
     try {
-      const tokenAmountWei = ethers.parseEther(tokenAmount)
-      const result = await (viewsContract as any).getSellEstimate(
-        BigInt(marketId),
-        tokenAmountWei,
-        isYes
-      )
-      
+      // Estimate based on AMM formula (simplified)
+      const market = await getPDXMarket(marketId)
+      const fee = parseFloat(tokenAmount) * 0.005 // 0.5% fee
+      const pdxOut = parseFloat(tokenAmount) - fee
+
       return {
-        pdxOut: ethers.formatEther(result[0]),
-        fee: ethers.formatEther(result[1])
+        pdxOut: pdxOut.toFixed(6),
+        fee: fee.toFixed(6)
       }
     } catch (error) {
-      console.error('❌ Error estimating PDX sell:', error)
+      console.error('❌ Error estimating sell:', error)
       return {
-        pdxOut: (parseFloat(tokenAmount) * 0.95).toFixed(6),
-        fee: (parseFloat(tokenAmount) * 0.01).toFixed(6)
+        pdxOut: (parseFloat(tokenAmount) * 0.995).toFixed(6),
+        fee: (parseFloat(tokenAmount) * 0.005).toFixed(6)
       }
     }
-  }, [viewsContract])
+  }, [getPDXMarket])
+
+  // ==================== TRADING FUNCTIONS ====================
 
   const createMarketWithPDX = useCallback(async (
     params: MarketCreationParams
   ): Promise<number> => {
-    if (!signer || !account || !isCorrectNetwork) {
+    if (!walletClient || !account || !isConnected) {
       throw new Error('Wallet not connected or wrong network')
     }
-    if (!isContractReady || !adapterContract || !pdxTokenContract) {
-      throw new Error('PDX Contract not ready - please ensure you\'re on BSC Testnet')
+    if (!isContractReady || !marketContract || !pdxTokenContract) {
+      throw new Error('Contracts not ready')
     }
+
+    // Get signer from wallet client
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
 
     setIsLoading(true)
     try {
       const validation = await validatePDXMarketWithPerplexity(params)
       if (!validation.valid) {
-        throw new Error(validation.reason || 'Market question did not pass AI validation')
+        throw new Error(validation.reason || 'Market validation failed')
       }
 
-      const adapterWithSigner = new ethers.Contract(
-        DUAL_TOKEN_ADAPTER_ADDRESS,
-        DUAL_TOKEN_ADAPTER_ABI,
-        signer
-      )
-
-      const pdxWithSigner = new ethers.Contract(
-        PDX_TOKEN_ADDRESS,
-        ERC20_ABI,
-        signer
-      )
+      const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+      const pdxWithSigner = (pdxTokenContract as ethers.Contract).connect(signer) as ethers.Contract
 
       const initialYesWei = ethers.parseEther(params.initialYes)
       const initialNoWei = ethers.parseEther(params.initialNo)
       const totalValue = initialYesWei + initialNoWei
 
-      const approveTx = await pdxWithSigner.approve(DUAL_TOKEN_ADAPTER_ADDRESS, totalValue)
-      await approveTx.wait()
-      console.log('✅ PDX approved for market creation')
+      console.log('📊 Market Creation Details:', {
+        question: params.question,
+        category: validation.category || params.category,
+        endTime: params.endTime,
+        initialYes: params.initialYes,
+        initialNo: params.initialNo,
+        totalPDX: ethers.formatEther(totalValue)
+      })
 
-      const tx = await (adapterWithSigner as any).createMarketWithPDX(
+      // Check PDX balance first
+      console.log('💰 Checking PDX balance...')
+      const balance = await (pdxWithSigner as any).balanceOf(account)
+      const balanceFormatted = ethers.formatEther(balance)
+      console.log(`Balance: ${balanceFormatted} PDX, Required: ${ethers.formatEther(totalValue)} PDX`)
+
+      if (balance < totalValue) {
+        throw new Error(`Insufficient PDX balance. You have ${balanceFormatted} PDX but need ${ethers.formatEther(totalValue)} PDX`)
+      }
+
+      // Check current allowance
+      console.log('🔍 Checking current PDX allowance...')
+      const currentAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
+      console.log(`Current allowance: ${ethers.formatEther(currentAllowance)} PDX`)
+
+      // Only approve if needed
+      if (currentAllowance < totalValue) {
+        console.log(`✍️ Approving ${ethers.formatEther(totalValue)} PDX...`)
+        
+        // Reset allowance to 0 first if there's an existing allowance (some tokens require this)
+        if (currentAllowance > BigInt(0)) {
+          console.log('Resetting existing allowance to 0...')
+          const resetTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, BigInt(0))
+          await resetTx.wait()
+          console.log('✅ Allowance reset')
+        }
+
+        const approveTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, totalValue)
+        console.log('⏳ Waiting for approval transaction...')
+        await approveTx.wait()
+        console.log('✅ PDX approved for market creation')
+      } else {
+        console.log('✅ Sufficient allowance already exists')
+      }
+
+      // Verify approval was successful
+      const newAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
+      console.log(`Verified allowance: ${ethers.formatEther(newAllowance)} PDX`)
+
+      if (newAllowance < totalValue) {
+        throw new Error('Approval failed. Please try again.')
+      }
+
+      console.log('🚀 Creating market...')
+      const tx = await (marketWithSigner as any).createMarket(
         params.question,
         validation.category || params.category || 'General',
         BigInt(params.endTime),
         initialYesWei,
         initialNoWei
       )
-      console.log('📝 Creating PDX market with initial YES:', params.initialYes, 'NO:', params.initialNo)
-      
-      console.log('⏳ Waiting for market creation transaction:', tx.hash)
+
+      console.log('⏳ Waiting for market creation:', tx.hash)
       const receipt = await tx.wait()
-      
+
       if (!receipt) {
-        throw new Error('Transaction failed - no receipt returned')
+        throw new Error('Transaction failed')
       }
 
-      let marketId: number
-      const marketCreatedTopic = ethers.id('MarketCreated(uint256,address,string)')
-      const event = receipt.logs.find((log: any) => log.topics[0] === marketCreatedTopic)
+      const nextId = await (marketWithSigner as any).nextMarketId()
+      const marketId = Number(nextId) - 1
 
-      if (event) {
-        const iface = new ethers.Interface(DUAL_TOKEN_ADAPTER_ABI)
-        const decodedEvent = iface.parseLog(event)
-        marketId = Number(decodedEvent?.args[0])
-      } else {
-        const nextId = await (adapterWithSigner as any).nextPDXMarketId()
-        marketId = Number(nextId) - 1
-      }
-
-      console.log(`✅ PDX Market created with ID: ${marketId}`)
+      console.log(`✅ Market created with ID: ${marketId}`)
       return marketId
 
     } catch (error: any) {
-      console.error('❌ Error creating PDX market:', error)
-      throw new Error(error.reason || error.message || 'Failed to create PDX market')
+      console.error('❌ Error creating market:', error)
+      
+      // Enhanced error messages
+      if (error.message?.includes('Insufficient PDX balance')) {
+        throw error
+      } else if (error.code === 'CALL_EXCEPTION') {
+        throw new Error('Transaction failed during simulation. This could be due to: insufficient PDX balance, contract paused, or invalid parameters. Please check your PDX balance and try again.')
+      } else if (error.message?.includes('user rejected')) {
+        throw new Error('Transaction was rejected by user')
+      } else {
+        throw new Error(error.reason || error.message || 'Failed to create market')
+      }
     } finally {
       setIsLoading(false)
     }
-  }, [signer, account, isCorrectNetwork, isContractReady, adapterContract, pdxTokenContract])
+  }, [walletClient, account, isConnected, isContractReady, marketContract, pdxTokenContract, getSigner])
 
   const buyYesWithPDX = useCallback(async (
     marketId: number,
     minTokensOut: string,
     pdxAmount: string
   ) => {
-    if (!signer || !isCorrectNetwork || !adapterContract || !pdxTokenContract) {
+    if (!walletClient || !isConnected || !marketContract || !pdxTokenContract || !account) {
       throw new Error('Wallet not connected or wrong network')
     }
-    if (!account) throw new Error('No account connected')
-    
-    const pdxWithSigner = new ethers.Contract(
-      PDX_TOKEN_ADDRESS,
-      ERC20_ABI,
-      signer
-    )
 
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const pdxWithSigner = (pdxTokenContract as ethers.Contract).connect(signer) as ethers.Contract
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+
     const pdxAmountWei = ethers.parseEther(pdxAmount)
     const minOutWei = ethers.parseEther(minTokensOut)
-    
-    const approveTx = await pdxWithSigner.approve(DUAL_TOKEN_ADAPTER_ADDRESS, pdxAmountWei)
+
+    const approveTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, pdxAmountWei)
     await approveTx.wait()
     console.log('✅ PDX approved for buy YES')
-    
-    const tx = await (adapterWithSigner as any).buyYesWithPDX(
+
+    const tx = await (marketWithSigner as any).buyYesWithPDXFor(
       BigInt(marketId),
       account,
       minOutWei,
       pdxAmountWei
     )
-    
+
     return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract, pdxTokenContract, account])
+  }, [walletClient, isConnected, marketContract, pdxTokenContract, account, getSigner])
 
   const buyNoWithPDX = useCallback(async (
     marketId: number,
     minTokensOut: string,
     pdxAmount: string
   ) => {
-    if (!signer || !isCorrectNetwork || !adapterContract || !pdxTokenContract) {
+    if (!walletClient || !isConnected || !marketContract || !pdxTokenContract || !account) {
       throw new Error('Wallet not connected or wrong network')
     }
-    if (!account) throw new Error('No account connected')
-    
-    const pdxWithSigner = new ethers.Contract(
-      PDX_TOKEN_ADDRESS,
-      ERC20_ABI,
-      signer
-    )
 
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const pdxWithSigner = (pdxTokenContract as ethers.Contract).connect(signer) as ethers.Contract
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+
     const pdxAmountWei = ethers.parseEther(pdxAmount)
     const minOutWei = ethers.parseEther(minTokensOut)
-    
-    const approveTx = await pdxWithSigner.approve(DUAL_TOKEN_ADAPTER_ADDRESS, pdxAmountWei)
+
+    const approveTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, pdxAmountWei)
     await approveTx.wait()
     console.log('✅ PDX approved for buy NO')
-    
-    const tx = await (adapterWithSigner as any).buyNoWithPDX(
+
+    const tx = await (marketWithSigner as any).buyNoWithPDXFor(
       BigInt(marketId),
       account,
       minOutWei,
       pdxAmountWei
     )
-    
+
     return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract, pdxTokenContract, account])
+  }, [walletClient, isConnected, marketContract, pdxTokenContract, account, getSigner])
 
   const sellYesForPDX = useCallback(async (
     marketId: number,
     tokenAmount: string,
     minPDXOut: string
   ) => {
-    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
-    
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
+    if (!walletClient || !isConnected || !marketContract || !account) throw new Error('Wallet not connected')
+
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+
     const tokenAmountWei = ethers.parseEther(tokenAmount)
     const minPDXOutWei = ethers.parseEther(minPDXOut)
-    
-    const tx = await (adapterWithSigner as any).sellYesForPDX(
+
+    const tx = await (marketWithSigner as any).sellYesForPDX(
       BigInt(marketId),
       tokenAmountWei,
       minPDXOutWei
     )
-    
+
     return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract])
+  }, [walletClient, isConnected, marketContract, account, getSigner])
 
   const sellNoForPDX = useCallback(async (
     marketId: number,
     tokenAmount: string,
     minPDXOut: string
   ) => {
-    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
-    
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
+    if (!walletClient || !isConnected || !marketContract || !account) throw new Error('Wallet not connected')
+
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+
     const tokenAmountWei = ethers.parseEther(tokenAmount)
     const minPDXOutWei = ethers.parseEther(minPDXOut)
-    
-    const tx = await (adapterWithSigner as any).sellNoForPDX(
+
+    const tx = await (marketWithSigner as any).sellNoForPDX(
       BigInt(marketId),
       tokenAmountWei,
       minPDXOutWei
     )
-    
+
     return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract])
+  }, [walletClient, isConnected, marketContract, account, getSigner])
 
-  const addPDXLiquidity = useCallback(async (
-    marketId: number,
-    yesAmount: string,
-    noAmount: string
-  ) => {
-    if (!signer || !isCorrectNetwork || !adapterContract || !pdxTokenContract) {
-      throw new Error('Wallet not connected or wrong network')
+  // ==================== RESOLUTION ====================
+
+  const requestResolution = useCallback(async (marketId: number, reason: string) => {
+    if (!walletClient || !isConnected || !marketContract || !account) {
+      throw new Error('Wallet not connected')
     }
-    
-    const pdxWithSigner = new ethers.Contract(
-      PDX_TOKEN_ADDRESS,
-      ERC20_ABI,
-      signer
-    )
 
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
-    const yesAmountWei = ethers.parseEther(yesAmount)
-    const noAmountWei = ethers.parseEther(noAmount)
-    const totalAmount = yesAmountWei + noAmountWei
-    
-    const approveTx = await pdxWithSigner.approve(DUAL_TOKEN_ADAPTER_ADDRESS, totalAmount)
-    await approveTx.wait()
-    console.log('✅ PDX approved for liquidity')
-    
-    const tx = await (adapterWithSigner as any).addPDXLiquidity(
-      BigInt(marketId),
-      yesAmountWei,
-      noAmountWei
-    )
-    
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+    const tx = await (marketWithSigner as any).requestResolution(BigInt(marketId), reason)
     return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract, pdxTokenContract])
-
-  const removePDXLiquidity = useCallback(async (
-    marketId: number,
-    lpAmount: string
-  ) => {
-    if (!signer || !isCorrectNetwork || !adapterContract) throw new Error('Wallet not connected or wrong network')
-    
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
-    const lpAmountWei = ethers.parseEther(lpAmount)
-    
-    const tx = await (adapterWithSigner as any).removePDXLiquidity(
-      BigInt(marketId),
-      lpAmountWei
-    )
-    
-    return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract])
-
-  const createStopLossOrder = useCallback(async (
-    marketId: number,
-    triggerPrice: number,
-    amount: string
-  ) => {
-    if (!signer || !isCorrectNetwork || !adapterContract) {
-      throw new Error('Wallet not connected or wrong network')
-    }
-    
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
-    const amountWei = ethers.parseEther(amount)
-    
-    const tx = await (adapterWithSigner as any).createStopLossOrder(
-      BigInt(marketId),
-      triggerPrice,
-      amountWei
-    )
-    
-    return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract])
-
-  const createTakeProfitOrder = useCallback(async (
-    marketId: number,
-    triggerPrice: number,
-    amount: string
-  ) => {
-    if (!signer || !isCorrectNetwork || !adapterContract) {
-      throw new Error('Wallet not connected or wrong network')
-    }
-    
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
-    const amountWei = ethers.parseEther(amount)
-    
-    const tx = await (adapterWithSigner as any).createTakeProfitOrder(
-      BigInt(marketId),
-      triggerPrice,
-      amountWei
-    )
-    
-    return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract])
-
-  const executeOrder = useCallback(async (orderId: number) => {
-    if (!signer || !isCorrectNetwork || !adapterContract) {
-      throw new Error('Wallet not connected or wrong network')
-    }
-    
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
-    const tx = await (adapterWithSigner as any).executeOrder(BigInt(orderId))
-    return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract])
-
-  const cancelOrder = useCallback(async (orderId: number) => {
-    if (!signer || !isCorrectNetwork || !adapterContract) {
-      throw new Error('Wallet not connected or wrong network')
-    }
-    
-    const adapterWithSigner = new ethers.Contract(
-      DUAL_TOKEN_ADAPTER_ADDRESS,
-      DUAL_TOKEN_ADAPTER_ABI,
-      signer
-    )
-    
-    const tx = await (adapterWithSigner as any).cancelOrder(BigInt(orderId))
-    return await tx.wait()
-  }, [signer, isCorrectNetwork, adapterContract])
-
-  const getUserOrders = useCallback(async (userAddress: string): Promise<number[]> => {
-    if (!adapterContract) throw new Error('Adapter contract not available')
-    
-    try {
-      const orderIds = await (adapterContract as any).getUserOrders(userAddress)
-      return orderIds.map((id: bigint) => Number(id))
-    } catch (error) {
-      console.error('❌ Error fetching user orders:', error)
-      return []
-    }
-  }, [adapterContract])
-
-  const checkOrderTrigger = useCallback(async (orderId: number): Promise<boolean> => {
-    if (!adapterContract) throw new Error('Adapter contract not available')
-    
-    try {
-      return await (adapterContract as any).checkOrderTrigger(BigInt(orderId))
-    } catch (error) {
-      console.error('❌ Error checking order trigger:', error)
-      return false
-    }
-  }, [adapterContract])
-
-  const requestResolution = useCallback(async (marketId: number) => {
-    if (!signer || !isCorrectNetwork || !resolutionContract) {
-      throw new Error('Wallet not connected or wrong network')
-    }
-    
-    const resolutionWithSigner = new ethers.Contract(
-      RESOLUTION_ADDRESS,
-      RESOLUTION_ABI,
-      signer
-    )
-    
-    const tx = await (resolutionWithSigner as any).requestResolution(BigInt(marketId))
-    return await tx.wait()
-  }, [signer, isCorrectNetwork, resolutionContract])
-
-  const resolveMarket = useCallback(async (marketId: number, outcome: boolean) => {
-    if (!signer || !isCorrectNetwork || !resolutionContract) {
-      throw new Error('Wallet not connected or wrong network')
-    }
-    
-    const resolutionWithSigner = new ethers.Contract(
-      RESOLUTION_ADDRESS,
-      RESOLUTION_ABI,
-      signer
-    )
-    
-    const tx = await (resolutionWithSigner as any).resolveMarket(BigInt(marketId), outcome)
-    return await tx.wait()
-  }, [signer, isCorrectNetwork, resolutionContract])
-
-  const disputeResolution = useCallback(async (marketId: number) => {
-    if (!signer || !isCorrectNetwork || !resolutionContract) {
-      throw new Error('Wallet not connected or wrong network')
-    }
-    
-    const resolutionWithSigner = new ethers.Contract(
-      RESOLUTION_ADDRESS,
-      RESOLUTION_ABI,
-      signer
-    )
-    
-    const tx = await (resolutionWithSigner as any).disputeResolution(BigInt(marketId))
-    return await tx.wait()
-  }, [signer, isCorrectNetwork, resolutionContract])
+  }, [walletClient, isConnected, marketContract, account, getSigner])
 
   const claimPDXRedemption = useCallback(async (marketId: number) => {
-    if (!signer || !isCorrectNetwork || !resolutionContract) {
-      throw new Error('Wallet not connected or wrong network')
+    if (!walletClient || !isConnected || !marketContract || !account) {
+      throw new Error('Wallet not connected')
     }
-    
-    const resolutionWithSigner = new ethers.Contract(
-      RESOLUTION_ADDRESS,
-      RESOLUTION_ABI,
-      signer
-    )
-    
-    const tx = await (resolutionWithSigner as any).claimPDXRedemption(BigInt(marketId))
+
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+    const tx = await (marketWithSigner as any).claimRedemption(BigInt(marketId))
     return await tx.wait()
-  }, [signer, isCorrectNetwork, resolutionContract])
+  }, [walletClient, isConnected, marketContract, account, getSigner])
+
+  const canRequestResolution = useCallback(async (marketId: number): Promise<boolean> => {
+    if (!helperContract) return false
+
+    try {
+      return await (helperContract as any).canRequestResolution(BigInt(marketId))
+    } catch (error) {
+      console.error('❌ Error checking resolution:', error)
+      return false
+    }
+  }, [helperContract])
+
+  // Helper function to check PDX balance
+  const checkPDXBalance = useCallback(async (requiredAmount: string): Promise<{ hasBalance: boolean, currentBalance: string, required: string }> => {
+    if (!account || !pdxTokenContract) {
+      return { hasBalance: false, currentBalance: '0', required: requiredAmount }
+    }
+
+    try {
+      const provider = getProvider()
+      if (!provider) throw new Error('Provider not available')
+
+      const pdxInstance = new ethers.Contract(PDX_TOKEN_ADDRESS, ERC20_ABI, provider)
+      const balance = await (pdxInstance as any).balanceOf(account)
+      const balanceFormatted = ethers.formatEther(balance)
+      const requiredWei = ethers.parseEther(requiredAmount)
+
+      return {
+        hasBalance: balance >= requiredWei,
+        currentBalance: balanceFormatted,
+        required: requiredAmount
+      }
+    } catch (error) {
+      console.error('❌ Error checking PDX balance:', error)
+      return { hasBalance: false, currentBalance: '0', required: requiredAmount }
+    }
+  }, [account, pdxTokenContract, getProvider])
 
   return {
     // Market management
     createMarketWithPDX,
     getPDXMarket,
+    getPDXMarkets,
+    getAllPDXMarkets,
     getUserPositions,
     getPDXMarketIds,
-    
-    // Trading functions (PDX ONLY)
+
+    // Trading
     buyYesWithPDX,
     buyNoWithPDX,
     sellYesForPDX,
     sellNoForPDX,
-    
-    // Estimation functions
+
+    // Estimation
     getBuyYesMultiplier,
     getBuyNoMultiplier,
     getCurrentMultipliers,
     getSellEstimatePDX,
-    
-    // Liquidity management
-    addPDXLiquidity,
-    removePDXLiquidity,
-    
-    // Order management
-    createStopLossOrder,
-    createTakeProfitOrder,
-    executeOrder,
-    cancelOrder,
-    getUserOrders,
-    checkOrderTrigger,
-    
-    // Resolution & Redemption
+
+    // Resolution
     requestResolution,
-    resolveMarket,
-    disputeResolution,
     claimPDXRedemption,
-    
-    // View functions
-    getUserInvestment,
-    getResolutionStatus,
     canRequestResolution,
-    canDispute,
-    getResolutionStatusString,
-    getDisputeDeadline,
-    getMarketOutcome,
-    
+
+    // View
+    getUserInvestment,
+    checkPDXBalance,
+
     // State
     isLoading,
-    adapterContract,
-    viewsContract,
-    resolutionContract,
+    marketContract,
+    helperContract,
     pdxTokenContract,
-    adapterAddress: DUAL_TOKEN_ADAPTER_ADDRESS,
-    viewsAddress: VIEWS_ADAPTER_ADDRESS,
-    resolutionAddress: RESOLUTION_ADDRESS,
+    marketAddress: PDX_PREDICTION_MARKET_ADDRESS,
+    helperAddress: PDX_HELPER_ADDRESS,
     pdxTokenAddress: PDX_TOKEN_ADDRESS,
     isContractReady,
-    
+
     // Constants
     MarketStatus,
     Outcome,
