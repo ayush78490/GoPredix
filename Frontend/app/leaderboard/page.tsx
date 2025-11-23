@@ -14,7 +14,7 @@ import LightRays from "@/components/LightRays"
 // Import ABIs
 import PREDICTION_MARKET_ARTIFACT from "@/contracts/abi.json"
 import HELPER_CONTRACT_ARTIFACT from "@/contracts/helperABI.json"
-import PDX_ADAPTER_ARTIFACT from "@/contracts/dualtokenadapterABI.json"  // ✅ Main PDX adapter ABI
+// import PDX_ADAPTER_ARTIFACT from "@/contracts/dualtokenadapterABI.json"  // ✅ Main PDX adapter ABI
 
 // Helper function to extract ABI
 const extractABI = (artifact: any): ethers.InterfaceAbi => {
@@ -24,7 +24,7 @@ const extractABI = (artifact: any): ethers.InterfaceAbi => {
 // Extract ABIs
 const PREDICTION_MARKET_ABI = extractABI(PREDICTION_MARKET_ARTIFACT)
 const HELPER_CONTRACT_ABI = extractABI(HELPER_CONTRACT_ARTIFACT)
-const PDX_ADAPTER_ABI = extractABI(PDX_ADAPTER_ARTIFACT)  // ✅ Use main adapter ABI
+// const PDX_ADAPTER_ABI = extractABI(PDX_ADAPTER_ARTIFACT)  // ✅ Use main adapter ABI
 
 // Contract addresses
 const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS
