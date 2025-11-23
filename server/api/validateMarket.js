@@ -4,6 +4,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const { ethers } = require('ethers');
 const cron = require('node-cron');
+const OpenAI = require('openai');
 
 // Use native fetch for Node.js 18+, otherwise use node-fetch
 let fetch;
@@ -27,7 +28,6 @@ const corsOptions = {
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
     'http://64.29.17.131'
-
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -49,174 +49,63 @@ app.options('*', cors(corsOptions));
 
 app.use(bodyParser.json());
 
-// Use both API keys
-const PPLX_API_KEYS = [
-  process.env.PERPLEXITY_API_KEY1,
-  process.env.PERPLEXITY_API_KEY
-].filter(key => key && key.trim() !== ''); // Remove empty or undefined keys
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPEN_AI_API_KEY,
+});
 
-if (PPLX_API_KEYS.length === 0) {
-  console.error('❌ No Perplexity API keys found in environment variables');
+if (!process.env.OPEN_AI_API_KEY) {
+  console.error('❌ No OpenAI API key found in environment variables');
   process.exit(1);
 }
 
-console.log(`🔑 Loaded ${PPLX_API_KEYS.length} API keys`);
+console.log('🔑 OpenAI client initialized');
 
 // API Health state tracking
 let apiHealth = {
   lastChecked: null,
   isHealthy: true,
-  lastError: null,
-  currentKeyIndex: 0,
-  keyStatus: PPLX_API_KEYS.map((_, index) => ({ index, healthy: true, lastUsed: null, errors: 0 }))
+  lastError: null
 };
-
-// ==================== API KEY MANAGEMENT ====================
-
-function getCurrentAPIKey() {
-  return PPLX_API_KEYS[apiHealth.currentKeyIndex];
-}
-
-function rotateAPIKey() {
-  const oldIndex = apiHealth.currentKeyIndex;
-  apiHealth.currentKeyIndex = (apiHealth.currentKeyIndex + 1) % PPLX_API_KEYS.length;
-  console.log(`🔄 Rotated API key from index ${oldIndex} to ${apiHealth.currentKeyIndex}`);
-  
-  // Mark the old key as potentially unhealthy
-  if (PPLX_API_KEYS.length > 1) {
-    apiHealth.keyStatus[oldIndex].healthy = false;
-    apiHealth.keyStatus[oldIndex].errors++;
-  }
-  
-  return getCurrentAPIKey();
-}
-
-function markCurrentKeyHealthy() {
-  apiHealth.keyStatus[apiHealth.currentKeyIndex].healthy = true;
-  apiHealth.keyStatus[apiHealth.currentKeyIndex].lastUsed = new Date().toISOString();
-  apiHealth.keyStatus[apiHealth.currentKeyIndex].errors = 0;
-}
-
-function markCurrentKeyUnhealthy(error) {
-  apiHealth.keyStatus[apiHealth.currentKeyIndex].healthy = false;
-  apiHealth.keyStatus[apiHealth.currentKeyIndex].lastUsed = new Date().toISOString();
-  apiHealth.keyStatus[apiHealth.currentKeyIndex].errors++;
-  apiHealth.lastError = error;
-}
-
-function getHealthyAPIKey() {
-  // If current key is healthy, use it
-  if (apiHealth.keyStatus[apiHealth.currentKeyIndex].healthy) {
-    return getCurrentAPIKey();
-  }
-  
-  // Otherwise, find a healthy key
-  const healthyKey = apiHealth.keyStatus.find(status => status.healthy);
-  if (healthyKey) {
-    apiHealth.currentKeyIndex = healthyKey.index;
-    return getCurrentAPIKey();
-  }
-  
-  // If no healthy keys, rotate to next one
-  return rotateAPIKey();
-}
 
 // ==================== API HEALTH CHECK ====================
 
 async function checkAPIHealth() {
   try {
-    console.log('🏥 Checking API health with model verification...');
+    console.log('🏥 Checking OpenAI API health...');
 
-    // FIXED: Use current valid Perplexity API models (2025)
-    const possibleModels = [
-      'sonar',              // Lightweight, fast search model
-      'sonar-pro',          // Advanced search with more citations
-      'sonar-reasoning',    // Reasoning with search capabilities
-      'sonar-reasoning-pro' // Advanced reasoning (DeepSeek R1 based)
-    ];
-
-    const currentKey = getHealthyAPIKey();
-    
-    for (const model of possibleModels) {
-      console.log(`🔍 Trying model: ${model} with key index: ${apiHealth.currentKeyIndex}`);
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-        const response = await fetch('https://api.perplexity.ai/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${currentKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [
-              { 
-                role: 'user', 
-                content: 'Respond with only: OK' 
-              }
-            ],
-            max_tokens: 5,
-            temperature: 0
-          }),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`✅ SUCCESS with model: ${model} and key index: ${apiHealth.currentKeyIndex}`);
-          
-          markCurrentKeyHealthy();
-          apiHealth.isHealthy = true;
-          apiHealth.lastChecked = new Date().toISOString();
-          
-          return {
-            healthy: true,
-            workingModel: model,
-            keyIndex: apiHealth.currentKeyIndex,
-            response: data
-          };
-        } else {
-          const errorText = await response.text();
-          console.log(`❌ Model ${model} failed with key ${apiHealth.currentKeyIndex}: ${response.status} - ${errorText}`);
-          
-          if (response.status === 401 || response.status === 429) {
-            markCurrentKeyUnhealthy(`API key error: ${response.status}`);
-            // Try with next key
-            if (PPLX_API_KEYS.length > 1) {
-              const nextKey = rotateAPIKey();
-              console.log(`🔄 Retrying with next API key: index ${apiHealth.currentKeyIndex}`);
-              continue; // Continue with next model but with new key
-            }
-          }
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        { 
+          role: "user", 
+          content: "Respond with only: OK" 
         }
-      } catch (error) {
-        console.log(`❌ Model ${model} error with key ${apiHealth.currentKeyIndex}:`, error.message);
-      }
-    }
+      ],
+      max_tokens: 5,
+      temperature: 0
+    });
 
-    // If all models failed, mark current key as unhealthy and try next one
-    markCurrentKeyUnhealthy('All model attempts failed');
-    if (PPLX_API_KEYS.length > 1) {
-      console.log('🔄 All models failed with current key, rotating to next key...');
-      rotateAPIKey();
-    }
+    console.log('✅ OpenAI API health check passed');
     
-    throw new Error('All model attempts failed with all keys');
+    apiHealth.isHealthy = true;
+    apiHealth.lastChecked = new Date().toISOString();
+    apiHealth.lastError = null;
+    
+    return {
+      healthy: true,
+      response: response
+    };
     
   } catch (error) {
-    console.error('💥 All health checks failed:', error.message);
+    console.error('❌ OpenAI API health check failed:', error.message);
+    
     apiHealth.isHealthy = false;
     apiHealth.lastChecked = new Date().toISOString();
+    apiHealth.lastError = error.message;
     
     return {
       healthy: false,
-      workingModel: null,
-      keyIndex: apiHealth.currentKeyIndex,
       error: error.message
     };
   }
@@ -224,97 +113,59 @@ async function checkAPIHealth() {
 
 // ==================== ENHANCED API CALL FUNCTION ====================
 
-async function makePerplexityAPICall(messages, model = 'sonar-pro', maxTokens = 500, temperature = 0.1) {
-  // FIXED: Changed default model to 'sonar-pro' (was 'llama-3-sonar-large-32k-online')
-  const maxRetries = PPLX_API_KEYS.length * 2; // Allow retries with different keys
+async function makeOpenAICall(messages, model = "gpt-4", maxTokens = 500, temperature = 0.1) {
+  const maxRetries = 3;
   let lastError;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const currentKey = getHealthyAPIKey();
-    console.log(`📤 API Call Attempt ${attempt + 1} with key index: ${apiHealth.currentKeyIndex}`);
+    console.log(`📤 OpenAI API Call Attempt ${attempt + 1} with model: ${model}`);
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-      const response = await fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${currentKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: messages,
-          max_tokens: maxTokens,
-          temperature: temperature
-        }),
-        signal: controller.signal
+      const response = await openai.chat.completions.create({
+        model: model,
+        messages: messages,
+        max_tokens: maxTokens,
+        temperature: temperature,
+        response_format: { type: "json_object" }
       });
 
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`✅ API call successful with key index: ${apiHealth.currentKeyIndex}`);
-        
-        markCurrentKeyHealthy();
-        apiHealth.isHealthy = true;
-        apiHealth.lastChecked = new Date().toISOString();
-        
-        return data;
-      } else {
-        const errorText = await response.text();
-        console.error(`❌ API call failed with key ${apiHealth.currentKeyIndex}: ${response.status}`, errorText);
-        
-        lastError = new Error(`Perplexity API returned ${response.status}: ${errorText}`);
-        
-        if (response.status === 401 || response.status === 429) {
-          markCurrentKeyUnhealthy(`API key error: ${response.status}`);
-          if (PPLX_API_KEYS.length > 1) {
-            console.log(`🔄 Rotating API key due to error ${response.status}`);
-            rotateAPIKey();
-            continue; // Retry with next key
-          }
-        }
-        
-        // Update API health status
-        apiHealth.isHealthy = false;
-        apiHealth.lastChecked = new Date().toISOString();
-        apiHealth.lastError = lastError.message;
-        
-        throw lastError;
-      }
+      console.log(`✅ OpenAI API call successful`);
+      
+      apiHealth.isHealthy = true;
+      apiHealth.lastChecked = new Date().toISOString();
+      
+      return response;
     } catch (error) {
-      console.error(`❌ API call error with key ${apiHealth.currentKeyIndex}:`, error.message);
+      console.error(`❌ OpenAI API call error on attempt ${attempt + 1}:`, error.message);
       lastError = error;
       
-      markCurrentKeyUnhealthy(error.message);
-      
-      if (PPLX_API_KEYS.length > 1 && attempt < maxRetries - 1) {
-        console.log('🔄 Rotating API key and retrying...');
-        rotateAPIKey();
+      // If it's a rate limit error, wait before retrying
+      if (error.status === 429 && attempt < maxRetries - 1) {
+        const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff
+        console.log(`⏳ Rate limited, waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
         continue;
       }
+      
+      apiHealth.isHealthy = false;
+      apiHealth.lastChecked = new Date().toISOString();
+      apiHealth.lastError = error.message;
+      
+      throw error;
     }
   }
 
-  // If we get here, all retries failed
-  apiHealth.isHealthy = false;
-  apiHealth.lastChecked = new Date().toISOString();
-  apiHealth.lastError = lastError?.message || 'All API calls failed';
-  
-  throw lastError || new Error('All API call attempts failed');
+  throw lastError || new Error('All OpenAI API call attempts failed');
 }
 
-// ==================== ENHANCED MARKET VALIDATION ====================
+// ==================== ENHANCED MARKET VALIDATION WITH DATE CHECKING ====================
 
-async function validateWithPerplexity({ question, endTime, initialYes, initialNo }) {
+async function validateWithOpenAI({ question, endTime, initialYes, initialNo }) {
   // Check API health first
   const healthCheck = await checkAPIHealth();
   
   if (!healthCheck.healthy) {
-    console.log('🚫 API is unhealthy - rejecting market validation');
+    console.log('🚫 OpenAI API is unhealthy - rejecting market validation');
     return {
       valid: false,
       reason: 'AI validation service is currently unavailable. Please try again later.',
@@ -325,24 +176,41 @@ async function validateWithPerplexity({ question, endTime, initialYes, initialNo
   }
 
   try {
-    console.log('🤖 Starting AI validation for question:', question);
+    console.log('🤖 Starting OpenAI validation for question:', question);
     
-    const systemPrompt = `You are a prediction market validator. Analyze if a question is suitable for a prediction market.
+    const currentDate = new Date();
+    const marketEndDate = new Date(endTime * 1000);
+    
+    const systemPrompt = `You are a prediction market validator. Analyze if a question is suitable for a prediction market with STRICT date validation.
 
-CRITERIA FOR VALID QUESTIONS:
+CRITICAL DATE VALIDATION RULES:
+1. The question MUST be about a future event relative to the market end date
+2. If the question mentions a specific date, that date MUST be BEFORE the market end date
+3. The event being predicted MUST occur or be verifiable BEFORE the market ends
+4. Reject questions where the resolution date is after the market end date
+
+ADDITIONAL CRITERIA FOR VALID QUESTIONS:
 ✅ MUST be objectively verifiable with clear YES/NO outcome
 ✅ MUST have specific resolution criteria
 ✅ MUST be about future events
 ✅ MUST be based on publicly available information
 ✅ MUST be unambiguous and specific
+✅ MUST have a resolution that can be determined BEFORE market end
 
 CRITERIA FOR INVALID QUESTIONS:
+❌ Event date occurs AFTER market end date
 ❌ Subjective opinions ("Is this good?")
 ❌ Already resolved events
 ❌ Personal/private matters
 ❌ Impossible to verify
 ❌ Multiple questions combined
 ❌ Vague or ambiguous phrasing
+❌ Events that cannot be resolved by market end time
+
+DATE ANALYSIS:
+- Extract any dates mentioned in the question
+- Compare them with the market end date
+- If no specific date is mentioned, ensure the event type suggests it will be resolved by market end
 
 CATEGORIES:
 - Cryptocurrency & Blockchain: Bitcoin, Ethereum, crypto regulations, blockchain tech
@@ -355,74 +223,95 @@ CATEGORIES:
 - World Events: Natural disasters, international conflicts, global summits
 - Other: Everything else
 
-Respond with JSON only: {valid: boolean, reason: string, category: string}`;
+Respond with JSON only: {
+  "valid": boolean,
+  "reason": string,
+  "category": string,
+  "dateAnalysis": {
+    "datesFound": string[],
+    "dateConflict": boolean,
+    "dateConflictReason": string
+  }
+}`;
 
     const userPrompt = `Analyze this prediction market question: "${question}"
 
-Resolution time: ${new Date(endTime * 1000).toISOString()}
+MARKET TIMING INFORMATION:
+- Market creation date: ${currentDate.toISOString()}
+- Market end date: ${marketEndDate.toISOString()}
+- Days until market ends: ${Math.ceil((marketEndDate - currentDate) / (1000 * 60 * 60 * 24))} days
+
 Initial liquidity: YES ${initialYes} BNB, NO ${initialNo} BNB
 
-Is this a valid prediction market question? Which category does it belong to?`;
+CRITICAL: Check if any dates mentioned in the question occur AFTER the market end date. If so, reject the question.
 
-    console.log('📤 Calling Perplexity API...');
+Is this a valid prediction market question? Which category does it belong to? Provide detailed date analysis.`;
+
+    console.log('📤 Calling OpenAI API...');
     
-    // FIXED: Changed model to 'sonar-pro'
-    const data = await makePerplexityAPICall([
+    const data = await makeOpenAICall([
       { 
-        role: 'system', 
+        role: "system", 
         content: systemPrompt 
       },
       { 
-        role: 'user', 
+        role: "user", 
         content: userPrompt 
       }
-    ], 'sonar-pro', 500, 0.1);
+    ], "gpt-4", 800, 0.1);
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error('Invalid response format from Perplexity API');
+      throw new Error('Invalid response format from OpenAI API');
     }
 
     const aiText = data.choices[0].message.content;
-    console.log('🤖 AI analysis text:', aiText);
+    console.log('🤖 OpenAI analysis text:', aiText);
 
-    // Try to extract JSON from the response
+    // Parse the JSON response
     try {
-      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const result = JSON.parse(jsonMatch[0]);
-        console.log('✅ Parsed AI validation result:', result);
-        
-        // Validate and map category
-        let category = result.category || 'OTHER';
-        category = category.toUpperCase().replace(/[^A-Z]/g, '');
-        
-        if (!CATEGORIES[category]) {
-          const matchedCategory = Object.keys(CATEGORIES).find(cat => 
-            result.category?.toLowerCase().includes(cat.toLowerCase()) ||
-            cat.toLowerCase().includes(result.category?.toLowerCase())
-          );
-          category = matchedCategory || 'OTHER';
-        }
-        
+      const result = JSON.parse(aiText);
+      console.log('✅ Parsed OpenAI validation result:', result);
+      
+      // Validate and map category
+      let category = result.category || 'OTHER';
+      category = category.toUpperCase().replace(/[^A-Z]/g, '');
+      
+      if (!CATEGORIES[category]) {
+        const matchedCategory = Object.keys(CATEGORIES).find(cat => 
+          result.category?.toLowerCase().includes(cat.toLowerCase()) ||
+          cat.toLowerCase().includes(result.category?.toLowerCase())
+        );
+        category = matchedCategory || 'OTHER';
+      }
+      
+      // Check for date conflicts in the AI response
+      const dateConflict = result.dateAnalysis?.dateConflict || false;
+      if (dateConflict) {
         return {
-          valid: Boolean(result.valid),
-          reason: result.reason || 'No reason provided by AI',
+          valid: false,
+          reason: result.dateAnalysis?.dateConflictReason || 'The event date conflicts with market end date',
           category: category,
+          dateConflict: true,
+          dateAnalysis: result.dateAnalysis,
           apiError: false
         };
-      } else {
-        console.log('⚠️ No JSON found in response, analyzing text...');
-        return analyzeTextResponse(aiText, question);
       }
+      
+      return {
+        valid: Boolean(result.valid),
+        reason: result.reason || 'No reason provided by AI',
+        category: category,
+        dateAnalysis: result.dateAnalysis,
+        apiError: false
+      };
     } catch (parseError) {
       console.error('❌ JSON parse error:', parseError);
-      return analyzeTextResponse(aiText, question);
+      return analyzeTextResponseWithDate(aiText, question, endTime);
     }
 
   } catch (error) {
-    console.error('❌ Error in validateWithPerplexity:', error);
+    console.error('❌ Error in validateWithOpenAI:', error);
     
-    // Return API error response instead of falling back to basic validation
     return {
       valid: false,
       reason: 'AI validation service is temporarily unavailable. Please try again in a few moments.',
@@ -433,9 +322,45 @@ Is this a valid prediction market question? Which category does it belong to?`;
   }
 }
 
-function analyzeTextResponse(aiText, question) {
+function analyzeTextResponseWithDate(aiText, question, endTime) {
   const lowerText = aiText.toLowerCase();
   const lowerQuestion = question.toLowerCase();
+  
+  // Enhanced date extraction from question
+  const dateRegex = /(\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4})|(\d{1,2}\/\d{1,2}\/\d{4})|(\d{4}-\d{1,2}-\d{1,2})|(\b(?:next|this)\s+(?:week|month|year)|tomorrow|today)/gi;
+  const datesFound = question.match(dateRegex) || [];
+  
+  const marketEndDate = new Date(endTime * 1000);
+  let dateConflict = false;
+  let dateConflictReason = '';
+  
+  // Simple date conflict detection
+  datesFound.forEach(dateStr => {
+    try {
+      const eventDate = new Date(dateStr);
+      if (eventDate > marketEndDate) {
+        dateConflict = true;
+        dateConflictReason = `The event date (${eventDate.toDateString()}) is after market end date (${marketEndDate.toDateString()})`;
+      }
+    } catch (e) {
+      // Ignore date parsing errors
+    }
+  });
+  
+  if (dateConflict) {
+    return {
+      valid: false,
+      reason: dateConflictReason,
+      category: determineCategory(question),
+      dateConflict: true,
+      dateAnalysis: {
+        datesFound: datesFound,
+        dateConflict: true,
+        dateConflictReason: dateConflictReason
+      },
+      apiError: false
+    };
+  }
   
   const positiveIndicators = [
     'valid', 'appropriate', 'suitable', 'good question', 'clear', 
@@ -444,7 +369,7 @@ function analyzeTextResponse(aiText, question) {
   
   const negativeIndicators = [
     'invalid', 'not suitable', 'inappropriate', 'ambiguous', 
-    'subjective', 'unclear', 'cannot be verified', 'vague'
+    'subjective', 'unclear', 'cannot be verified', 'vague', 'date conflict'
   ];
   
   const positiveCount = positiveIndicators.filter(indicator => 
@@ -457,25 +382,28 @@ function analyzeTextResponse(aiText, question) {
   
   const category = determineCategory(question);
   
-  if (positiveCount > negativeCount) {
+  if (positiveCount > negativeCount && !dateConflict) {
     return {
       valid: true,
       reason: 'AI analysis indicates this is a valid question',
       category: category,
-      apiError: false
-    };
-  } else if (negativeCount > positiveCount) {
-    return {
-      valid: false,
-      reason: 'AI analysis indicates issues with this question',
-      category: category,
+      dateAnalysis: {
+        datesFound: datesFound,
+        dateConflict: false,
+        dateConflictReason: 'No date conflicts detected'
+      },
       apiError: false
     };
   } else {
     return {
       valid: false,
-      reason: 'Unable to determine validity from AI analysis',
+      reason: 'AI analysis indicates issues with this question',
       category: category,
+      dateAnalysis: {
+        datesFound: datesFound,
+        dateConflict: dateConflict,
+        dateConflictReason: dateConflict ? dateConflictReason : 'Other validation issues'
+      },
       apiError: false
     };
   }
@@ -506,12 +434,12 @@ function determineCategory(question) {
 
 // ==================== MARKET RESOLUTION ====================
 
-async function resolveWithPerplexity({ question, endTime, marketId }) {
+async function resolveWithOpenAI({ question, endTime, marketId }) {
   // Check API health first
   const healthCheck = await checkAPIHealth();
   
   if (!healthCheck.healthy) {
-    console.log('🚫 API is unhealthy - cannot resolve market');
+    console.log('🚫 OpenAI API is unhealthy - cannot resolve market');
     return {
       success: false,
       outcome: null,
@@ -524,7 +452,7 @@ async function resolveWithPerplexity({ question, endTime, marketId }) {
   }
 
   try {
-    console.log('🤖 Starting AI resolution for question:', question);
+    console.log('🤖 Starting OpenAI resolution for question:', question);
     
     const systemPrompt = `You are a prediction market resolver. Determine the correct YES/NO outcome for a prediction market question based on real-world facts.
 
@@ -551,53 +479,46 @@ Current time: ${new Date().toISOString()}
 
 What is the verifiable outcome? Answer YES (true), NO (false), or NULL if outcome cannot be determined yet.`;
 
-    console.log('📤 Calling Perplexity API for resolution...');
+    console.log('📤 Calling OpenAI API for resolution...');
     
-    // FIXED: Changed model to 'sonar-pro'
-    const data = await makePerplexityAPICall([
+    const data = await makeOpenAICall([
       { 
-        role: 'system', 
+        role: "system", 
         content: systemPrompt 
       },
       { 
-        role: 'user', 
+        role: "user", 
         content: userPrompt 
       }
-    ], 'sonar-pro', 1000, 0.1);
+    ], "gpt-4", 1000, 0.1);
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error('Invalid response format from Perplexity API');
+      throw new Error('Invalid response format from OpenAI API');
     }
 
     const aiText = data.choices[0].message.content;
-    console.log('🤖 AI resolution text:', aiText);
+    console.log('🤖 OpenAI resolution text:', aiText);
 
     try {
-      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const result = JSON.parse(jsonMatch[0]);
-        console.log('✅ Parsed AI resolution result:', result);
-        
-        return {
-          success: true,
-          outcome: result.outcome,
-          reason: result.reason || 'No reason provided by AI',
-          confidence: result.confidence || 0,
-          sources: result.sources || ['AI analysis'],
-          resolvedAt: result.resolvedAt || new Date().toISOString(),
-          apiError: false
-        };
-      } else {
-        console.log('⚠️ No JSON found in resolution response, analyzing text...');
-        return analyzeResolutionText(aiText, question);
-      }
+      const result = JSON.parse(aiText);
+      console.log('✅ Parsed OpenAI resolution result:', result);
+      
+      return {
+        success: true,
+        outcome: result.outcome,
+        reason: result.reason || 'No reason provided by AI',
+        confidence: result.confidence || 0,
+        sources: result.sources || ['AI analysis'],
+        resolvedAt: result.resolvedAt || new Date().toISOString(),
+        apiError: false
+      };
     } catch (parseError) {
       console.error('❌ JSON parse error in resolution:', parseError);
       return analyzeResolutionText(aiText, question);
     }
 
   } catch (error) {
-    console.error('❌ Error in resolveWithPerplexity:', error);
+    console.error('❌ Error in resolveWithOpenAI:', error);
     
     return {
       success: false,
@@ -918,9 +839,9 @@ app.post('/api/validate-market', async (req, res) => {
       });
     }
     
-    console.log('✅ Parameter validation passed, calling AI...');
+    console.log('✅ Parameter validation passed, calling OpenAI...');
     
-    const validation = await validateWithPerplexity({
+    const validation = await validateWithOpenAI({
       question: question.trim(),
       endTime: endTimeNum,
       initialYes: initialYes.toString(),
@@ -970,9 +891,9 @@ app.post('/api/resolve-market', async (req, res) => {
       });
     }
     
-    console.log('✅ Resolution parameters validated, calling AI...');
+    console.log('✅ Resolution parameters validated, calling OpenAI...');
     
-    const resolution = await resolveWithPerplexity({
+    const resolution = await resolveWithOpenAI({
       question: question.trim(),
       endTime: parseInt(endTime),
       marketId: marketId || 'unknown'
@@ -998,13 +919,10 @@ app.post('/api/resolve-market', async (req, res) => {
 // API health status endpoint
 app.get('/api/health-status', (req, res) => {
   res.json({
-    api: 'Perplexity AI',
+    api: 'OpenAI',
     status: apiHealth.isHealthy ? 'HEALTHY' : 'UNHEALTHY',
     lastChecked: apiHealth.lastChecked,
     lastError: apiHealth.lastError,
-    currentKeyIndex: apiHealth.currentKeyIndex,
-    totalKeys: PPLX_API_KEYS.length,
-    keyStatus: apiHealth.keyStatus,
     timestamp: new Date().toISOString()
   });
 });
@@ -1015,11 +933,8 @@ app.post('/api/health-check', async (req, res) => {
   res.json({
     healthy: healthResult.healthy,
     status: healthResult.healthy ? 'HEALTHY' : 'UNHEALTHY',
-    workingModel: healthResult.workingModel,
-    keyIndex: healthResult.keyIndex,
     lastChecked: apiHealth.lastChecked,
-    lastError: apiHealth.lastError,
-    keyStatus: apiHealth.keyStatus
+    lastError: apiHealth.lastError
   });
 });
 
@@ -1060,12 +975,10 @@ app.get('/health', (req, res) => {
       validation: 'active',
       resolution: 'active',
       blockchain: resolutionService ? 'connected' : 'disconnected',
-      perplexityAPI: apiHealth.isHealthy ? 'healthy' : 'unhealthy'
+      openaiAPI: apiHealth.isHealthy ? 'healthy' : 'unhealthy'
     },
     apiHealth: {
       status: apiHealth.isHealthy ? 'HEALTHY' : 'UNHEALTHY',
-      currentKeyIndex: apiHealth.currentKeyIndex,
-      totalKeys: PPLX_API_KEYS.length,
       lastChecked: apiHealth.lastChecked
     }
   });
@@ -1079,7 +992,7 @@ let resolutionService;
 const initializeServer = async () => {
   try {
     // Perform initial API health check
-    console.log('🔍 Performing initial API health check...');
+    console.log('🔍 Performing initial OpenAI API health check...');
     await checkAPIHealth();
 
     // Initialize blockchain resolution service if credentials are provided
@@ -1123,9 +1036,8 @@ const initializeServer = async () => {
       console.log(`📋 Health check: http://localhost:${PORT}/health`);
       console.log(`🔍 API Status: http://localhost:${PORT}/api/health-status`);
       console.log(`🤖 Services: Validation ✅ | Resolution ✅ | Categories ✅`);
-      console.log(`🔑 Available API Keys: ${PPLX_API_KEYS.length}`);
+      console.log(`🔑 AI Provider: OpenAI GPT-4`);
       console.log(`🔧 API Health: ${apiHealth.isHealthy ? 'HEALTHY ✅' : 'UNHEALTHY ❌'}`);
-      console.log(`🔑 Current Key Index: ${apiHealth.currentKeyIndex}`);
       if (resolutionService) {
         console.log(`🔗 Blockchain: Monitoring ✅ | Auto-resolution ✅`);
       }
