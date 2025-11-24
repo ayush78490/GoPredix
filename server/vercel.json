@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "validationMarket.js",
+      "src": "validateMarket.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/validationMarket.js",
+      "dest": "/validateMarket.js",
       "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
     }
   ]
