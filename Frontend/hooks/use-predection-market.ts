@@ -109,7 +109,7 @@ export enum OrderType {
 async function validateMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
     console.log('🔍 Attempting AI validation...')
-    const res = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
+    const res = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),

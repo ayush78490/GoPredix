@@ -76,7 +76,7 @@ export interface TradingInfo {
 // PDX Market Creation Validation
 async function validatePDXMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
-    const res = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
+    const res = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
