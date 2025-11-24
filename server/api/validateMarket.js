@@ -32,10 +32,7 @@ async function makeOpenAICall(messages, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await openai.chat.completions.create({
-        model: "GPT-4",
         model: "gpt-3.5-turbo",
-        model: "GPT-4-turbo-preview",
-        model: "GPT-5",
         messages: messages,
         max_tokens: 1000,
         temperature: 0.1,
