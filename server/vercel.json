@@ -9,16 +9,31 @@
   "routes": [
     { 
       "src": "/api/validate-market", 
-      "dest": "/api/validateMarket.js",
-      "methods": ["GET", "POST", "OPTIONS"]
+      "dest": "/api/validateMarket.js"
+    },
+    { 
+      "src": "/api/resolve-market", 
+      "dest": "/api/validateMarket.js"
     },
     { 
       "src": "/api/health", 
-      "dest": "/api/validateMarket.js" 
+      "dest": "/api/validateMarket.js"
+    },
+    { 
+      "src": "/api/health-status", 
+      "dest": "/api/validateMarket.js"
+    },
+    { 
+      "src": "/api/health-check", 
+      "dest": "/api/validateMarket.js"
+    },
+    { 
+      "src": "/api/categories", 
+      "dest": "/api/validateMarket.js"
     },
     { 
       "src": "/api/test-cors", 
-      "dest": "/api/validateMarket.js" 
+      "dest": "/api/validateMarket.js"
     }
   ]
 }
