@@ -123,7 +123,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     setValidationResult(null)
 
     try {
-      const response = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
+      const response = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

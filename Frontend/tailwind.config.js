@@ -18,6 +18,9 @@ module.exports = {
         accent: "hsl(var(--accent))",
         border: "hsl(var(--border))",
       },
+      animation: {
+      'spin-slow': 'spin 5s linear infinite',
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
