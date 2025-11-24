@@ -4,7 +4,7 @@
   "description": "AI-powered prediction market validation and resolution server",
   "main": "api/validateMarket.js",
   "scripts": {
-    "start": "node testServer.js",
+    "start": "node validateMarket.js",
     "dev": "node api/validateMarket.js"
   },
   "dependencies": {
