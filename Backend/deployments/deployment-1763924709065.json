@@ -1,0 +1,36 @@
+{
+  "timestamp": "2025-11-23T19:05:09.065Z",
+  "network": "BSC Testnet",
+  "deployer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "contracts": {
+    "bnbMarket": {
+      "address": "0x12FD6C9B618949d940806B0E59e3c65507eC37E8",
+      "file": "bazar.sol",
+      "name": "PredictionMarketWithMultipliers"
+    },
+    "bnbHelper": {
+      "address": "0xC940106a30742F21daE111d41e8F41d482feda15",
+      "file": "helpercontract.sol",
+      "name": "PredictionMarketHelper"
+    },
+    "pdxMarket": {
+      "address": "0x7d46139e1513571f19c9B87cE9A01D21cA9ef665",
+      "file": "pdxbazar.sol",
+      "name": "PDXPredictionMarket"
+    },
+    "pdxHelper": {
+      "address": "0x0CCaDd82A453075B8C0193809cC3693ef58E46D1",
+      "file": "pdxhelpercontract.sol",
+      "name": "PDXPredictionMarketHelper"
+    },
+    "pdxToken": {
+      "address": "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8",
+      "name": "PDX Token (existing)"
+    }
+  },
+  "configuration": {
+    "feeBps": 200,
+    "lpFeeBps": 5000,
+    "creatorFeeBps": 5000
+  }
+}

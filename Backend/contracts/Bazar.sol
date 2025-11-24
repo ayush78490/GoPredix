@@ -306,16 +306,16 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
             require(outAmount <= m.yesPool && outAmount + amountIn >= minOut);
             totalOut = outAmount + amountIn;
 
-            m.noPool += amountAfterFee + lpFee;
-            m.yesPool -= outAmount;
+            m.yesPool += amountAfterFee + lpFee;
+            m.noPool -= outAmount;
             m.yesToken.mint(beneficiary, totalOut);
         } else {
             outAmount = _getAmountOut(amountAfterFee, m.yesPool, m.noPool);
             require(outAmount <= m.noPool && outAmount + amountIn >= minOut);
             totalOut = outAmount + amountIn;
 
-            m.yesPool += amountAfterFee + lpFee;
-            m.noPool -= outAmount;
+            m.noPool += amountAfterFee + lpFee;
+            m.yesPool -= outAmount;
             m.noToken.mint(beneficiary, totalOut);
         }
         m.totalBacking += amountIn;
@@ -356,19 +356,17 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
 
         require(outAmount >= minBNBOut && address(this).balance >= outAmount);
 
-        token.burn(msg.sender, tokenAmount);
+    token.burn(msg.sender, tokenAmount);
 
-        if (isYes) {
-            m.yesPool += tokenAfterFee + lpFee;
-            m.noPool -= outAmount;
-        } else {
-            m.noPool += tokenAfterFee + lpFee;
-            m.yesPool -= outAmount;
-        }
+    if (isYes) {
+        m.noPool += tokenAfterFee + lpFee;
+        m.yesPool -= outAmount;
+    } else {
+        m.yesPool += tokenAfterFee + lpFee;
+        m.noPool -= outAmount;
+    }
 
-        m.totalBacking -= outAmount;
-
-        _transferBNB(msg.sender, outAmount);
+    m.totalBacking -= outAmount;        _transferBNB(msg.sender, outAmount);
 
         emit SellForBNB(id, msg.sender, isYes, tokenAmount, outAmount);
     }
@@ -597,16 +595,34 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
         _transferBNB(owner, fees);
     }
 
-    function getCurrentMultipliers(uint256 id) external view override marketExists(id) returns (uint256 yesMultiplier, uint256 noMultiplier, uint256 yesPrice, uint256 noPrice) {
+    /// @notice Returns current odds and prices
+    ///         - Multiplier goes DOWN when that side is heavily bought (exactly what you want)
+    ///         - 1_000_000 = 1.00x, 3_500_000 = 3.50x, etc.
+    function getCurrentMultipliers(uint256 id) external view override marketExists(id) returns (
+        uint256 yesMultiplier,   // payout multiplier if YES wins
+        uint256 noMultiplier,    // payout multiplier if NO wins
+        uint256 yesPrice,        // 0–10000 (probability × 100)
+        uint256 noPrice
+    ) {
         Market storage m = markets[id];
         uint256 totalPool = m.yesPool + m.noPool;
-        if (totalPool == 0) return (10000, 10000, 5000, 5000);
+
+        if (totalPool == 0) {
+            return (2_000_000, 2_000_000, 5000, 5000); // 2.00× both sides before any liquidity
+        }
 
         yesPrice = (m.yesPool * 10000) / totalPool;
-        noPrice = (m.noPool * 10000) / totalPool;
+        noPrice  = 10000 - yesPrice; // always adds up perfectly
 
-        yesMultiplier = yesPrice > 0 ? (1e6) / yesPrice : type(uint256).max;
-        noMultiplier = noPrice > 0 ? (1e6) / noPrice : type(uint256).max;
+        // CORRECT BEHAVIOUR:
+        // More people buy YES → noPrice becomes smaller → yesMultiplier becomes smaller (worse odds)
+        // More people buy NO  → yesPrice becomes smaller → noMultiplier becomes smaller
+        yesMultiplier = (10000 * 1_000_000) / noPrice;
+        noMultiplier  = (10000 * 1_000_000) / yesPrice;
+
+        // Your original 999× cap — kept exactly as requested
+        if (yesMultiplier > 999_000_000) yesMultiplier = 999_000_000;
+        if (noMultiplier  > 999_000_000) noMultiplier  = 999_000_000;
     }
 
     function _updateUserInvestment(uint256 marketId, address user, uint256 amount) internal {

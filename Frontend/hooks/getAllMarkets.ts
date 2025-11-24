@@ -3,7 +3,8 @@ import { usePredictionMarketBNB } from './use-predection-market'
 import { usePredictionMarketPDX } from './use-prediction-market-pdx'
 
 export interface UnifiedMarket {
-  id: string
+  id: string           // Composite ID like "BNB-0" or "PDX-0"
+  numericId: number    // Original numeric ID for contract calls
   creator: string
   question: string
   category: string
@@ -55,7 +56,8 @@ export function useAllMarkets() {
         if (market) {
           return {
             ...market,
-            id: marketId.toString(),
+            id: `BNB-${marketId}`,
+            numericId: marketId,
             yesPrice: market.yesPrice ?? 50,
             noPrice: market.noPrice ?? 50,
             yesMultiplier: market.yesMultiplier ?? 2,
@@ -79,7 +81,8 @@ export function useAllMarkets() {
         const market = await pdxHook.getPDXMarket(marketId)
         if (market) {
           return {
-            id: marketId.toString(),
+            id: `PDX-${marketId}`,
+            numericId: marketId,
             creator: market.creator,
             question: market.question,
             category: market.category,
