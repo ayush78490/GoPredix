@@ -217,7 +217,11 @@ export default function MarketCard({
   return (
     <div className="relative">
       <Link
-        href={shouldDisableTrading && isMarketActive ? "#" : `/markets/${market.slug || market.id}`}
+        href={
+          shouldDisableTrading && isMarketActive 
+            ? "#" 
+            : `/markets/${market.slug || `market-${market.id}`}`
+        }
         onClick={handleClick}
         className="block"
       >
