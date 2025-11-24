@@ -299,16 +299,30 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
         totalFee = platformFee;
     }
 
-    function getCurrentMultipliers(uint256 id) external view override marketExists(id) returns (uint256 yesMultiplier, uint256 noMultiplier, uint256 yesPrice, uint256 noPrice) {
+    /// @notice Returns intuitive multipliers (e.g., 1250000 = 1.25x payout if outcome wins)
+    ///         - Heavy buying on YES → YES multiplier goes DOWN (worse odds for next buyer)
+    ///         - Scale: 1_000_000 = 1.00x; display as (multiplier / 1_000_000).toFixed(2) + "x"
+    function getCurrentMultipliers(uint256 id) external view override marketExists(id) 
+        returns (uint256 yesMultiplier, uint256 noMultiplier, uint256 yesPrice, uint256 noPrice) 
+    {
         Market storage m = markets[id];
         uint256 totalPool = m.yesPool + m.noPool;
-        if (totalPool == 0) return (10000, 10000, 5000, 5000);
 
+        if (totalPool == 0) {
+            return (2_000_000, 2_000_000, 5000, 5000); // 2.00x both sides at launch
+        }
+
+        // Prices as % probability (0-10000)
         yesPrice = (m.yesPool * 10000) / totalPool;
-        noPrice = (m.noPool * 10000) / totalPool;
+        noPrice = 10000 - yesPrice;
 
-        yesMultiplier = yesPrice > 0 ? (1e6) / yesPrice : type(uint256).max;
-        noMultiplier = noPrice > 0 ? (1e6) / noPrice : type(uint256).max;
+        // CORRECT: Payout multiplier = total / winning_pool (decreases with heavy buying on that side)
+        yesMultiplier = (totalPool * 1_000_000) / m.yesPool;  // e.g., yesPool=80% → 1.25x
+        noMultiplier  = (totalPool * 1_000_000) / m.noPool;   // e.g., noPool=20% → 5.00x
+
+        // Cap at 999x to prevent overflow/UI issues (your original cap kept)
+        if (yesMultiplier > 999_000_000) yesMultiplier = 999_000_000;
+        if (noMultiplier  > 999_000_000) noMultiplier  = 999_000_000;
     }
 
     // ==================== TRADING FUNCTIONS ====================
@@ -349,16 +363,16 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
             require(outAmount <= m.yesPool && outAmount + pdxAmount >= minOut, "slippage exceeded");
             totalOut = outAmount + pdxAmount;
 
-            m.noPool += amountAfterFee;
-            m.yesPool -= outAmount;
+            m.yesPool += amountAfterFee;
+            m.noPool -= outAmount;
             m.yesToken.mint(beneficiary, totalOut);
         } else {
             outAmount = _getAmountOut(amountAfterFee, m.yesPool, m.noPool);
             require(outAmount <= m.noPool && outAmount + pdxAmount >= minOut, "slippage exceeded");
             totalOut = outAmount + pdxAmount;
 
-            m.yesPool += amountAfterFee;
-            m.noPool -= outAmount;
+            m.noPool += amountAfterFee;
+            m.yesPool -= outAmount;
             m.noToken.mint(beneficiary, totalOut);
         }
         m.totalBacking += pdxAmount;
@@ -396,13 +410,13 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
         if (isYes) {
             outAmount = _getAmountOut(tokenAfterFee, m.yesPool, m.noPool);
             require(outAmount <= m.noPool, "insufficient liquidity");
-            m.yesPool += tokenAfterFee;
-            m.noPool -= outAmount;
+            m.noPool += tokenAfterFee;
+            m.yesPool -= outAmount;
         } else {
             outAmount = _getAmountOut(tokenAfterFee, m.noPool, m.yesPool);
             require(outAmount <= m.yesPool, "insufficient liquidity");
-            m.noPool += tokenAfterFee;
-            m.yesPool -= outAmount;
+            m.yesPool += tokenAfterFee;
+            m.noPool -= outAmount;
         }
 
         require(outAmount >= minPDXOut, "slippage exceeded");

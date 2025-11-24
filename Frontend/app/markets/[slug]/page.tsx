@@ -36,12 +36,42 @@ export const generateSlug = (question: string, id: number | string): string => {
   return `${baseSlug}-${id}` || `market-${id}`
 }
 
-export const extractIdFromSlug = (slug: string): number | null => {
-  if (!slug) return null
-  if (/^\d+$/.test(slug)) return parseInt(slug)
-  const idMatch = slug.match(/-(\d+)$/)
-  if (idMatch) return parseInt(idMatch[1])
-  return null
+export const parseMarketSlug = (slug: string): { 
+  type: 'BNB' | 'PDX' | null, 
+  numericId: number | null,
+  compositeId: string | null
+} => {
+  if (!slug) return { type: null, numericId: null, compositeId: null }
+  
+  // Try to find "BNB-X" or "PDX-X" pattern in the slug
+  // e.g., "will-bitcoin-reach-100k-PDX-0" → type: "PDX", id: 0
+  const parts = slug.split('-')
+  
+  // Check from the end backwards for token-id pattern
+  for (let i = parts.length - 2; i >= 0; i--) {
+    const potentialType = parts[i]
+    const potentialId = parts[i + 1]
+    
+    if ((potentialType === 'BNB' || potentialType === 'PDX') && /^\d+$/.test(potentialId)) {
+      const numericId = parseInt(potentialId, 10)
+      return {
+        type: potentialType as 'BNB' | 'PDX',
+        numericId,
+        compositeId: `${potentialType}-${potentialId}`
+      }
+    }
+  }
+  
+  // Fallback: try direct numeric ID (assume BNB for backward compatibility)
+  if (/^\d+$/.test(slug)) {
+    return {
+      type: 'BNB',
+      numericId: parseInt(slug, 10),
+      compositeId: `BNB-${slug}`
+    }
+  }
+  
+  return { type: null, numericId: null, compositeId: null }
 }
 
 const extractCategory = (question = ""): string => {
@@ -229,32 +259,30 @@ export default function MarketPage() {
       }
 
       let foundMarket: any = null
-      const extractedId = extractIdFromSlug(marketSlug)
+      const parsed = parseMarketSlug(marketSlug)
 
-      console.log(`Looking for market with slug: "${marketSlug}", extracted ID: ${extractedId}`)
+      console.log(`Looking for market with slug: "${marketSlug}"`, parsed)
 
-      if (extractedId !== null && extractedId >= 0) {
-        const market = marketsToSearch.find((m: any) => {
-          const marketId = typeof m.id === 'string' ? parseInt(m.id) : Number(m.id)
-          return marketId === extractedId
-        })
+      // Try to find by composite ID first
+      if (parsed.compositeId) {
+        const market = marketsToSearch.find((m: any) => m.id === parsed.compositeId)
         
         if (market) {
-          console.log(`Found market by ID: ${extractedId}`)
-          foundMarket = convertToFrontendMarket(market, extractedId)
+          console.log(`Found market by composite ID: ${parsed.compositeId}`)
+          foundMarket = convertToFrontendMarket(market, parsed.compositeId)
         }
       }
 
-      if (!foundMarket && /^\d+$/.test(marketSlug)) {
-        const directId = parseInt(marketSlug)
+      // Fallback: try numeric ID (for backward compatibility)
+      if (!foundMarket && parsed.numericId !== null && parsed.numericId >= 0) {
         const market = marketsToSearch.find((m: any) => {
           const marketId = typeof m.id === 'string' ? parseInt(m.id) : Number(m.id)
-          return marketId === directId
+          return marketId === parsed.numericId
         })
         
         if (market) {
-          console.log(`Found market by direct ID: ${directId}`)
-          foundMarket = convertToFrontendMarket(market, directId)
+          console.log(`Found market by numeric ID: ${parsed.numericId}`)
+          foundMarket = convertToFrontendMarket(market, parsed.numericId)
         }
       }
 
@@ -275,10 +303,12 @@ export default function MarketPage() {
       if (foundMarket) {
         marketFoundRef.current = true
         
-        const paymentToken = foundMarket.paymentToken || "BNB"
-        const marketId = typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id)
+        // ✅ FIXED: Update the market object with the correct payment token from slug
+        const paymentToken = parsed.type || foundMarket.paymentToken || "BNB"
+        foundMarket.paymentToken = paymentToken  // 👈 ADD THIS LINE
+        const marketId = parsed.numericId ?? (typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id))
         
-        console.log(`Market ${marketId} uses payment token: ${paymentToken}`)
+        console.log(`Market ${marketId} uses payment token: ${paymentToken} (parsed from slug: ${parsed.type})`)
         
         try {
           if (paymentToken === "PDX" && pdxHook.isContractReady) {

@@ -80,141 +80,314 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
   // Validate question with AI
   const validateQuestion = async () => {
-    if (!question || question.length < 10) {
-      setError("Question must be at least 10 characters")
+  // Clear previous states
+  setError(null)
+  setValidationResult(null)
+
+  // Basic input validation
+  if (!question || question.trim().length === 0) {
+    setError("Question is required")
+    return false
+  }
+
+  if (question.trim().length < 10) {
+    setError("Question must be at least 10 characters")
+    return false
+  }
+
+  if (question.length > 280) {
+    setError("Question must be less than 280 characters")
+    return false
+  }
+
+  if (!endDate || !endTime) {
+    setError("Please set an end date and time first")
+    return false
+  }
+
+  // Date validation with detailed debugging
+  let endDateTime
+  let endTimeUnix
+  try {
+    endDateTime = new Date(`${endDate}T${endTime}:00`)
+    
+    // Debug date parsing
+    console.log('📅 Date Validation Debug:', {
+      input: `${endDate}T${endTime}:00`,
+      parsedDate: endDateTime.toString(),
+      parsedISO: endDateTime.toISOString(),
+      parsedTimestamp: endDateTime.getTime()
+    })
+
+    if (isNaN(endDateTime.getTime())) {
+      setError("Invalid date or time format")
       return false
     }
 
-    if (question.length > 280) {
-      setError("Question must be less than 280 characters")
-      return false
-    }
-
-    if (!endDate || !endTime) {
-      setError("Please set an end date and time first")
-      return false
-    }
-
-    const endDateTime = new Date(`${endDate}T${endTime}`)
-    const endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
+    endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
 
     // Validate end time is at least 1 hour from now
     const now = new Date()
     const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
+    
+    console.log('⏰ Time Comparison Debug:', {
+      now: now.toString(),
+      nowTimestamp: now.getTime(),
+      oneHourFromNow: oneHourFromNow.toString(),
+      endDateTime: endDateTime.toString(),
+      timeDifferenceMs: endDateTime.getTime() - now.getTime(),
+      timeDifferenceHours: (endDateTime.getTime() - now.getTime()) / (1000 * 60 * 60),
+      isValid: endDateTime > oneHourFromNow
+    })
+
     if (endDateTime <= oneHourFromNow) {
-      setError("End time must be at least 1 hour from now")
+      setError(`End time must be at least 1 hour from now. Selected: ${endDateTime.toLocaleString()}`)
       return false
     }
 
-    // Validate liquidity amounts
+    // Validate it's not too far in future (optional safety check)
+    const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
+    if (endDateTime > oneYearFromNow) {
+      setError("End time cannot be more than 1 year from now")
+      return false
+    }
+
+  } catch (dateError) {
+    console.error('❌ Date parsing error:', dateError)
+    setError("Invalid date format. Please check your date and time.")
+    return false
+  }
+
+  // Liquidity validation
+  try {
     const yesAmount = parseFloat(initialYes)
     const noAmount = parseFloat(initialNo)
+    const totalLiquidity = yesAmount + noAmount
+
+    if (isNaN(yesAmount) || isNaN(noAmount)) {
+      setError("Invalid liquidity amounts")
+      return false
+    }
+
     if (yesAmount <= 0 || noAmount <= 0) {
       setError("Both YES and NO liquidity must be greater than 0")
       return false
     }
+
     if (totalLiquidity < 0.01) {
       setError(`Total liquidity must be at least 0.01 ${paymentToken}`)
       return false
     }
 
-    setIsValidating(true)
-    setError(null)
-    setValidationResult(null)
+    // Validate reasonable maximum (optional)
+    if (totalLiquidity > 1000) {
+      setError(`Total liquidity cannot exceed 1000 ${paymentToken}`)
+      return false
+    }
 
-    try {
-      const response = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: question.trim(),
-          endTime: endTimeUnix,
-          initialYes,
-          initialNo
-        })
-      })
+  } catch (liquidityError) {
+    console.error('❌ Liquidity validation error:', liquidityError)
+    setError("Invalid liquidity values")
+    return false
+  }
 
-      if (!response.ok) {
+  // AI Validation
+  setIsValidating(true)
+
+  try {
+    console.log('🔄 Starting AI validation with:', {
+      question: question.trim(),
+      endTime: endTimeUnix,
+      initialYes,
+      initialNo,
+      timestamp: new Date().toISOString()
+    })
+
+    const requestBody = {
+      question: question.trim(),
+      endTime: endTimeUnix,
+      initialYes,
+      initialNo
+    }
+
+    console.log('📤 Sending request to validation API...')
+    
+    const response = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      // Add timeout
+      signal: AbortSignal.timeout(30000) // 30 second timeout
+    })
+
+    console.log('📨 Response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    })
+
+    if (!response.ok) {
+      let errorDetail = `HTTP ${response.status}`
+      
+      try {
+        const errorData = await response.json()
+        errorDetail += ` - ${errorData.reason || errorData.error || JSON.stringify(errorData)}`
+      } catch (parseError) {
         const errorText = await response.text()
-        throw new Error(`Validation API error: ${response.status} - ${errorText}`)
+        errorDetail += ` - ${errorText || response.statusText}`
       }
-
-      const validation = await response.json()
-      setValidationResult(validation)
-      return validation.valid
-
-    } catch (err: any) {
-      console.error('❌ AI validation error:', err)
-
-      // Fallback to basic validation when AI service is unavailable
-      const basicValidation = performBasicValidation(question, Math.floor(new Date(`${endDate}T${endTime}`).getTime() / 1000), initialYes, initialNo)
-      setValidationResult(basicValidation)
-
-      if (!basicValidation.valid) {
-        setError(`AI validation unavailable. Basic validation: ${basicValidation.reason}`)
-      } else {
-        setError("AI validation service is temporarily unavailable. Using basic validation.")
-      }
-
-      return basicValidation.valid
-    } finally {
-      setIsValidating(false)
+      
+      throw new Error(`Validation API error: ${errorDetail}`)
     }
+
+    const validation = await response.json()
+    console.log('✅ Validation API response:', validation)
+
+    // Validate response structure
+    if (typeof validation.valid !== 'boolean') {
+      console.warn('⚠️ Invalid validation response structure:', validation)
+      throw new Error('Invalid response from validation service')
+    }
+
+    setValidationResult(validation)
+    
+    if (!validation.valid) {
+      console.log('❌ Question rejected by AI validation:', validation.reason)
+    } else {
+      console.log('✅ Question approved by AI validation')
+    }
+
+    return validation.valid
+
+  } catch (err: any) {
+    console.error('❌ AI validation error details:', {
+      name: err.name,
+      message: err.message,
+      stack: err.stack
+    })
+
+    // Handle different error types
+    if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+      setError("Validation request timed out. Please try again.")
+    } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+      setError("Network error. Please check your connection and try again.")
+    } else if (err.message.includes('HTTP 5')) {
+      setError("Validation service is temporarily unavailable. Please try again in a moment.")
+    } else {
+      setError(`Validation error: ${err.message}`)
+    }
+
+    // Fallback to basic validation
+    console.log('🔄 Falling back to basic validation...')
+    const basicValidation = performBasicValidation(question, endTimeUnix, initialYes, initialNo)
+    setValidationResult(basicValidation)
+
+    if (!basicValidation.valid) {
+      console.log('❌ Basic validation also failed:', basicValidation.reason)
+      // Don't override the original error if basic validation also fails
+      if (!err.message.includes('HTTP 5')) {
+        setError(`AI validation failed and basic validation rejected: ${basicValidation.reason}`)
+      }
+      return false
+    } else {
+      console.log('✅ Basic validation passed, proceeding with caution')
+      // If AI failed but basic passed, we can proceed with warning
+      setError("AI validation unavailable, but question passes basic checks. You may proceed.")
+      return true
+    }
+
+  } finally {
+    setIsValidating(false)
   }
+}
 
-  // Basic validation fallback
-  const performBasicValidation = (question: string, endTime: number, initialYes: string, initialNo: string): ValidationResult => {
-    if (!question.includes('?')) {
-      return {
-        valid: false,
-        reason: 'Question must end with a question mark',
-        category: 'OTHER'
-      }
-    }
-
-    if (question.length < 10) {
-      return {
-        valid: false,
-        reason: 'Question must be at least 10 characters long',
-        category: 'OTHER'
-      }
-    }
-
-    if (question.length > 280) {
-      return {
-        valid: false,
-        reason: 'Question must be less than 280 characters',
-        category: 'OTHER'
-      }
-    }
-
-    const invalidPatterns = [
-      /\b(opinion|think|believe|feel|probably|maybe)\b/i,
-      /\b(subjective|arbitrary|pointless)\b/i,
-      /\?.*\?/,
-      /\b(and|or)\b.*\?/
-    ]
-
-    for (const pattern of invalidPatterns) {
-      if (pattern.test(question)) {
-        return {
-          valid: false,
-          reason: 'Question contains ambiguous or subjective language',
-          category: 'OTHER'
-        }
-      }
-    }
-
-    const category = determineCategory(question)
-
+// Enhanced basic validation fallback
+const performBasicValidation = (question: string, endTime: number, initialYes: string, initialNo: string): ValidationResult => {
+  console.log('🔄 Running basic validation...')
+  
+  const trimmedQuestion = question.trim()
+  
+  // Question structure validation
+  if (!trimmedQuestion.includes('?')) {
     return {
-      valid: true,
-      reason: 'Passes basic validation checks (AI service unavailable)',
-      category: category
+      valid: false,
+      reason: 'Question must end with a question mark',
+      category: 'OTHER'
     }
   }
+
+  if (trimmedQuestion.length < 10) {
+    return {
+      valid: false,
+      reason: 'Question must be at least 10 characters long',
+      category: 'OTHER'
+    }
+  }
+
+  if (trimmedQuestion.length > 280) {
+    return {
+      valid: false,
+      reason: 'Question must be less than 280 characters',
+      category: 'OTHER'
+    }
+  }
+
+  // Check for multiple questions
+  if ((trimmedQuestion.match(/\?/g) || []).length > 1) {
+    return {
+      valid: false,
+      reason: 'Please ask only one question per market',
+      category: 'OTHER'
+    }
+  }
+
+  // Subjective/ambiguous language patterns
+  const invalidPatterns = [
+    { pattern: /\b(opinion|think|believe|feel|probably|maybe)\b/i, reason: 'Avoid subjective language like "think" or "believe"' },
+    { pattern: /\b(subjective|arbitrary|pointless)\b/i, reason: 'Question should be objective and verifiable' },
+    { pattern: /\?.*\?/, reason: 'Multiple questions detected' },
+    { pattern: /\b(and|or)\b.*\?.*\b(and|or)\b/i, reason: 'Avoid complex "and/or" questions' },
+    { pattern: /\b(should|ought to)\b/i, reason: 'Avoid normative language like "should"' },
+    { pattern: /\b(best|worst|better|worse)\b.*\?/i, reason: 'Avoid comparative language without clear criteria' }
+  ]
+
+  for (const { pattern, reason } of invalidPatterns) {
+    if (pattern.test(trimmedQuestion)) {
+      return {
+        valid: false,
+        reason,
+        category: 'OTHER'
+      }
+    }
+  }
+
+  // Check for past tense (historical events)
+  const pastTensePatterns = [
+    /\b(did|was|were|had|happened|occurred)\b.*\?/i,
+    /\b(in|during)\s+(202[0-3]|2024\b)/, // Past years
+    /\b(last\s+(year|month|week))\b/i
+  ]
+
+  for (const pattern of pastTensePatterns) {
+    if (pattern.test(trimmedQuestion)) {
+      return {
+        valid: false,
+        reason: 'Questions about past events are not allowed',
+        category: 'OTHER'
+      }
+    }
+  }
+
+  const category = determineCategory(trimmedQuestion)
+
+  return {
+    valid: true,
+    reason: 'Passes basic validation checks',
+    category: category
+  }
+}
 
   // Determine category based on question content
   const determineCategory = (question: string): string => {

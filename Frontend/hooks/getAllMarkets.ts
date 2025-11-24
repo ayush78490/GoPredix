@@ -5,7 +5,8 @@ import { usePredictionMarketBNB } from './use-predection-market'
 import { usePredictionMarketPDX } from './use-prediction-market-pdx'
 
 export interface UnifiedMarket {
-  id: string
+  id: string           // Composite ID like "BNB-0" or "PDX-0"
+  numericId: number    // Original numeric ID for contract calls
   creator: string
   question: string
   category: string
@@ -57,7 +58,8 @@ export function useAllMarkets() {
         if (market) {
           return {
             ...market,
-            id: marketId.toString(),
+            id: `BNB-${marketId}`,
+            numericId: marketId,
             yesPrice: market.yesPrice ?? 50,
             noPrice: market.noPrice ?? 50,
             yesMultiplier: market.yesMultiplier ?? 2,
@@ -81,7 +83,8 @@ export function useAllMarkets() {
         const market = await pdxHook.getPDXMarket(marketId)
         if (market) {
           return {
-            id: marketId.toString(),
+            id: `PDX-${marketId}`,
+            numericId: marketId,
             creator: market.creator,
             question: market.question,
             category: market.category,
@@ -155,33 +158,23 @@ export function useAllMarkets() {
     try {
       console.log("💜 Fetching all PDX markets...")
       
-      if (!pdxHook.adapterContract) {
+      if (!pdxHook.isContractReady) {
         console.warn("⚠️ PDX adapter contract not ready yet")
         return []
       }
 
       try {
-        let totalMarkets = 0
-        try {
-          const nextPDXMarketId = await pdxHook.adapterContract.nextPDXMarketId()
-          totalMarkets = Number(nextPDXMarketId)
-        } catch {
-          console.warn("⚠️ Could not get PDX market count")
-          return []
-        }
+        const marketIds = await pdxHook.getPDXMarketIds()
         
-        console.log(`📊 Found ${totalMarkets} PDX markets on chain`)
+        console.log(`📊 Found ${marketIds.length} PDX markets on chain`)
         
-        if (totalMarkets === 0) {
+        if (marketIds.length === 0) {
           console.log("ℹ️ No PDX markets found")
           return []
         }
 
-        const marketPromises: Promise<UnifiedMarket | null>[] = []
-        for (let i = 0; i < totalMarkets; i++) {
-          marketPromises.push(fetchPDXMarket(i))
-        }
-
+        // Fetch all markets in parallel using the IDs
+        const marketPromises = marketIds.map(id => fetchPDXMarket(id))
         const results = await Promise.all(marketPromises)
         const validMarkets = results.filter((m): m is UnifiedMarket => m !== null)
         

@@ -3,8 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePredictionMarketBNB } from '@/hooks/use-predection-market'
-import { usePredictionMarketPDX } from '@/hooks/use-prediction-market-pdx'
+import { useAllMarkets } from '@/hooks/getAllMarkets'
 
 // Helper function to generate slug from question
 export const generateSlug = (question: string, id: number | string): string => {
@@ -121,62 +120,30 @@ interface MarketListProps {
 }
 
 export function MarketList({ tokenFilter = "ALL" }: MarketListProps) {
-  const bnbHook = usePredictionMarketBNB()
-  const pdxHook = usePredictionMarketPDX()
+  const { 
+    markets, 
+    isLoading, 
+    error,
+    getBNBMarkets,
+    getPDXMarkets 
+  } = useAllMarkets()
   
-  const [allMarkets, setAllMarkets] = useState<FrontendMarket[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [displayMarkets, setDisplayMarkets] = useState<FrontendMarket[]>([])
 
   useEffect(() => {
-    const loadMarkets = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
-        
-        const markets: FrontendMarket[] = []
-        let marketIndex = 0
-
-        // Load BNB markets
-        if (tokenFilter === "ALL" || tokenFilter === "BNB") {
-          try {
-            // This would require implementing a function in the hook to get all markets
-            // For now, we'll fetch markets that were created (you'd need to track IDs)
-            // Example: assume you store market IDs in localStorage or from indexer
-            console.log("🔶 Loading BNB markets...")
-            // const bnbMarkets = await loadBNBMarkets()
-            // markets.push(...bnbMarkets)
-          } catch (err) {
-            console.warn("⚠️ Error loading BNB markets:", err)
-          }
-        }
-
-        // Load PDX markets
-        if (tokenFilter === "ALL" || tokenFilter === "PDX") {
-          try {
-            console.log("💜 Loading PDX markets...")
-            // const pdxMarkets = await loadPDXMarkets()
-            // markets.push(...pdxMarkets)
-          } catch (err) {
-            console.warn("⚠️ Error loading PDX markets:", err)
-          }
-        }
-
-        setAllMarkets(markets)
-        
-        if (markets.length === 0) {
-          setError("No markets found")
-        }
-      } catch (err) {
-        console.error("❌ Error loading markets:", err)
-        setError(err instanceof Error ? err.message : "Failed to load markets")
-      } finally {
-        setIsLoading(false)
-      }
+    // Filter markets based on token filter
+    let filtered = markets
+    
+    if (tokenFilter === "BNB") {
+      filtered = getBNBMarkets()
+    } else if (tokenFilter === "PDX") {
+      filtered = getPDXMarkets()
     }
 
-    loadMarkets()
-  }, [tokenFilter])
+    // Convert to frontend format
+    const converted = filtered.map(m => convertToFrontendMarket(m, m.id, m.paymentToken))
+    setDisplayMarkets(converted)
+  }, [markets, tokenFilter, getBNBMarkets, getPDXMarkets])
 
   if (isLoading) {
     return (
@@ -197,7 +164,7 @@ export function MarketList({ tokenFilter = "ALL" }: MarketListProps) {
     )
   }
 
-  if (allMarkets.length === 0) {
+  if (displayMarkets.length === 0 && !isLoading) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">No markets found</p>
@@ -210,16 +177,16 @@ export function MarketList({ tokenFilter = "ALL" }: MarketListProps) {
       {/* Filter Info */}
       <div className="mb-6 p-4 bg-muted rounded-lg">
         <p className="text-sm text-muted-foreground">
-          Showing {allMarkets.length} market{allMarkets.length !== 1 ? "s" : ""}
+          Showing {displayMarkets.length} market{displayMarkets.length !== 1 ? "s" : ""}
           {tokenFilter !== "ALL" && ` • ${tokenFilter} only`}
         </p>
       </div>
 
       {/* Markets Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {allMarkets.map((market) => (
+        {displayMarkets.map((market) => (
           <Link 
-            key={market.slug} 
+            key={market.id} 
             href={`/market/${market.slug}`}
             className="block group"
           >

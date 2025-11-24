@@ -1,601 +1,668 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
-import { ethers } from "ethers"
-import { useWeb3Context } from "@/lib/wallet-context"
-import { usePredictionMarketBNB, MarketStatus, Outcome } from "@/hooks/use-predection-market"
-import { useStopLossTakeProfit } from "@/hooks/useStoploss"
-import { useAutoSellTokens, useSellEstimate } from "@/hooks/useSellToken"
-import { OrderInfo } from "@/hooks/useStoploss"
+import { useState, useEffect, useCallback } from "react"
 import Header from "@/components/header"
-import { Card } from "@/components/ui/card"
+import Footer from "@/components/footer"
 import { Button } from "@/components/ui/button"
-import { Loader2, Coins, Copy, ExternalLink, Wallet, BarChart3, CheckCircle, AlertCircle, TrendingDown, TrendingUp, Shield, DollarSign } from "lucide-react"
-import Link from "next/link"
-import LightRays from "@/components/LightRays"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Trophy, Medal, ArrowLeft, Wallet, Loader2, TrendingUp, Users, BarChart3, ExternalLink, AlertTriangle } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ethers } from "ethers"
+import LightRays from "@/components/LightRays"
+import { useAccount, useChainId } from "wagmi"
 
-// Fallback contract addresses
-const FALLBACK_BNB_CONTRACT = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || "0xYourBNBContractAddress"
+// Import ABIs
+import BNB_MARKET_ARTIFACT from "@/contracts/abi.json"
+import BNB_HELPER_ARTIFACT from "@/contracts/helperABI.json"
+import PDX_MARKET_ARTIFACT from "@/contracts/pdxabi.json"
+import PDX_HELPER_ARTIFACT from "@/contracts/pdxhelperabi.json"
 
-// ✅ Define enhanced position type for component state
-interface EnhancedUserPosition {
-  marketId: number
-  yesBalance: string
-  noBalance: string
-  market: {
-    id: number
-    question: string
-    category: string
-    status: MarketStatus
-    outcome?: Outcome
-    endTime: number
-    yesPool?: bigint
-    noPool?: bigint
-    yesPrice?: number
-    noPrice?: number
-    paymentToken: "BNB"
-    [key: string]: any
-  }
+// Helper function to extract ABI
+const extractABI = (artifact: any): ethers.InterfaceAbi => {
+  return ('abi' in artifact ? artifact.abi : artifact) as ethers.InterfaceAbi
 }
 
-// Market status function
-const getMarketStatus = (market: any) => {
-  const nowInSeconds = Math.floor(Date.now() / 1000)
-  const endTimeInSeconds = Number(market.endTime)
-  const contractStatus = Number(market.status)
-  
-  // Resolved
-  if (contractStatus === 3) {
-    return {
-      isActive: false,
-      isEnded: true,
-      isResolved: true,
-      statusLabel: "Resolved",
-      statusColor: "green"
-    }
-  }
-  
-  // Disputed
-  if (contractStatus === 4) {
-    return {
-      isActive: false,
-      isEnded: true,
-      isResolved: false,
-      statusLabel: "Disputed",
-      statusColor: "orange"
-    }
-  }
-  
-  // Resolution requested
-  if (contractStatus === 2) {
-    return {
-      isActive: false,
-      isEnded: true,
-      isResolved: false,
-      statusLabel: "Resolution Requested",
-      statusColor: "yellow"
-    }
-  }
-  
-  // Time expired
-  if (nowInSeconds >= endTimeInSeconds) {
-    return {
-      isActive: false,
-      isEnded: true,
-      isResolved: false,
-      statusLabel: "Ended",
-      statusColor: "red"
-    }
-  }
-  
-  // Active
-  if (contractStatus === 0) {
-    return {
-      isActive: true,
-      isEnded: false,
-      isResolved: false,
-      statusLabel: "Active",
-      statusColor: "green"
-    }
-  }
-  
-  // Closed
-  return {
-    isActive: false,
-    isEnded: true,
-    isResolved: false,
-    statusLabel: "Closed",
-    statusColor: "red"
-  }
+// Extract ABIs
+const BNB_MARKET_ABI = extractABI(BNB_MARKET_ARTIFACT)
+const BNB_HELPER_ABI = extractABI(BNB_HELPER_ARTIFACT)
+const PDX_MARKET_ABI = extractABI(PDX_MARKET_ARTIFACT)
+const PDX_HELPER_ABI = extractABI(PDX_HELPER_ARTIFACT)
+
+// Contract addresses
+const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
+const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS
+const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_PREDICTION_MARKET_ADDRESS || "0x275fa689f785fa232861a076aD4cc1955F88171A"
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || "0x02D4E1573ec5ade27eC852fBBf873d7073219E21"
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
+
+interface UserStats {
+  address: string
+  totalMarketsTraded: number
+  totalVolume: number
+  currentPortfolioValue: number
+  realizedPnl: number
+  unrealizedPnl: number
+  totalPnl: number
+  winningMarkets: number
+  activePositions: number
+  favoriteCategory: string
+  totalInvestment: string
+  bnbInvestment: string
+  pdxInvestment: string
+}
+
+interface MarketPosition {
+  marketId: number
+  question: string
+  category: string
+  yesTokens: number
+  noTokens: number
+  currentValue: number
+  investedAmount: number
+  potentialPnl: number
+  status: "Active" | "Resolved" | "Cancelled"
+  yesPrice: number
+  noPrice: number
+  marketStatus: number
+  endTime: number
+  paymentToken: "BNB" | "PDX"
+}
+
+interface Market {
+  id: number
+  creator: string
+  question: string
+  category: string
+  endTime: number
+  status: number
+  outcome: number
+  yesToken: string
+  noToken: string
+  yesPool: string
+  noPool: string
+  lpTotalSupply: string
+  totalBacking: string
+  platformFees: string
+  resolutionRequestedAt: number
+  disputeDeadline: number
+  resolutionReason: string
+  resolutionConfidence: number
+  paymentToken: "BNB" | "PDX"
 }
 
 export default function ProfilePage() {
+  const router = useRouter()
+  const { address: account, isConnected } = useAccount()
+  const chainId = useChainId()
   
-  const { account, connectWallet, provider } = useWeb3Context()
-  
-  // ✅ Get hooks for BNB only
-  const bnbHook = usePredictionMarketBNB()
-  const {
-    getUserPositions: getBNBUserPositions,
-    getMarketInvestment: getBNBMarketInvestment, 
-    getCurrentMultipliers: getBNBCurrentMultipliers,
-    getMarket: getMarketBNB
-  } = bnbHook
-
-  const bnbContractAddress = FALLBACK_BNB_CONTRACT
-
-  // ✅ Initialize useStopLossTakeProfit with BNB payment token
-  const bnbOrders = useStopLossTakeProfit("BNB", account || undefined)
-
-  // Sell tokens hook
-  const { sellTokens, isLoading: isSelling, isSuccess: sellSuccess, error: sellError, txHash: sellTxHash } = useAutoSellTokens()
-
-  // ✅ State with proper typing
-  const [positions, setPositions] = useState<EnhancedUserPosition[]>([])
-  const [marketInvestments, setMarketInvestments] = useState<{ [key: string]: string }>({})
-  const [marketOdds, setMarketOdds] = useState<{ [key: string]: { yesMultiplier: number, noMultiplier: number, yesPrice: number, noPrice: number } }>({})
+  const [userStats, setUserStats] = useState<UserStats | null>(null)
+  const [userPositions, setUserPositions] = useState<MarketPosition[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [redeemingMarketId, setRedeemingMarketId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [showSellModal, setShowSellModal] = useState(false)
+  const [showStopLossModal, setShowStopLossModal] = useState(false)
+  const [showTakeProfitModal, setShowTakeProfitModal] = useState(false)
+  const [selectedPosition, setSelectedPosition] = useState<MarketPosition | null>(null)
+  const [sellTokenType, setSellTokenType] = useState<"YES" | "NO">("YES")
+  const [sellAmount, setSellAmount] = useState("")
+  const [minReceive, setMinReceive] = useState("")
+  const [stopLossPrice, setStopLossPrice] = useState("")
+  const [takeProfitPrice, setTakeProfitPrice] = useState("")
 
-  // Order Dialog State
-  const [orderDialogOpen, setOrderDialogOpen] = useState(false)
-  const [selectedMarket, setSelectedMarket] = useState<EnhancedUserPosition | null>(null)
-  const [orderType, setOrderType] = useState<'stopLoss' | 'takeProfit'>('stopLoss')
-  const [tokenType, setTokenType] = useState<'yes' | 'no'>('yes')
-  const [tokenAmount, setTokenAmount] = useState('')
-  const [triggerPrice, setTriggerPrice] = useState('')
+  const isCorrectNetwork = chainId === 97
+  const canFetchData = isConnected && isCorrectNetwork && account
 
-  // Sell Dialog State
-  const [sellDialogOpen, setSellDialogOpen] = useState(false)
-  const [selectedSellMarket, setSelectedSellMarket] = useState<EnhancedUserPosition | null>(null)
-  const [sellTokenType, setSellTokenType] = useState<'yes' | 'no'>('yes')
-  const [sellTokenAmount, setSellTokenAmount] = useState('')
-  const [minOut, setMinOut] = useState('')
-  const [estimateAmount, setEstimateAmount] = useState('')
-  const [paymentToken] = useState<"BNB">("BNB")
-
-  // ✅ Helper function to fetch and enrich position with market data
-  const fetchAndEnrichPosition = useCallback(
-    async (position: any): Promise<EnhancedUserPosition> => {
-      try {
-        let marketData
-        
-        try {
-          marketData = await getMarketBNB(position.marketId)
-        } catch (e) {
-          console.error(`Failed to fetch BNB market ${position.marketId}:`, e)
-          marketData = null
-        }
-
-        return {
-          ...position,
-          market: marketData ? {
-            ...marketData,
-            id: position.marketId,
-            paymentToken: "BNB"
-          } : {
-            id: position.marketId,
-            paymentToken: "BNB",
-            question: "Market data unavailable",
-            category: "",
-            status: MarketStatus.Open,
-            endTime: 0
-          }
-        }
-      } catch (error) {
-        console.error(`Failed to enrich position ${position.marketId}:`, error)
-        return {
-          ...position,
-          market: {
-            id: position.marketId,
-            paymentToken: "BNB",
-            question: "Error loading market",
-            category: "",
-            status: MarketStatus.Open,
-            endTime: 0
-          }
-        }
-      }
-    },
-    [getMarketBNB]
-  )
-
-  // Get sell estimate with BNB payment token
-  const { estimate: sellEstimate, isLoading: isEstimating, fetchEstimate } = useSellEstimate(
-    "BNB",
-    selectedSellMarket?.marketId || 0,
-    estimateAmount,
-    sellTokenType === 'yes'
-  )
-
-  // ✅ Load positions from BNB only
-  useEffect(() => {
-    const loadData = async () => {
-      if (!account) return
-
-      setIsLoading(true)
-
-      try {
-        // Get user positions from BNB only
-        const bnbPositions = await getBNBUserPositions(account).catch(e => {
-          console.error("Failed to load BNB positions:", e)
-          return []
-        })
-
-        // Combine all positions (only BNB now)
-        const allPositions = [
-          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const }))
-        ]
-
-        // Enrich each position with full market data
-        const enrichedPositions = await Promise.all(
-          allPositions.map(pos => fetchAndEnrichPosition(pos))
-        )
-
-        setPositions(enrichedPositions)
-
-        // Fetch investments for each position
-        const investmentsPromises = enrichedPositions.map(async (pos) => {
-          try {
-            const investment = await getBNBMarketInvestment(account, pos.marketId)
-            return { marketId: pos.marketId, investment }
-          } catch {
-            return { marketId: pos.marketId, investment: "0" }
-          }
-        })
-
-        // Fetch odds for each position
-        const oddsPromises = enrichedPositions.map(async (pos) => {
-          try {
-            const odds = await getBNBCurrentMultipliers(pos.marketId)
-            return { marketId: pos.marketId, odds }
-          } catch {
-            return {
-              marketId: pos.marketId,
-              odds: { yesMultiplier: 10000, noMultiplier: 10000, yesPrice: 5000, noPrice: 5000 }
-            }
-          }
-        })
-
-        const investments = await Promise.all(investmentsPromises)
-        const oddsData = await Promise.all(oddsPromises)
-
-        let investmentMap: { [key: string]: string } = {}
-        investments.forEach(({ marketId, investment }) => {
-          investmentMap[marketId] = investment
-        })
-        setMarketInvestments(investmentMap)
-
-        let oddsMap: { [key: string]: any } = {}
-        oddsData.forEach(({ marketId, odds }) => {
-          oddsMap[marketId] = odds
-        })
-        setMarketOdds(oddsMap)
-
-      } catch (error) {
-        console.error("Failed to load portfolio data:", error)
-      } finally {
-        setIsLoading(false)
-      }
+  // ============================================
+  // ✅ CREATE CONTRACTS
+  // ============================================
+  
+  const getReadOnlyContracts = useCallback(() => {
+    if (!BNB_MARKET_ADDRESS || !BNB_HELPER_ADDRESS || !PDX_MARKET_ADDRESS || !PDX_HELPER_ADDRESS) {
+      throw new Error('Contract addresses not configured in environment variables')
     }
 
-    loadData()
-  }, [
-    account, 
-    getBNBUserPositions, 
-    fetchAndEnrichPosition, 
-    getBNBMarketInvestment, 
-    getBNBCurrentMultipliers
-  ])
-
-  // Fetch estimate when amount changes
-  useEffect(() => {
-    if (estimateAmount && parseFloat(estimateAmount) > 0) {
-      fetchEstimate()
-    }
-  }, [estimateAmount, fetchEstimate])
-
-  // Update minOut with 2% slippage when estimate is available
-  useEffect(() => {
-    if (sellEstimate) {
-      const slippage = 0.98
-      let minOutValue = "0"
+    try {
+      const provider = new ethers.JsonRpcProvider(RPC_URL)
       
-      if (sellEstimate.bnbOut) {
-        minOutValue = (parseFloat(sellEstimate.bnbOut) * slippage).toFixed(6)
-      } else if (sellEstimate.tokenOut) {
-        minOutValue = (parseFloat(sellEstimate.tokenOut) * slippage).toFixed(6)
-      }
+      // BNB Contracts
+      const bnbMarketContract = new ethers.Contract(BNB_MARKET_ADDRESS, BNB_MARKET_ABI, provider)
+      const bnbHelperContract = new ethers.Contract(BNB_HELPER_ADDRESS, BNB_HELPER_ABI, provider)
       
-      setMinOut(minOutValue)
-    }
-  }, [sellEstimate])
-
-  // Updated market status function using the new getMarketStatus
-  const getMarketStatusInfo = useCallback((market: any) => {
-    const status = getMarketStatus(market)
-    
-    const statusConfig: Record<string, { label: string; color: string; description: string }> = {
-      "Active": { 
-        label: "Active", 
-        color: "bg-green-500 text-white",
-        description: "Open for trading"
-      },
-      "Closed": { 
-        label: "Closed", 
-        color: "bg-yellow-500 text-white",
-        description: "Trading closed, pending resolution"
-      },
-      "Resolution Requested": { 
-        label: "Resolving", 
-        color: "bg-blue-500 text-white",
-        description: "AI resolution in progress"
-      },
-      "Resolved": { 
-        label: "Resolved", 
-        color: "bg-purple-500 text-white",
-        description: "Market has been resolved"
-      },
-      "Disputed": { 
-        label: "Disputed", 
-        color: "bg-red-500 text-white",
-        description: "Resolution under dispute"
-      },
-      "Ended": {
-        label: "Ended",
-        color: "bg-red-500 text-white",
-        description: "Trading period has ended"
+      // PDX Contracts
+      const pdxMarketContract = new ethers.Contract(PDX_MARKET_ADDRESS, PDX_MARKET_ABI, provider)
+      const pdxHelperContract = new ethers.Contract(PDX_HELPER_ADDRESS, PDX_HELPER_ABI, provider)
+      
+      return { 
+        bnbMarketContract, 
+        bnbHelperContract,
+        pdxMarketContract,
+        pdxHelperContract,
+        provider 
       }
-    }
-    
-    return statusConfig[status.statusLabel] || { 
-      label: status.statusLabel, 
-      color: "bg-gray-500 text-white",
-      description: `Market is ${status.statusLabel.toLowerCase()}`
+    } catch (error) {
+      console.error('Error creating read-only contracts:', error)
+      throw error
     }
   }, [])
 
-  // ✅ FIX: Get active orders for a specific market with proper typing
-  const getActiveOrdersForMarket = useCallback((marketId: number): OrderInfo[] => {
+  // Get individual BNB market
+  const getBNBMarket = useCallback(async (marketId: number): Promise<Market | null> => {
     try {
-      if (!bnbOrders.activeOrders || bnbOrders.activeOrders.length === 0) {
-        return []
-      }
+      const { bnbMarketContract } = getReadOnlyContracts()
+      const marketData = await bnbMarketContract.markets(marketId)
       
-      return bnbOrders.activeOrders.filter(
-        order => parseInt(order.marketId) === marketId
-      )
+      let question = marketData[1] || `Market ${marketId}`
+      if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
+        question = question.slice(1, -1)
+      }
+
+      const market: Market = {
+        id: marketId,
+        creator: marketData[0] || "0x0000000000000000000000000000000000000000",
+        question: question,
+        category: marketData[2] || "General",
+        endTime: Number(marketData[3] || 0),
+        status: Number(marketData[4] || 0),
+        outcome: Number(marketData[5] || 0),
+        yesToken: marketData[6] || "0x0000000000000000000000000000000000000000",
+        noToken: marketData[7] || "0x0000000000000000000000000000000000000000",
+        yesPool: ethers.formatEther(marketData[8] || 0),
+        noPool: ethers.formatEther(marketData[9] || 0),
+        lpTotalSupply: ethers.formatEther(marketData[10] || 0),
+        totalBacking: ethers.formatEther(marketData[11] || 0),
+        platformFees: ethers.formatEther(marketData[12] || 0),
+        resolutionRequestedAt: Number(marketData[13] || 0),
+        disputeDeadline: Number(marketData[17] || 0),
+        resolutionReason: marketData[15] || '',
+        resolutionConfidence: Number(marketData[16] || 0),
+        paymentToken: "BNB"
+      }
+
+      return market
     } catch (error) {
-      console.error("Error getting active orders for market:", error)
+      console.error(`Error fetching BNB market ${marketId}:`, error)
+      return null
+    }
+  }, [getReadOnlyContracts])
+
+  // Get individual PDX market
+  const getPDXMarket = useCallback(async (marketId: number): Promise<Market | null> => {
+    try {
+      const { pdxMarketContract } = getReadOnlyContracts()
+      const marketData = await pdxMarketContract.markets(marketId)
+      
+      if (!marketData || !marketData[0] || marketData[0] === "0x0000000000000000000000000000000000000000") {
+        console.warn(`PDX Market ${marketId} is empty or not found`)
+        return null
+      }
+
+      let question = marketData[1] || `PDX Market ${marketId}`
+      if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
+        question = question.slice(1, -1)
+      }
+
+      const market: Market = {
+        id: marketId,
+        creator: marketData[0],
+        question: question,
+        category: marketData[2] || "General",
+        endTime: Number(marketData[3] || 0),
+        status: Number(marketData[4] || 0),
+        outcome: Number(marketData[5] || 255),
+        yesToken: marketData[6] || "0x0000000000000000000000000000000000000000",
+        noToken: marketData[7] || "0x0000000000000000000000000000000000000000",
+        yesPool: ethers.formatEther(marketData[8] || 0),
+        noPool: ethers.formatEther(marketData[9] || 0),
+        lpTotalSupply: ethers.formatEther(marketData[10] || 0),
+        totalBacking: ethers.formatEther(marketData[11] || 0),
+        platformFees: ethers.formatEther(marketData[12] || 0),
+        resolutionRequestedAt: Number(marketData[13] || 0),
+        disputeDeadline: Number(marketData[17] || 0),
+        resolutionReason: marketData[15] || '',
+        resolutionConfidence: Number(marketData[16] || 0),
+        paymentToken: "PDX"
+      }
+
+      return market
+      
+    } catch (error) {
+      console.error(`❌ Error fetching PDX market ${marketId}:`, error)
+      return null
+    }
+  }, [getReadOnlyContracts])
+
+  // Helper functions
+  const getMarketStatusText = (status: number, endTime: number): "Active" | "Resolved" | "Cancelled" => {
+    const resolutionDate = new Date(endTime * 1000)
+    const now = new Date()
+    
+    if (status === 0 && resolutionDate > now) return "Active"
+    else if (status === 1 || status === 2) return "Resolved"
+    else return "Resolved"
+  }
+
+  const isMarketActive = (status: number, endTime: number): boolean => {
+    const resolutionDate = new Date(endTime * 1000)
+    const now = new Date()
+    return status === 0 && resolutionDate > now
+  }
+
+  const calculatePrices = (yesPool: string, noPool: string) => {
+    const yes = parseFloat(yesPool) || 0
+    const no = parseFloat(noPool) || 0
+    const total = yes + no
+
+    if (total === 0) return { yesPrice: 50, noPrice: 50 }
+
+    return {
+      yesPrice: (yes / total) * 100,
+      noPrice: (no / total) * 100
+    }
+  }
+
+  // Get user BNB positions
+  const getUserBNBPositions = useCallback(async (address: string): Promise<any[]> => {
+    try {
+      const { bnbHelperContract } = getReadOnlyContracts()
+      const positions = await bnbHelperContract.getUserPositions(address)
+      const formattedPositions = []
+
+      for (const pos of positions) {
+        try {
+          const market = await getBNBMarket(Number(pos.marketId))
+          if (market) {
+            formattedPositions.push({
+              market,
+              yesBalance: ethers.formatEther(pos.yesBalance),
+              noBalance: ethers.formatEther(pos.noBalance),
+              bnbInvested: ethers.formatEther(pos.bnbInvested),
+              paymentToken: "BNB"
+            })
+          }
+        } catch (error) {
+          console.warn(`Error processing BNB position for market ${pos.marketId}:`, error)
+        }
+      }
+
+      return formattedPositions
+    } catch (error) {
+      console.error(`Error fetching BNB positions for ${address}:`, error)
       return []
     }
-  }, [bnbOrders.activeOrders])
+  }, [getReadOnlyContracts, getBNBMarket])
 
-  // ✅ Updated redeem function for BNB only
-  const handleRedeem = useCallback(
-    async (marketId: number) => {
-      if (!account) return
-      
-      setRedeemingMarketId(marketId.toString())
-      try {
-        // Note: You'll need to implement BNB redemption logic here
-        // await bnbHook.redeemWinnings?.(marketId)
-        console.log("Redeeming BNB market:", marketId)
-        
-        // Refresh positions
-        const bnbPositions = await getBNBUserPositions(account).catch(() => [])
-        const allPositions = [
-          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const }))
-        ]
-
-        const enrichedPositions = await Promise.all(
-          allPositions.map(pos => fetchAndEnrichPosition(pos))
-        )
-        setPositions(enrichedPositions)
-        
-        // Update investment
-        const updatedInvestment = await getBNBMarketInvestment(account, marketId)
-        
-        setMarketInvestments(prev => ({
-          ...prev,
-          [marketId]: updatedInvestment
-        }))
-      } catch (error) {
-        console.error("Failed to redeem winnings:", error)
-      } finally {
-        setRedeemingMarketId(null)
-      }
-    },
-    [account, fetchAndEnrichPosition, getBNBUserPositions, getBNBMarketInvestment]
-  )
-
-  const handleOpenOrderDialog = useCallback((market: EnhancedUserPosition, type: 'stopLoss' | 'takeProfit') => {
-    setSelectedMarket(market)
-    setOrderType(type)
-    setOrderDialogOpen(true)
-    setTokenAmount('')
-    setTriggerPrice('')
-  }, [])
-
-  // ✅ FIX: Create order with BNB hook only
-  const handleCreateOrder = useCallback(async () => {
-    if (!selectedMarket || !tokenAmount || !triggerPrice) return
-
+  // Get user PDX positions
+  const getUserPDXPositions = useCallback(async (address: string): Promise<any[]> => {
     try {
-      // ✅ FIX: Keep marketId as number (don't convert to string)
-      const params = {
-        marketId: selectedMarket.marketId,  // ✅ Already a number
-        isYes: tokenType === 'yes',
-        tokenAmount: tokenAmount,
-        triggerPrice: parseFloat(triggerPrice)
-      }
+      const { pdxHelperContract } = getReadOnlyContracts()
+      const positions = await pdxHelperContract.getUserPositions(address)
+      const formattedPositions = []
 
-      const result = orderType === 'stopLoss'
-        ? await bnbOrders.createStopLossOrder(params)
-        : await bnbOrders.createTakeProfitOrder(params)
-
-      if (result?.success || result) {
-        setOrderDialogOpen(false)
-        if (bnbOrders.refreshOrders) {
-          await bnbOrders.refreshOrders()
+      for (const pos of positions) {
+        try {
+          const market = await getPDXMarket(Number(pos.marketId))
+          if (market) {
+            formattedPositions.push({
+              market,
+              yesBalance: ethers.formatEther(pos.yesBalance),
+              noBalance: ethers.formatEther(pos.noBalance),
+              pdxInvested: ethers.formatEther(pos.totalInvested),
+              paymentToken: "PDX"
+            })
+          }
+        } catch (error) {
+          console.warn(`Error processing PDX position for market ${pos.marketId}:`, error)
         }
       }
+
+      return formattedPositions
     } catch (error) {
-      console.error("Failed to create order:", error)
+      console.error(`Error fetching PDX positions for ${address}:`, error)
+      return []
     }
-  }, [selectedMarket, tokenAmount, triggerPrice, orderType, tokenType, bnbOrders])
+  }, [getReadOnlyContracts, getPDXMarket])
 
-  const handleOpenSellDialog = useCallback((market: EnhancedUserPosition, type: 'yes' | 'no') => {
-    setSelectedSellMarket(market)
-    setSellTokenType(type)
-    setSellDialogOpen(true)
-    setSellTokenAmount('')
-    setMinOut('')
-    setEstimateAmount('')
-  }, [])
-
-  // ✅ Handle sell tokens with BNB only
-  const handleSellTokens = useCallback(async () => {
-    if (!selectedSellMarket || !sellTokenAmount || !minOut) return
-
+  // Get total investment
+  const getTotalInvestment = useCallback(async (address: string): Promise<{bnb: string, pdx: string}> => {
     try {
-      await sellTokens({
-        marketId: selectedSellMarket.marketId,
-        tokenAmount: sellTokenAmount,
-        minTokenOut: minOut,
-        isYes: sellTokenType === 'yes',
-        paymentToken: "BNB"
-      })
+      const { bnbHelperContract, pdxHelperContract } = getReadOnlyContracts()
+      
+      const bnbInvestment = await bnbHelperContract.getUserTotalInvestment(address)
+      const pdxInvestment = await pdxHelperContract.getUserTotalInvestment(address)
+      
+      return {
+        bnb: ethers.formatEther(bnbInvestment),
+        pdx: ethers.formatEther(pdxInvestment)
+      }
+    } catch (error) {
+      console.error(`Error fetching total investment for ${address}:`, error)
+      return { bnb: "0", pdx: "0" }
+    }
+  }, [getReadOnlyContracts])
 
-      // Refresh positions after successful sale
-      if (account) {
-        const bnbPositions = await getBNBUserPositions(account).catch(() => [])
-        const allPositions = [
-          ...bnbPositions.map((pos: any) => ({ ...pos, paymentToken: "BNB" as const }))
-        ]
+  // Calculate user stats
+  const calculateUserStats = useCallback(async (address: string): Promise<UserStats> => {
+    try {
+      const bnbPositions = await getUserBNBPositions(address)
+      const pdxPositions = await getUserPDXPositions(address)
+      const allPositions = [...bnbPositions, ...pdxPositions]
+      
+      const investments = await getTotalInvestment(address)
+      
+      let totalVolume = 0
+      let currentPortfolioValue = 0
+      let unrealizedPnl = 0
+      let activePositions = 0
+      const categoryCount: { [key: string]: number } = {}
 
-        const enrichedPositions = await Promise.all(
-          allPositions.map(pos => fetchAndEnrichPosition(pos))
-        )
-        setPositions(enrichedPositions)
+      for (const position of allPositions) {
+        const prices = calculatePrices(position.market.yesPool, position.market.noPool)
+        const yesValue = parseFloat(position.yesBalance) * prices.yesPrice / 100
+        const noValue = parseFloat(position.noBalance) * prices.noPrice / 100
+        const positionValue = yesValue + noValue
+        
+        const invested = parseFloat(position.bnbInvested || position.pdxInvested || "0")
+        
+        totalVolume += invested
+        currentPortfolioValue += positionValue
+        
+        const positionPnl = positionValue - invested
+        if (positionPnl > 0) {
+          unrealizedPnl += positionPnl
+        }
+
+        if (isMarketActive(position.market.status, position.market.endTime)) {
+          activePositions++
+        }
+
+        const category = position.market.category || "General"
+        categoryCount[category] = (categoryCount[category] || 0) + 1
       }
 
-      setSellDialogOpen(false)
+      const favoriteCategory = Object.entries(categoryCount)
+        .sort(([,a], [,b]) => b - a)[0]?.[0] || "General"
+
+      const totalPnl = unrealizedPnl
+
+      const stats: UserStats = {
+        address,
+        totalMarketsTraded: allPositions.length,
+        totalVolume,
+        currentPortfolioValue,
+        realizedPnl: 0,
+        unrealizedPnl,
+        totalPnl,
+        winningMarkets: 0,
+        activePositions,
+        favoriteCategory,
+        totalInvestment: (parseFloat(investments.bnb) + parseFloat(investments.pdx)).toFixed(4),
+        bnbInvestment: investments.bnb,
+        pdxInvestment: investments.pdx
+      }
+
+      return stats
+
     } catch (error) {
-      console.error("Failed to sell tokens:", error)
+      console.error(`Error calculating stats for ${address}:`, error)
+      return {
+        address,
+        totalMarketsTraded: 0,
+        totalVolume: 0,
+        currentPortfolioValue: 0,
+        realizedPnl: 0,
+        unrealizedPnl: 0,
+        totalPnl: 0,
+        winningMarkets: 0,
+        activePositions: 0,
+        favoriteCategory: "General",
+        totalInvestment: "0",
+        bnbInvestment: "0",
+        pdxInvestment: "0"
+      }
     }
-  }, [selectedSellMarket, sellTokenAmount, minOut, sellTokenType, sellTokens, account, getBNBUserPositions, fetchAndEnrichPosition])
+  }, [getUserBNBPositions, getUserPDXPositions, getTotalInvestment])
 
-  const handleSellAmountChange = useCallback((value: string) => {
-    setSellTokenAmount(value)
-    setEstimateAmount(value)
-  }, [])
+  const fetchUserMarketPositions = useCallback(async (address: string): Promise<MarketPosition[]> => {
+    try {
+      const bnbPositions = await getUserBNBPositions(address)
+      const pdxPositions = await getUserPDXPositions(address)
+      const allPositions = [...bnbPositions, ...pdxPositions]
+      
+      return allPositions.map(position => {
+        const prices = calculatePrices(position.market.yesPool, position.market.noPool)
+        
+        return {
+          marketId: position.market.id,
+          question: position.market.question,
+          category: position.market.category || "General",
+          yesTokens: parseFloat(position.yesBalance),
+          noTokens: parseFloat(position.noBalance),
+          currentValue: parseFloat(position.yesBalance) * prices.yesPrice / 100 + 
+                       parseFloat(position.noBalance) * prices.noPrice / 100,
+          investedAmount: parseFloat(position.bnbInvested || position.pdxInvested || "0"),
+          potentialPnl: (parseFloat(position.yesBalance) * prices.yesPrice / 100 + 
+                        parseFloat(position.noBalance) * prices.noPrice / 100) - 
+                       parseFloat(position.bnbInvested || position.pdxInvested || "0"),
+          status: getMarketStatusText(position.market.status, position.market.endTime),
+          marketStatus: position.market.status,
+          endTime: position.market.endTime,
+          yesPrice: prices.yesPrice,
+          noPrice: prices.noPrice,
+          paymentToken: position.paymentToken
+        }
+      })
 
-  const totalInvestment = Object.values(marketInvestments).reduce((acc, val) => acc + parseFloat(val || "0"), 0)
-  const totalMarkets = positions.length
-  const activeMarkets = positions.filter(pos => getMarketStatus(pos.market).isActive).length
-  const resolvedMarkets = positions.filter(pos => getMarketStatus(pos.market).isResolved).length
-  const inactiveMarkets = positions.filter(pos => !getMarketStatus(pos.market).isActive).length
-
-  const copyToClipboard = useCallback((text: string) => { 
-    navigator.clipboard.writeText(text) 
-  }, [])
-
-  const getBlockExplorerUrl = useCallback((address: string) => `https://testnet.bscscan.com/address/${address}`, [])
-
-  const getPredictedOutcome = useCallback((yesPrice: number, noPrice: number): { outcomeText: string; confidence: number } => {
-    if (yesPrice > noPrice) {
-      return { outcomeText: "YES more likely", confidence: yesPrice / 100 }
-    } else if (noPrice > yesPrice) {
-      return { outcomeText: "NO more likely", confidence: noPrice / 100 }
+    } catch (error) {
+      console.error(`Error fetching positions for ${address}:`, error)
+      return []
     }
-    return { outcomeText: "Even odds", confidence: 50 }
-  }, [])
+  }, [getUserBNBPositions, getUserPDXPositions])
 
-  const hasWinningTokens = useCallback((position: EnhancedUserPosition): boolean => {
-    const market = position.market
-    const marketStatus = getMarketStatus(market)
-    
-    if (!marketStatus.isResolved) {
-      return false
+  // Main data fetching
+  const fetchUserData = useCallback(async () => {
+    if (!canFetchData || !account) {
+      return
     }
-    
-    const yesBalance = parseFloat(position.yesBalance || "0")
-    const noBalance = parseFloat(position.noBalance || "0")
-    
-    if (market.outcome === Outcome.Yes && yesBalance > 0.0001) {
-      return true
-    }
-    
-    if (market.outcome === Outcome.No && noBalance > 0.0001) {
-      return true
-    }
-    
-    return false
-  }, [])
 
-  const calculatePotentialWinnings = useCallback((position: EnhancedUserPosition): string => {
-    const market = position.market
-    const marketStatus = getMarketStatus(market)
+    setIsLoading(true)
+    setError(null)
     
-    if (!marketStatus.isResolved) {
-      return "0"
-    }
-    
-    const yesBalance = parseFloat(position.yesBalance || "0")
-    const noBalance = parseFloat(position.noBalance || "0")
-    
-    if (market.outcome === Outcome.Yes && yesBalance > 0) {
-      return yesBalance.toFixed(4)
-    } else if (market.outcome === Outcome.No && noBalance > 0) {
-      return noBalance.toFixed(4)
-    }
-    
-    return "0"
-  }, [])
+    try {
+      console.log(`🚀 Fetching data for wallet: ${account}`)
+      
+      const stats = await calculateUserStats(account)
+      setUserStats(stats)
 
-  const totalWinnings = positions.reduce((total, position) => {
-    if (hasWinningTokens(position)) {
-      const winnings = parseFloat(calculatePotentialWinnings(position) || "0")
-      return total + winnings
+      const positions = await fetchUserMarketPositions(account)
+      setUserPositions(positions)
+
+      console.log("🎉 User data loaded successfully")
+
+    } catch (err: any) {
+      console.error("❌ Error fetching user data:", err)
+      setError(err.message || 'Failed to load user data from blockchain')
+      setUserStats(null)
+      setUserPositions([])
+    } finally {
+      setIsLoading(false)
     }
-    return total
-  }, 0)
+  }, [canFetchData, account, calculateUserStats, fetchUserMarketPositions])
 
-  if (!account) {
-    return (
-      <main className="min-h-screen bg-background relative overflow-hidden">
-        <div className="fixed inset-0 z-0">
-          <LightRays
-            raysOrigin="top-center"
-            raysColor="#6366f1"
-            raysSpeed={1.5}
-            lightSpread={0.8}
-            rayLength={1.2}
-            followMouse={true}
-            mouseInfluence={0.1}
-            noiseAmount={0.1}
-            distortion={0.05}
-          />
-        </div>
+  useEffect(() => {
+    if (canFetchData) {
+      fetchUserData()
+    } else {
+      setUserStats(null)
+      setUserPositions([])
+      setError(null)
+    }
+  }, [canFetchData, fetchUserData])
 
-        <div className="relative z-10 bg-black/80 min-h-screen">
-          <Header />
-          <div className="max-w-4xl mx-auto px-4 py-12 text-center">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-muted flex items-center justify-center backdrop-blur-sm bg-card/80">
-              <Wallet className="w-10 h-10 text-muted-foreground" />
-            </div>
-            <h1 className="text-3xl font-bold mb-4">Your Portfolio</h1>
-            <p className="text-muted-foreground mb-6">Connect your wallet to view your trading positions and portfolio</p>
-            <Button onClick={connectWallet} variant="outline" size="lg" className="backdrop-blur-sm bg-card/80">Connect Wallet</Button>
-          </div>
-        </div>
-      </main>
-    )
+  const refreshData = useCallback(async () => {
+    await fetchUserData()
+  }, [fetchUserData])
+
+  // ==================== SELL TOKEN HANDLERS ====================
+  
+  const handleSellTokens = (position: MarketPosition, tokenType: "YES" | "NO") => {
+    setSelectedPosition(position)
+    setSellTokenType(tokenType)
+    const maxAmount = tokenType === "YES" ? position.yesTokens : position.noTokens
+    setSellAmount(maxAmount.toString())
+    setMinReceive("")
+    setShowSellModal(true)
+  }
+
+  const executeSellTokens = async () => {
+    if (!selectedPosition || !sellAmount || !minReceive) {
+      setError("Please fill in all fields")
+      return
+    }
+
+    setActionLoading(`sell-${selectedPosition.marketId}-${sellTokenType}`)
+    setError(null)
+
+    try {
+      // You'll need to import your BNB/PDX hooks here
+      // For now, showing the structure
+      console.log(`Selling ${sellAmount} ${sellTokenType} tokens from market ${selectedPosition.marketId}`)
+      console.log(`Minimum to receive: ${minReceive} ${selectedPosition.paymentToken}`)
+      
+      // TODO: Call actual contract function based on paymentToken
+      // if (selectedPosition.paymentToken === "BNB") {
+      //   if (sellTokenType === "YES") {
+      //     await bnbHook.sellYesForBNB(selectedPosition.marketId, sellAmount, minReceive)
+      //   } else {
+      //     await bnbHook.sellNoForBNB(selectedPosition.marketId, sellAmount, minReceive)
+      //   }
+      // } else {
+      //   if (sellTokenType === "YES") {
+      //     await pdxHook.sellYesForPDX(selectedPosition.marketId, sellAmount, minReceive)
+      //   } else {
+      //     await pdxHook.sellNoForPDX(selectedPosition.marketId, sellAmount, minReceive)
+      //   }
+      // }
+
+      setShowSellModal(false)
+      await refreshData()
+      
+    } catch (err: any) {
+      console.error("Error selling tokens:", err)
+      setError(err.message || "Failed to sell tokens")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // ==================== STOP LOSS HANDLERS ====================
+  
+  const handleSetStopLoss = (position: MarketPosition) => {
+    setSelectedPosition(position)
+    setStopLossPrice("")
+    setShowStopLossModal(true)
+  }
+
+  const executeSetStopLoss = async () => {
+    if (!selectedPosition || !stopLossPrice) {
+      setError("Please enter a stop loss price")
+      return
+    }
+
+    setActionLoading(`stoploss-${selectedPosition.marketId}`)
+    setError(null)
+
+    try {
+      console.log(`Setting stop loss for market ${selectedPosition.marketId} at price ${stopLossPrice}`)
+      
+      // TODO: Call actual contract function
+      // Determine which token has more value
+      // const isYes = selectedPosition.yesTokens > selectedPosition.noTokens
+      // const tokenAmount = isYes ? selectedPosition.yesTokens : selectedPosition.noTokens
+      // 
+      // if (selectedPosition.paymentToken === "BNB") {
+      //   await bnbHook.createStopLossOrder(
+      //     selectedPosition.marketId,
+      //     isYes,
+      //     tokenAmount.toString(),
+      //     parseFloat(stopLossPrice)
+      //   )
+      // } else {
+      //   await pdxHook.createStopLossOrder(
+      //     selectedPosition.marketId,
+      //     isYes,
+      //     tokenAmount.toString(),
+      //     parseFloat(stopLossPrice)
+      //   )
+      // }
+
+      setShowStopLossModal(false)
+      await refreshData()
+      
+    } catch (err: any) {
+      console.error("Error setting stop loss:", err)
+      setError(err.message || "Failed to set stop loss")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // ==================== TAKE PROFIT HANDLERS ====================
+  
+  const handleSetTakeProfit = (position: MarketPosition) => {
+    setSelectedPosition(position)
+    setTakeProfitPrice("")
+    setShowTakeProfitModal(true)
+  }
+
+  const executeSetTakeProfit = async () => {
+    if (!selectedPosition || !takeProfitPrice) {
+      setError("Please enter a take profit price")
+      return
+    }
+
+    setActionLoading(`takeprofit-${selectedPosition.marketId}`)
+    setError(null)
+
+    try {
+      console.log(`Setting take profit for market ${selectedPosition.marketId} at price ${takeProfitPrice}`)
+      
+      // TODO: Call actual contract function
+      // Determine which token has more value
+      // const isYes = selectedPosition.yesTokens > selectedPosition.noTokens
+      // const tokenAmount = isYes ? selectedPosition.yesTokens : selectedPosition.noTokens
+      // 
+      // if (selectedPosition.paymentToken === "BNB") {
+      //   await bnbHook.createTakeProfitOrder(
+      //     selectedPosition.marketId,
+      //     isYes,
+      //     tokenAmount.toString(),
+      //     parseFloat(takeProfitPrice)
+      //   )
+      // } else {
+      //   await pdxHook.createTakeProfitOrder(
+      //     selectedPosition.marketId,
+      //     isYes,
+      //     tokenAmount.toString(),
+      //     parseFloat(takeProfitPrice)
+      //   )
+      // }
+
+      setShowTakeProfitModal(false)
+      await refreshData()
+      
+    } catch (err: any) {
+      console.error("Error setting take profit:", err)
+      setError(err.message || "Failed to set take profit")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const formatAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
   return (
@@ -614,698 +681,626 @@ export default function ProfilePage() {
         />
       </div>
 
-      <div className="relative z-10 bg-black/80 min-h-screen">
+      <div className="relative z-10 bg-black/80">
         <Header />
-        <div className="max-w-6xl mx-auto px-4 py-8 ">
-          <div className="mb-8 mt-[10vh]">
-            <h1 className="text-3xl font-bold mb-2">Your Portfolio</h1>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 mt-[10vh]">
+            <div className="flex items-center mb-4 md:mb-0">
+              <Button
+                variant="ghost"
+                onClick={() => router.push("/")}
+                className="mr-4 backdrop-blur-sm bg-card/80"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
               <div>
-                <p className="text-muted-foreground mb-2 backdrop-blur-sm bg-card/80 p-2 rounded-lg inline-block">
-                  Connected: {account.slice(0, 6)}...{account.slice(-4)}
+                <h1 className="text-3xl md:text-4xl font-bold mb-2">My Profile</h1>
+                <p className="text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg inline-block">
+                  Your trading stats and positions across BNB & PDX markets
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {bnbContractAddress && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg">
-                      <span>BNB Contract: {bnbContractAddress.slice(0, 8)}...{bnbContractAddress.slice(-6)}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 hover:bg-muted"
-                        onClick={() => copyToClipboard(bnbContractAddress)}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 hover:bg-muted"
-                        onClick={() => window.open(getBlockExplorerUrl(bnbContractAddress), '_blank')}
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
               </div>
-              <Card className="p-4 bg-primary/5 border-primary/20 backdrop-blur-sm bg-card/80">
-                <div className="flex items-center gap-2">
-                  <Coins className="w-5 h-5 text-primary" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Investment</p>
-                    <p className="text-xl font-bold">
-                      {isLoading ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        `${totalInvestment.toFixed(4)} BNB`
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </Card>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={refreshData}
+                disabled={isLoading || !canFetchData}
+                variant="outline"
+                className="whitespace-nowrap backdrop-blur-sm bg-card/80"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  "Refresh Data"
+                )}
+              </Button>
             </div>
           </div>
 
-          {positions.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Coins className="w-5 h-5 text-green-500" />
-                  <span className="text-2xl font-bold">{totalInvestment.toFixed(4)}</span>
+          {/* Wallet Connection Status */}
+          {!isConnected && (
+            <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-950 border border-yellow-300 dark:border-yellow-700 rounded-lg backdrop-blur-sm bg-card/80">
+              <div className="flex items-center gap-3">
+                <Wallet className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                <div>
+                  <h3 className="text-yellow-800 dark:text-yellow-300 font-semibold">Wallet Not Connected</h3>
+                  <p className="text-yellow-700 dark:text-yellow-400 text-sm mt-1">
+                    Please connect your wallet to view your profile and trading statistics
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground">Total Investment</p>
-              </Card>
-              <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="text-2xl font-bold mb-2">{totalMarkets}</div>
-                <p className="text-sm text-muted-foreground">Markets Traded</p>
-              </Card>
-              <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="text-2xl font-bold mb-2">{activeMarkets}</div>
-                <p className="text-sm text-muted-foreground">Active Positions</p>
-              </Card>
-              <Card className="p-4 text-center overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50">
-                <div className="text-2xl font-bold mb-2">{resolvedMarkets}</div>
-                <p className="text-sm text-muted-foreground">Resolved</p>
-              </Card>
+              </div>
             </div>
           )}
 
-          {totalWinnings > 0 && (
-            <Card className="mb-6 p-4 bg-gradient-to-r from-green-500 to-emerald-600 border-green-400 backdrop-blur-sm">
+          {isConnected && !isCorrectNetwork && (
+            <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-950 border border-orange-300 dark:border-orange-700 rounded-lg backdrop-blur-sm bg-card/80">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                <div>
+                  <h3 className="text-orange-800 dark:text-orange-300 font-semibold">Wrong Network</h3>
+                  <p className="text-orange-700 dark:text-orange-400 text-sm mt-1">
+                    Please switch to BSC Testnet (Chain ID: 97) to view your profile data
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-700 rounded-lg backdrop-blur-sm bg-card/80">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="w-6 h-6 text-white" />
-                  <div>
-                    <p className="text-white font-semibold">Total Winnings Available</p>
-                    <p className="text-white text-lg font-bold">{totalWinnings.toFixed(4)} BNB</p>
+                <div>
+                  <h3 className="text-red-800 dark:text-red-300 font-semibold">Error Loading Data</h3>
+                  <p className="text-red-700 dark:text-red-400 text-sm mt-1">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {canFetchData && account && (
+            <>
+              {/* User Address Card */}
+              <Card className="mb-6 backdrop-blur-sm bg-card/80">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Wallet className="h-8 w-8 text-primary" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Connected Wallet</p>
+                        <p className="text-lg font-mono font-semibold">{formatAddress(account)}</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => window.open(`https://testnet.bscscan.com/address/${account}`, '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Stats Grid */}
+              {isLoading ? (
+                <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">
+                    Loading your profile data...
+                  </span>
                 </div>
-                <div className="text-white text-sm">
-                  Ready to claim from {positions.filter(pos => hasWinningTokens(pos)).length} market(s)
-                </div>
-              </div>
-            </Card>
-          )}
+              ) : userStats ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                    <Card className="backdrop-blur-sm bg-card/80 hover:border-white/50">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Markets Traded</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center">
+                          <BarChart3 className="w-8 h-8 text-primary mr-2" />
+                          <div className="text-2xl font-bold">{userStats.totalMarketsTraded}</div>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {userStats.activePositions} active positions
+                        </div>
+                      </CardContent>
+                    </Card>
 
-          {!isLoading && positions.length === 0 && (
-            <Card className="p-12 text-center backdrop-blur-sm bg-card/80 bg-black/10">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                <BarChart3 className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">No positions yet</h3>
-              <p className="text-muted-foreground mb-6">You haven't traded in any prediction markets yet. Start trading to build your portfolio!</p>
-              <div className="flex gap-4 justify-center">
-                <Link href="/">
-                  <Button className="backdrop-blur-sm bg-card/80">Browse Markets</Button>
-                </Link>
-                <Link href="/markets">
-                  <Button variant="outline" className="backdrop-blur-sm bg-card/80">View All Markets</Button>
-                </Link>
-              </div>
-            </Card>
-          )}
+                    <Card className="backdrop-blur-sm bg-card/80 hover:border-white/50">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Total Investment</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center">
+                          <TrendingUp className="w-8 h-8 text-primary mr-2" />
+                          <div className="text-2xl font-bold">{userStats.totalInvestment}</div>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          🔶 {parseFloat(userStats.bnbInvestment).toFixed(4)} BNB • 
+                          💎 {parseFloat(userStats.pdxInvestment).toFixed(4)} PDX
+                        </div>
+                      </CardContent>
+                    </Card>
 
-          {!isLoading && positions.length > 0 && (
-            <div className="grid gap-6">
-              {positions.map((position, index) => {
-                const investmentStr = marketInvestments[position.marketId] || "0"
-                const investment = parseFloat(investmentStr)
-                const odds = marketOdds[position.marketId] || { yesPrice: 5000, noPrice: 5000 }
-                const predicted = getPredictedOutcome(odds.yesPrice, odds.noPrice)
-                const market = position.market
-                const marketStatus = getMarketStatus(market)
-                const hasWinnings = hasWinningTokens(position)
-                const potentialWinnings = calculatePotentialWinnings(position)
-                const statusInfo = getMarketStatusInfo(market)
-                
-                // ✅ FIXED: Get active orders with proper typing
-                const marketOrders: OrderInfo[] = getActiveOrdersForMarket(market.id)
-                
-                const marketPaymentToken = "BNB"
-
-                const yesBalance = parseFloat(position.yesBalance || "0")
-                const noBalance = parseFloat(position.noBalance || "0")
-                const hasSellableTokens = (yesBalance > 0 || noBalance > 0) && marketStatus.isActive
-
-                return (
-                  <Card key={index} className={`p-6 hover:shadow-lg transition-shadow backdrop-blur-sm bg-card/80 ${
-                    !marketStatus.isActive ? 'opacity-70 border-gray-400' : 'border-2'
-                  }`}>
-                    {!marketStatus.isActive && (
-                      <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm text-gray-700">This market is no longer active for trading</span>
-                      </div>
-                    )}
-
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <Link href={`/market/${market.id}`}>
-                            <h3 className={`text-lg font-semibold hover:text-primary transition-colors cursor-pointer line-clamp-2 ${
-                              !marketStatus.isActive ? 'text-gray-600' : ''
-                            }`}>
-                              {market.question}
-                              {!marketStatus.isActive && (
-                                <span className="ml-2 text-xs text-gray-500">(Inactive)</span>
-                              )}
-                            </h3>
-                          </Link>
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color} backdrop-blur-sm`}>
-                              {statusInfo.label}
-                            </span>
-                            <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-500 text-white backdrop-blur-sm">
-                              BNB
-                            </span>
+                    <Card className="backdrop-blur-sm bg-card/80 hover:border-white/50">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center">
+                          <Trophy className="w-8 h-8 text-primary mr-2" />
+                          <div className="text-2xl font-bold">
+                            ${userStats.currentPortfolioValue.toFixed(2)}
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                          <span>Market ID: {market.id}</span>
-                          <span>Category: {market.category || "General"}</span>
-                          <span>Token: BNB</span>
-                          {marketStatus.isResolved && (
-                            <span className="font-medium">
-                              Outcome: {(() => {
-                                switch (market.outcome as Outcome) {
-                                  case Outcome.Yes: return "YES Won"
-                                  case Outcome.No: return "NO Won"
-                                  default: return "Pending"
-                                }
-                              })()}
-                            </span>
-                          )}
-                          {!marketStatus.isActive && (
-                            <span className="text-gray-500">• Inactive</span>
-                          )}
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Current value
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">{statusInfo.description}</p>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
 
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
-                      }`}>
-                        <p className="text-xs text-muted-foreground mb-1">BNB Invested</p>
-                        <p className={`text-lg font-bold flex items-center gap-1 ${
-                          marketStatus.isActive ? 'text-primary' : 'text-gray-600'
-                        }`}>
-                          <Coins className="w-4 h-4" />{investment.toFixed(4)}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">Total in this market</p>
-                      </div>
-                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
-                      }`}>
-                        <p className="text-xs text-muted-foreground mb-1">YES Tokens</p>
-                        <p className={`text-lg font-bold flex items-center gap-1 ${
-                          marketStatus.isActive ? 'text-green-600' : 'text-gray-600'
-                        }`}>
-                          {yesBalance.toFixed(4)}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          ≈ {(yesBalance * (odds.yesPrice || 50) / 100).toFixed(4)} BNB
-                        </p>
-                      </div>
-                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
-                      }`}>
-                        <p className="text-xs text-muted-foreground mb-1">NO Tokens</p>
-                        <p className={`text-lg font-bold flex items-center gap-1 ${
-                          marketStatus.isActive ? 'text-red-600' : 'text-gray-600'
-                        }`}>
-                          {noBalance.toFixed(4)}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          ≈ {(noBalance * (odds.noPrice || 50) / 100).toFixed(4)} BNB
-                        </p>
-                      </div>
-                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
-                      }`}>
-                        <p className="text-xs text-muted-foreground mb-1">Predicted Outcome</p>
-                        <p className={`text-lg font-bold ${
-                          marketStatus.isActive ? 'text-blue-600' : 'text-gray-600'
-                        }`}>
-                          {predicted.outcomeText}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{predicted.confidence.toFixed(2)}% confidence</p>
-                      </div>
-                      <div className={`rounded-lg p-3 border backdrop-blur-sm ${
-                        marketStatus.isActive ? 'bg-primary/10 border-primary/20' : 'bg-primary/10 border-primary/20'
-                      }`}>
-                        <p className="text-xs text-muted-foreground mb-1">Current Odds</p>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className={marketStatus.isActive ? "text-green-600" : "text-gray-600"}>YES:</span>
-                            <span className="font-medium">{(odds.yesPrice / 100).toFixed(1)}%</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className={marketStatus.isActive ? "text-red-600" : "text-gray-600"}>NO:</span>
-                            <span className="font-medium">{(odds.noPrice / 100).toFixed(1)}%</span>
+                    <Card className="backdrop-blur-sm bg-card/80 hover:border-white/50">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Total P&L</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center">
+                          <Medal className="w-8 h-8 text-primary mr-2" />
+                          <div className={`text-2xl font-bold ${
+                            userStats.totalPnl >= 0 ? "text-green-600" : "text-red-600"
+                          }`}>
+                            {userStats.totalPnl >= 0 ? "+" : ""}${userStats.totalPnl.toFixed(2)}
                           </div>
                         </div>
-                      </div>
-                    </div>
-
-                    {/* ✅ FIXED: Active Orders Section with proper typing */}
-                    {marketOrders && marketOrders.length > 0 && (
-                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Shield className="w-4 h-4 text-blue-600" />
-                          <span className="text-sm font-medium text-blue-800">
-                            {marketOrders.length} Active Order{marketOrders.length > 1 ? 's' : ''}
-                          </span>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Unrealized P&L
                         </div>
-                        <div className="space-y-1">
-                          {/* ✅ FIXED: Add explicit type annotation to order */}
-                          {marketOrders.map((order: OrderInfo) => (
-                            <div key={order.orderId} className="text-xs text-blue-700 flex items-center justify-between">
-                              <span>
-                                {order.orderType === 'StopLoss' ? '🛡️ Stop Loss' : '🎯 Take Profit'} - 
-                                {order.isYes ? ' YES' : ' NO'} @ {(Number(order.stopLossPrice || order.takeProfitPrice) / 100).toFixed(1)}%
-                              </span>
-                              <span className="text-blue-600">{parseFloat(order.tokenAmount).toFixed(4)} tokens</span>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Additional Stats */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <Card className="backdrop-blur-sm bg-card/80">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Total Volume</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-xl font-bold">
+                          ${userStats.totalVolume.toFixed(2)}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="backdrop-blur-sm bg-card/80">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Favorite Category</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <Badge variant="outline" className="text-base">
+                          {userStats.favoriteCategory}
+                        </Badge>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="backdrop-blur-sm bg-card/80">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Unrealized P&L</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className={`text-xl font-bold ${
+                          userStats.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
+                        }`}>
+                          {userStats.unrealizedPnl >= 0 ? "+" : ""}${userStats.unrealizedPnl.toFixed(2)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Positions List */}
+                  {userPositions.length > 0 ? (
+                    <Card className="backdrop-blur-sm bg-card/80 hover:shadow-blue-500/50">
+                      <CardHeader>
+                        <CardTitle>Your Positions</CardTitle>
+                        <CardDescription>
+                          All your active and resolved positions across BNB & PDX markets
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {userPositions.map((position, index) => (
+                            <div
+                              key={`${position.marketId}-${position.paymentToken}-${index}`}
+                              className="p-4 rounded-lg border backdrop-blur-sm bg-card/60"
+                            >
+                              <div className="flex flex-col md:flex-row justify-between gap-4">
+                                <div className="flex-1">
+                                  <div className="flex items-start gap-2 mb-2">
+                                    <div className="flex-1">
+                                      <h3 className="font-semibold text-base mb-2">{position.question}</h3>
+                                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                                        <Badge variant="secondary" className="backdrop-blur-sm">
+                                          {position.category}
+                                        </Badge>
+                                        <Badge 
+                                          variant="secondary" 
+                                          className="backdrop-blur-sm"
+                                        >
+                                          {position.paymentToken === "BNB" ? "🔶 BNB" : "💎 PDX"}
+                                        </Badge>
+                                        <Badge 
+                                          variant={position.status === "Active" ? "default" : "secondary"}
+                                          className="backdrop-blur-sm"
+                                        >
+                                          {position.status}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
+                                    <div>
+                                      <span className="text-muted-foreground">YES Tokens:</span>
+                                      <div className="font-medium">{position.yesTokens.toFixed(4)}</div>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">NO Tokens:</span>
+                                      <div className="font-medium">{position.noTokens.toFixed(4)}</div>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">YES Price:</span>
+                                      <div className="font-medium text-green-600">
+                                        {position.yesPrice.toFixed(1)}%
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">NO Price:</span>
+                                      <div className="font-medium text-red-600">
+                                        {position.noPrice.toFixed(1)}%
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="text-right md:min-w-[180px]">
+                                  <div className="mb-2">
+                                    <span className="text-sm text-muted-foreground">Invested</span>
+                                    <div className="text-lg font-bold">
+                                      ${position.investedAmount.toFixed(2)}
+                                    </div>
+                                  </div>
+                                  <div className="mb-2">
+                                    <span className="text-sm text-muted-foreground">Current Value</span>
+                                    <div className="text-lg font-bold">
+                                      ${position.currentValue.toFixed(2)}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="text-sm text-muted-foreground">P&L</span>
+                                    <div className={`text-xl font-bold ${
+                                      position.potentialPnl >= 0 ? "text-green-600" : "text-red-600"
+                                    }`}>
+                                      {position.potentialPnl >= 0 ? "+" : ""}${position.potentialPnl.toFixed(2)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 pt-3 border-t border-muted flex flex-wrap gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => router.push(`/markets?id=${position.marketId}`)}
+                                  className="backdrop-blur-sm"
+                                >
+                                  View Market
+                                </Button>
+                                
+                                {position.yesTokens > 0 && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleSellTokens(position, "YES")}
+                                    className="backdrop-blur-sm text-green-600 border-green-600 hover:bg-green-600/10"
+                                  >
+                                    Sell YES ({position.yesTokens.toFixed(4)})
+                                  </Button>
+                                )}
+                                
+                                {position.noTokens > 0 && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleSellTokens(position, "NO")}
+                                    className="backdrop-blur-sm text-red-600 border-red-600 hover:bg-red-600/10"
+                                  >
+                                    Sell NO ({position.noTokens.toFixed(4)})
+                                  </Button>
+                                )}
+                                
+                                {position.status === "Active" && (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleSetStopLoss(position)}
+                                      className="backdrop-blur-sm"
+                                    >
+                                      Set Stop Loss
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleSetTakeProfit(position)}
+                                      className="backdrop-blur-sm"
+                                    >
+                                      Set Take Profit
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
-
-                    {marketStatus.isResolved && hasWinnings && (
-                      <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <CheckCircle className="w-5 h-5 text-green-600" />
-                            <div>
-                              <p className="text-sm font-medium text-green-800">Winnings Available</p>
-                              <p className="text-lg font-bold text-green-600">
-                                {potentialWinnings} BNB
-                              </p>
-                              <p className="text-xs text-green-600">
-                                {market.outcome === Outcome.Yes ? 'YES' : 'NO'} tokens can be redeemed for BNB
-                              </p>
-                            </div>
-                          </div>
-                          <Button 
-                            size="sm" 
-                            className="bg-green-600 hover:bg-green-700 backdrop-blur-sm flex items-center gap-2"
-                            onClick={() => handleRedeem(market.id)}
-                            disabled={redeemingMarketId === market.id.toString()}
-                          >
-                            {redeemingMarketId === market.id.toString() ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <CheckCircle className="w-4 h-4" />
-                            )}
-                            Claim {potentialWinnings} BNB
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {marketStatus.isResolved && !hasWinnings && (
-                      <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                          <p className="text-sm text-gray-600">
-                            Market resolved - {market.outcome === Outcome.Yes ? 'YES' : 'NO'} won. 
-                            {yesBalance > 0 || noBalance > 0 
-                              ? " You don't have winning tokens for this outcome." 
-                              : " You didn't participate in this market."}
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="backdrop-blur-sm bg-card/80">
+                      <CardContent className="py-12">
+                        <div className="text-center">
+                          <Trophy className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                          <h3 className="text-xl font-semibold mb-2">No Positions Yet</h3>
+                          <p className="text-muted-foreground mb-6">
+                            Start trading prediction markets to see your positions here!
                           </p>
+                          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            <Button onClick={() => router.push("/markets")} variant="outline" className="backdrop-blur-sm bg-card/80">
+                              View Markets
+                            </Button>
+                            <Button onClick={() => router.push("/markets")} className="backdrop-blur-sm bg-card/80">
+                              Start Trading
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-
-                    <div className="flex gap-3 flex-wrap">
-                      <Link href={`/market/${market.id}`}>
-                        <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">View Market</Button>
-                      </Link>
-                      
-                      {marketStatus.isActive && (
-                        <>
-                          <Link href={`/market/${market.id}?tab=trade`}>
-                            <Button variant="outline" size="sm" className="backdrop-blur-sm bg-card/80">Trade More</Button>
-                          </Link>
-                          
-                          {yesBalance > 0 && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="backdrop-blur-sm bg-card/80 text-blue-600 hover:text-blue-700 border-blue-300 hover:border-blue-400"
-                              onClick={() => handleOpenSellDialog(position, 'yes')}
-                            >
-                              <DollarSign className="w-4 h-4 mr-1" />
-                              Sell YES
-                            </Button>
-                          )}
-                          
-                          {noBalance > 0 && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="backdrop-blur-sm bg-card/80 text-blue-600 hover:text-blue-700 border-blue-300 hover:border-blue-400"
-                              onClick={() => handleOpenSellDialog(position, 'no')}
-                            >
-                              <DollarSign className="w-4 h-4 mr-1" />
-                              Sell NO
-                            </Button>
-                          )}
-                          
-                          {hasSellableTokens && (
-                            <>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="backdrop-blur-sm bg-card/80 text-orange-600 hover:text-orange-700 border-orange-300 hover:border-orange-400"
-                                onClick={() => handleOpenOrderDialog(position, 'stopLoss')}
-                              >
-                                <TrendingDown className="w-4 h-4 mr-1" />
-                                Stop Loss
-                              </Button>
-                              
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="backdrop-blur-sm bg-card/80 text-green-600 hover:text-green-700 border-green-300 hover:border-green-400"
-                                onClick={() => handleOpenOrderDialog(position, 'takeProfit')}
-                              >
-                                <TrendingUp className="w-4 h-4 mr-1" />
-                                Take Profit
-                              </Button>
-                            </>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              ) : null}
+            </>
           )}
 
-          {isLoading && (
-            <div className="flex justify-center py-12 backdrop-blur-sm bg-card/80 rounded-lg p-4">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Loading your portfolio...</span>
+          {!canFetchData && !isLoading && (
+            <Card className="backdrop-blur-sm bg-card/80">
+              <CardContent className="py-12">
+                <div className="text-center">
+                  <Wallet className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">Connect Your Wallet</h3>
+                  <p className="text-muted-foreground mb-6">
+                    {!isConnected 
+                      ? "Connect your wallet to view your trading profile and statistics"
+                      : "Switch to BSC Testnet to view your profile data"
+                    }
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {canFetchData && !isLoading && !error && (
+            <div className="mt-4 text-center text-sm text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg">
+              <p>Live data from GoPredix contracts on BSC Testnet</p>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Order Creation Dialog */}
-      <Dialog open={orderDialogOpen} onOpenChange={setOrderDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>
-              {orderType === 'stopLoss' ? 'Create Stop Loss Order' : 'Create Take Profit Order'}
-            </DialogTitle>
-            <DialogDescription>
-              {orderType === 'stopLoss' 
-                ? 'Automatically sell your tokens if the price drops below a certain level to limit losses.'
-                : 'Automatically sell your tokens when the price reaches your target to lock in profits.'
-              }
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {selectedMarket && (
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium mb-1">Market</p>
-                <p className="text-xs text-muted-foreground line-clamp-2">{selectedMarket.market.question}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Token: BNB
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Token Type</Label>
-              <RadioGroup value={tokenType} onValueChange={(value: 'yes' | 'no') => setTokenType(value)}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="yes" id="yes" />
-                  <Label htmlFor="yes" className="cursor-pointer">
-                    YES Tokens ({positions.find(p => p.marketId === selectedMarket?.marketId)?.yesBalance || '0'} available)
-                  </Label>
+        {/* Sell Tokens Modal */}
+        {showSellModal && selectedPosition && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setShowSellModal(false)} />
+            <Card className="relative w-full max-w-md backdrop-blur-sm bg-card/95">
+              <CardHeader>
+                <CardTitle>Sell {sellTokenType} Tokens</CardTitle>
+                <CardDescription>
+                  {selectedPosition.question}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Amount to Sell (Max: {sellTokenType === "YES" ? selectedPosition.yesTokens.toFixed(4) : selectedPosition.noTokens.toFixed(4)})
+                  </label>
+                  <input
+                    type="number"
+                    value={sellAmount}
+                    onChange={(e) => setSellAmount(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    placeholder="0.0"
+                    max={sellTokenType === "YES" ? selectedPosition.yesTokens : selectedPosition.noTokens}
+                  />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="no" id="no" />
-                  <Label htmlFor="no" className="cursor-pointer">
-                    NO Tokens ({positions.find(p => p.marketId === selectedMarket?.marketId)?.noBalance || '0'} available)
-                  </Label>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Minimum {selectedPosition.paymentToken} to Receive
+                  </label>
+                  <input
+                    type="number"
+                    value={minReceive}
+                    onChange={(e) => setMinReceive(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    placeholder="0.0"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Set slippage tolerance to protect against price changes
+                  </p>
                 </div>
-              </RadioGroup>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tokenAmount">Token Amount</Label>
-              <Input
-                id="tokenAmount"
-                type="number"
-                step="0.0001"
-                placeholder="0.0000"
-                value={tokenAmount}
-                onChange={(e) => setTokenAmount(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Enter the amount of tokens to include in this order
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="triggerPrice">
-                {orderType === 'stopLoss' ? 'Stop Loss Price (basis points)' : 'Take Profit Price (basis points)'}
-              </Label>
-              <Input
-                id="triggerPrice"
-                type="number"
-                placeholder={orderType === 'stopLoss' ? 'e.g., 4500 (45%)' : 'e.g., 15000 (150%)'}
-                value={triggerPrice}
-                onChange={(e) => setTriggerPrice(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {orderType === 'stopLoss' 
-                  ? 'Order executes when price drops to or below this level (10000 = 100%)'
-                  : 'Order executes when price rises to or above this level (10000 = 100%)'
-                }
-              </p>
-              <div className="text-xs text-muted-foreground space-y-1 mt-2">
-                <p>Examples:</p>
-                <p>• 4500 = 45% (stop loss at 45% of pool value)</p>
-                <p>• 15000 = 150% (take profit at 1.5x)</p>
-                <p>• 20000 = 200% (take profit at 2x)</p>
-              </div>
-            </div>
-
-            {selectedMarket && marketOdds[selectedMarket.marketId] && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-xs font-medium text-blue-800 mb-2">Current Market Prices</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">YES: </span>
-                    <span className="font-medium">{marketOdds[selectedMarket.marketId].yesPrice / 100}%</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">NO: </span>
-                    <span className="font-medium">{marketOdds[selectedMarket.marketId].noPrice / 100}%</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setOrderDialogOpen(false)}
-              disabled={bnbOrders.loading}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleCreateOrder}
-              disabled={bnbOrders.loading || !tokenAmount || !triggerPrice}
-            >
-              {bnbOrders.loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  {orderType === 'stopLoss' ? (
-                    <TrendingDown className="w-4 h-4 mr-2" />
-                  ) : (
-                    <TrendingUp className="w-4 h-4 mr-2" />
-                  )}
-                  Create Order
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Sell Tokens Dialog */}
-      <Dialog open={sellDialogOpen} onOpenChange={setSellDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>
-              Sell {sellTokenType === 'yes' ? 'YES' : 'NO'} Tokens
-            </DialogTitle>
-            <DialogDescription>
-              Sell your {sellTokenType === 'yes' ? 'YES' : 'NO'} tokens back to the market for BNB.
-            </DialogDescription>
-          </DialogHeader>
-
-          {sellError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600" />
-              <span className="text-sm text-red-700">{sellError.message}</span>
-            </div>
-          )}
-
-          {sellSuccess && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-green-600" />
-              <span className="text-sm text-green-700">Tokens sold successfully!</span>
-            </div>
-          )}
-
-          <div className="space-y-4 py-4">
-            {selectedSellMarket && (
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium mb-1">Market</p>
-                <p className="text-xs text-muted-foreground line-clamp-2">{selectedSellMarket.market.question}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Token: BNB
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="sellTokenAmount">Token Amount to Sell</Label>
-              <Input
-                id="sellTokenAmount"
-                type="number"
-                step="0.0001"
-                placeholder="0.0000"
-                value={sellTokenAmount}
-                onChange={(e) => handleSellAmountChange(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Available: {sellTokenType === 'yes' 
-                  ? positions.find(p => p.marketId === selectedSellMarket?.marketId)?.yesBalance || '0'
-                  : positions.find(p => p.marketId === selectedSellMarket?.marketId)?.noBalance || '0'
-                } {sellTokenType === 'yes' ? 'YES' : 'NO'} tokens
-              </p>
-            </div>
-
-            {isEstimating && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Calculating estimate...
-              </div>
-            )}
-
-            {sellEstimate && !isEstimating && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-                <p className="text-sm font-medium text-blue-800">Estimated Output</p>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">BNB to receive:</span>
-                    <span className="font-bold text-blue-700">
-                      {parseFloat(sellEstimate.bnbOut || "0").toFixed(6)} BNB
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Fee:</span>
-                    <span className="text-muted-foreground">
-                      {parseFloat(sellEstimate.fee || "0").toFixed(6)} BNB
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="minOut">Minimum BNB Out (Slippage Protection)</Label>
-              <Input
-                id="minOut"
-                type="number"
-                step="0.000001"
-                placeholder="0.000000"
-                value={minOut}
-                onChange={(e) => setMinOut(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Transaction will revert if you receive less than this amount. Default is 2% slippage.
-              </p>
-            </div>
-
-            {selectedSellMarket && marketOdds[selectedSellMarket.marketId] && (
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <p className="text-xs font-medium text-gray-800 mb-2">Current Market Prices</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">YES: </span>
-                    <span className="font-medium">{marketOdds[selectedSellMarket.marketId].yesPrice / 100}%</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">NO: </span>
-                    <span className="font-medium">{marketOdds[selectedSellMarket.marketId].noPrice / 100}%</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {sellTxHash && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-xs font-medium text-green-800 mb-1">Transaction Hash</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-xs text-green-700 font-mono truncate">{sellTxHash}</p>
+                <div className="flex gap-2">
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={() => window.open(`https://testnet.bscscan.com/tx/${sellTxHash}`, '_blank')}
+                    onClick={executeSellTokens}
+                    disabled={!sellAmount || !minReceive || !!actionLoading}
+                    className="flex-1"
                   >
-                    <ExternalLink className="w-3 h-3" />
+                    {actionLoading === `sell-${selectedPosition.marketId}-${sellTokenType}` ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Selling...
+                      </>
+                    ) : (
+                      `Sell ${sellTokenType} Tokens`
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowSellModal(false)}
+                    disabled={!!actionLoading}
+                  >
+                    Cancel
                   </Button>
                 </div>
-              </div>
-            )}
+              </CardContent>
+            </Card>
           </div>
+        )}
 
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setSellDialogOpen(false)}
-              disabled={isSelling}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleSellTokens}
-              disabled={isSelling || !sellTokenAmount || !minOut || parseFloat(sellTokenAmount) <= 0}
-            >
-              {isSelling ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Selling...
-                </>
-              ) : (
-                <>
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Sell for BNB
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {/* Stop Loss Modal */}
+        {showStopLossModal && selectedPosition && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setShowStopLossModal(false)} />
+            <Card className="relative w-full max-w-md backdrop-blur-sm bg-card/95">
+              <CardHeader>
+                <CardTitle>Set Stop Loss</CardTitle>
+                <CardDescription>
+                  {selectedPosition.question}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Stop Loss Price (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={stopLossPrice}
+                    onChange={(e) => setStopLossPrice(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    placeholder="e.g., 45"
+                    min="0"
+                    max="100"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Automatically sell when price drops to this level
+                  </p>
+                  <div className="mt-2 text-sm">
+                    <span className="text-muted-foreground">Current YES Price: </span>
+                    <span className="font-medium text-green-600">{selectedPosition.yesPrice.toFixed(1)}%</span>
+                    <span className="mx-2">•</span>
+                    <span className="text-muted-foreground">Current NO Price: </span>
+                    <span className="font-medium text-red-600">{selectedPosition.noPrice.toFixed(1)}%</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={executeSetStopLoss}
+                    disabled={!stopLossPrice || !!actionLoading}
+                    className="flex-1"
+                  >
+                    {actionLoading === `stoploss-${selectedPosition.marketId}` ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Setting...
+                      </>
+                    ) : (
+                      "Set Stop Loss"
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowStopLossModal(false)}
+                    disabled={!!actionLoading}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Take Profit Modal */}
+        {showTakeProfitModal && selectedPosition && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setShowTakeProfitModal(false)} />
+            <Card className="relative w-full max-w-md backdrop-blur-sm bg-card/95">
+              <CardHeader>
+                <CardTitle>Set Take Profit</CardTitle>
+                <CardDescription>
+                  {selectedPosition.question}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Take Profit Price (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={takeProfitPrice}
+                    onChange={(e) => setTakeProfitPrice(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    placeholder="e.g., 80"
+                    min="0"
+                    max="100"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Automatically sell when price rises to this level
+                  </p>
+                  <div className="mt-2 text-sm">
+                    <span className="text-muted-foreground">Current YES Price: </span>
+                    <span className="font-medium text-green-600">{selectedPosition.yesPrice.toFixed(1)}%</span>
+                    <span className="mx-2">•</span>
+                    <span className="text-muted-foreground">Current NO Price: </span>
+                    <span className="font-medium text-red-600">{selectedPosition.noPrice.toFixed(1)}%</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={executeSetTakeProfit}
+                    disabled={!takeProfitPrice || !!actionLoading}
+                    className="flex-1"
+                  >
+                    {actionLoading === `takeprofit-${selectedPosition.marketId}` ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Setting...
+                      </>
+                    ) : (
+                      "Set Take Profit"
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTakeProfitModal(false)}
+                    disabled={!!actionLoading}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <Footer />
+      </div>
     </main>
   )
 }

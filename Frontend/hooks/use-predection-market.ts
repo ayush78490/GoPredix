@@ -8,8 +8,8 @@ const PREDICTION_MARKET_ABI = (PREDICTION_MARKET_JSON as any).abi || PREDICTION_
 const HELPER_ABI = (HELPER_JSON as any).abi || HELPER_JSON
 
 // Contract addresses - BNB only
-const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x651790f7A07d818D5a2152572C46e2e3C6E226E5'
-const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0x00B4af3a7950CF31DdB1dCC4D8413193713CD2b5'
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x12FD6C9B618949d940806B0E59e3c65507eC37E8'
+const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0xC940106a30742F21daE111d41e8F41d482feda15'
 
 // Market Status enum
 export enum MarketStatus {
@@ -109,7 +109,7 @@ export enum OrderType {
 async function validateMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
     console.log('🔍 Attempting AI validation...')
-    const res = await fetch('https://sigma-predection.vercel.app/api/validate-market', {
+    const res = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -340,53 +340,60 @@ export function usePredictionMarketBNB() {
   // ==================== MARKET DATA FETCHING ====================
 
   const getMarket = useCallback(async (marketId: number): Promise<BNBMarket> => {
-    if (!marketContract || !helperContract) throw new Error('Contracts not available')
+  if (!marketContract || !helperContract) throw new Error('Contracts not available')
 
-    try {
-      const marketData = await (marketContract as any).markets(BigInt(marketId))
+  try {
+    const marketData = await (marketContract as any).markets(BigInt(marketId))
 
-      let question = marketData.question || `Market ${marketId}`
-      if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
-        question = question.slice(1, -1)
-      }
-
-      const tradingInfo = await (helperContract as any).getTradingInfo(BigInt(marketId))
-      
-      const market: BNBMarket = {
-        id: marketId,
-        creator: marketData.creator,
-        question: question,
-        category: marketData.category || "General",
-        endTime: Number(marketData.endTime),
-        status: marketData.status,
-        outcome: marketData.outcome,
-        yesToken: marketData.yesToken,
-        noToken: marketData.noToken,
-        yesPool: ethers.formatEther(marketData.yesPool),
-        noPool: ethers.formatEther(marketData.noPool),
-        lpTotalSupply: ethers.formatEther(marketData.lpTotalSupply),
-        totalBacking: ethers.formatEther(marketData.totalBacking),
-        platformFees: ethers.formatEther(marketData.platformFees),
-        resolutionRequestedAt: Number(marketData.resolutionRequestedAt),
-        resolutionRequester: marketData.resolutionRequester,
-        resolutionReason: marketData.resolutionReason,
-        resolutionConfidence: Number(marketData.resolutionConfidence),
-        disputeDeadline: Number(marketData.disputeDeadline),
-        disputer: marketData.disputer,
-        disputeReason: marketData.disputeReason,
-        yesPrice: Number(tradingInfo.yesPrice) / 100,
-        noPrice: Number(tradingInfo.noPrice) / 100,
-        yesMultiplier: Number(tradingInfo.yesMultiplier) / 10000,
-        noMultiplier: Number(tradingInfo.noMultiplier) / 10000
-      }
-
-      return market
-
-    } catch (error) {
-      console.error('❌ Error fetching market:', error)
-      throw error
+    let question = marketData.question || `Market ${marketId}`
+    if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
+      question = question.slice(1, -1)
     }
-  }, [marketContract, helperContract])
+
+    const tradingInfo = await (helperContract as any).getTradingInfo(BigInt(marketId))
+    
+    // ✅ FIXED: Invert the multipliers from tradingInfo
+    const yesPriceBps = Number(tradingInfo.yesMultiplier) / 10000  // 0.647
+    const noPriceBps = Number(tradingInfo.noMultiplier) / 10000    // 0.353
+    const yesMultiplierInverted = yesPriceBps > 0 ? Number((1 / yesPriceBps).toFixed(4)) : 2
+    const noMultiplierInverted = noPriceBps > 0 ? Number((1 / noPriceBps).toFixed(4)) : 2
+    
+    const market: BNBMarket = {
+      id: marketId,
+      creator: marketData.creator,
+      question: question,
+      category: marketData.category || "General",
+      endTime: Number(marketData.endTime),
+      status: marketData.status,
+      outcome: marketData.outcome,
+      yesToken: marketData.yesToken,
+      noToken: marketData.noToken,
+      yesPool: ethers.formatEther(marketData.yesPool),
+      noPool: ethers.formatEther(marketData.noPool),
+      lpTotalSupply: ethers.formatEther(marketData.lpTotalSupply),
+      totalBacking: ethers.formatEther(marketData.totalBacking),
+      platformFees: ethers.formatEther(marketData.platformFees),
+      resolutionRequestedAt: Number(marketData.resolutionRequestedAt),
+      resolutionRequester: marketData.resolutionRequester,
+      resolutionReason: marketData.resolutionReason,
+      resolutionConfidence: Number(marketData.resolutionConfidence),
+      disputeDeadline: Number(marketData.disputeDeadline),
+      disputer: marketData.disputer,
+      disputeReason: marketData.disputeReason,
+      yesPrice: Number(tradingInfo.yesPrice) / 100,
+      noPrice: Number(tradingInfo.noPrice) / 100,
+      yesMultiplier: yesMultiplierInverted,    // ✅ Now inverted!
+      noMultiplier: noMultiplierInverted       // ✅ Now inverted!
+    }
+
+    return market
+
+  } catch (error) {
+    console.error('❌ Error fetching market:', error)
+    throw error
+  }
+}, [marketContract, helperContract])
+
 
   // ==================== USER INVESTMENT FUNCTIONS ====================
 
@@ -463,85 +470,118 @@ export function usePredictionMarketBNB() {
   // ==================== MULTIPLIER & PRICE CALCULATIONS ====================
 
   const getBuyYesMultiplier = useCallback(async (
-    marketId: number, 
-    bnbAmount: string
-  ): Promise<MultiplierInfo> => {
-    if (!helperContract) throw new Error('Helper contract not available')
+  marketId: number, 
+  bnbAmount: string
+): Promise<MultiplierInfo> => {
+  if (!helperContract) throw new Error('Helper contract not available')
+  
+  try {
+    const amountInWei = ethers.parseEther(bnbAmount)
+    // ✅ FIXED: Contract has YES/NO swapped - call getBuyNoMultiplier to get YES data
+    const result = await (helperContract as any).getBuyNoMultiplier(BigInt(marketId), amountInWei)
     
-    try {
-      const amountInWei = ethers.parseEther(bnbAmount)
-      const result = await (helperContract as any).getBuyYesMultiplier(BigInt(marketId), amountInWei)
-      
-      return {
-        multiplier: Number(result.multiplier) / 10000,
-        totalOut: ethers.formatEther(result.totalOut),
-        totalFee: ethers.formatEther(result.totalFee)
-      }
-    } catch (error) {
-      console.error('❌ Error calculating YES multiplier:', error)
-      throw error
+    const totalOutTokens = Number(ethers.formatEther(result.totalOut))
+    const bnbAmountNumber = parseFloat(bnbAmount)
+    const realMultiplier = bnbAmountNumber > 0 ? totalOutTokens / bnbAmountNumber : 0
+    
+    console.log('✅ YES Multiplier (from NO contract call):', { 
+      bnbAmount,
+      totalOutTokens,
+      realMultiplier
+    })
+    
+    return {
+      multiplier: realMultiplier,
+      totalOut: ethers.formatEther(result.totalOut),
+      totalFee: ethers.formatEther(result.totalFee)
     }
-  }, [helperContract])
+  } catch (error) {
+    console.error('❌ Error calculating YES multiplier:', error)
+    throw error
+  }
+}, [helperContract])
 
   const getBuyNoMultiplier = useCallback(async (
-    marketId: number, 
-    bnbAmount: string
-  ): Promise<MultiplierInfo> => {
-    if (!helperContract) throw new Error('Helper contract not available')
+  marketId: number, 
+  bnbAmount: string
+): Promise<MultiplierInfo> => {
+  if (!helperContract) throw new Error('Helper contract not available')
+  
+  try {
+    const amountInWei = ethers.parseEther(bnbAmount)
+    // ✅ FIXED: Contract has YES/NO swapped - call getBuyYesMultiplier to get NO data
+    const result = await (helperContract as any).getBuyYesMultiplier(BigInt(marketId), amountInWei)
     
-    try {
-      const amountInWei = ethers.parseEther(bnbAmount)
-      const result = await (helperContract as any).getBuyNoMultiplier(BigInt(marketId), amountInWei)
-      
-      return {
-        multiplier: Number(result.multiplier) / 10000,
-        totalOut: ethers.formatEther(result.totalOut),
-        totalFee: ethers.formatEther(result.totalFee)
-      }
-    } catch (error) {
-      console.error('❌ Error calculating NO multiplier:', error)
-      throw error
+    const totalOutTokens = Number(ethers.formatEther(result.totalOut))
+    const bnbAmountNumber = parseFloat(bnbAmount)
+    const realMultiplier = bnbAmountNumber > 0 ? totalOutTokens / bnbAmountNumber : 0
+    
+    console.log('✅ NO Multiplier (from YES contract call):', { 
+      bnbAmount,
+      totalOutTokens,
+      realMultiplier
+    })
+    
+    return {
+      multiplier: realMultiplier,
+      totalOut: ethers.formatEther(result.totalOut),
+      totalFee: ethers.formatEther(result.totalFee)
     }
-  }, [helperContract])
+  } catch (error) {
+    console.error('❌ Error calculating NO multiplier:', error)
+    throw error
+  }
+}, [helperContract])
+
 
   const getCurrentMultipliers = useCallback(async (
-    marketId: number
-  ): Promise<{ yesMultiplier: number; noMultiplier: number; yesPrice: number; noPrice: number }> => {
-    if (!helperContract) throw new Error('Helper contract not available')
+  marketId: number
+): Promise<{ yesMultiplier: number; noMultiplier: number; yesPrice: number; noPrice: number }> => {
+  if (!helperContract) throw new Error('Helper contract not available')
+  
+  try {
+    const result = await (helperContract as any).getCurrentMultipliers(BigInt(marketId))
     
-    try {
-      const result = await (helperContract as any).getCurrentMultipliers(BigInt(marketId))
-      
-      return {
-        yesMultiplier: Number(result[0]) / 10000,
-        noMultiplier: Number(result[1]) / 10000,
-        yesPrice: Number(result[2]) / 100,
-        noPrice: Number(result[3]) / 100
-      }
-    } catch (error) {
-      console.error('❌ Error fetching current multipliers:', error)
-      throw error
+    // ✅ FIXED: result[0] and result[1] are prices, need to invert them
+    const yesPriceBps = Number(result[0]) / 10000  // 0.647
+    const noPriceBps = Number(result[1]) / 10000   // 0.353
+    
+    return {
+      yesMultiplier: yesPriceBps > 0 ? Number((1 / yesPriceBps).toFixed(4)) : 2,  // 1.54x
+      noMultiplier: noPriceBps > 0 ? Number((1 / noPriceBps).toFixed(4)) : 2,      // 2.83x
+      yesPrice: Number(result[2]) / 100,
+      noPrice: Number(result[3]) / 100
     }
-  }, [helperContract])
+  } catch (error) {
+    console.error('❌ Error fetching current multipliers:', error)
+    throw error
+  }
+}, [helperContract])
+
 
   const getTradingInfo = useCallback(async (marketId: number): Promise<TradingInfo> => {
-    if (!helperContract) throw new Error('Helper contract not available')
+  if (!helperContract) throw new Error('Helper contract not available')
+  
+  try {
+    const result = await (helperContract as any).getTradingInfo(BigInt(marketId))
     
-    try {
-      const result = await (helperContract as any).getTradingInfo(BigInt(marketId))
-      
-      return {
-        yesMultiplier: Number(result.yesMultiplier) / 10000,
-        noMultiplier: Number(result.noMultiplier) / 10000,
-        yesPrice: Number(result.yesPrice) / 100,
-        noPrice: Number(result.noPrice) / 100,
-        totalLiquidity: ethers.formatEther(result.totalLiquidity)
-      }
-    } catch (error) {
-      console.error('❌ Error fetching trading info:', error)
-      throw error
+    // ✅ FIXED: Invert the multipliers
+    const yesPriceBps = Number(result.yesMultiplier) / 10000
+    const noPriceBps = Number(result.noMultiplier) / 10000
+    
+    return {
+      yesMultiplier: yesPriceBps > 0 ? Number((1 / yesPriceBps).toFixed(4)) : 2,
+      noMultiplier: noPriceBps > 0 ? Number((1 / noPriceBps).toFixed(4)) : 2,
+      yesPrice: Number(result.yesPrice) / 100,
+      noPrice: Number(result.noPrice) / 100,
+      totalLiquidity: ethers.formatEther(result.totalLiquidity)
     }
-  }, [helperContract])
+  } catch (error) {
+    console.error('❌ Error fetching trading info:', error)
+    throw error
+  }
+}, [helperContract])
+
 
   const getSwapMultiplier = useCallback(async (
     marketId: number,
@@ -670,7 +710,8 @@ export function usePredictionMarketBNB() {
     const amountInWei = ethers.parseEther(amountIn)
     const minOutWei = ethers.parseEther(minTokensOut)
     
-    const tx = await (marketWithSigner as any).buyYesWithBNBFor(
+    // ✅ FIXED: Swap - call buyNoWithBNBFor to actually buy YES tokens
+    const tx = await (marketWithSigner as any).buyNoWithBNBFor(
       BigInt(marketId),
       account,
       minOutWei,
@@ -697,7 +738,8 @@ export function usePredictionMarketBNB() {
     const amountInWei = ethers.parseEther(amountIn)
     const minOutWei = ethers.parseEther(minTokensOut)
     
-    const tx = await (marketWithSigner as any).buyNoWithBNBFor(
+    // ✅ FIXED: Swap - call buyYesWithBNBFor to actually buy NO tokens
+    const tx = await (marketWithSigner as any).buyYesWithBNBFor(
       BigInt(marketId),
       account,
       minOutWei,
