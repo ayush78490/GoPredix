@@ -19,25 +19,28 @@ const app = express();
 
 // -------------------- CORS CONFIG --------------------
 const corsOptions = {
-  origin: [
-    'https://sigma-predection.vercel.app',
-    'https://gopredix.vercel.app',
-    'https://sigma-prediction.vercel.app',
-    'https://www.gopredix.xyz',
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'http://64.29.17.131'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ],
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://sigma-predection.vercel.app',
+      'https://gopredix.vercel.app', 
+      'https://sigma-prediction.vercel.app',
+      'https://www.gopredix.xyz',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://64.29.17.131'
+    ];
+    
+    // Allow requests with no origin (like serverless functions)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'production') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200
 };

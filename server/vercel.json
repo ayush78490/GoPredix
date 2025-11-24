@@ -1,39 +1,16 @@
 {
   "version": 2,
   "builds": [
-    { 
-      "src": "api/validateMarket.js", 
-      "use": "@vercel/node" 
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
-    { 
-      "src": "/api/validate-market", 
-      "dest": "/api/validateMarket.js"
-    },
-    { 
-      "src": "/api/resolve-market", 
-      "dest": "/api/validateMarket.js"
-    },
-    { 
-      "src": "/api/health", 
-      "dest": "/api/validateMarket.js"
-    },
-    { 
-      "src": "/api/health-status", 
-      "dest": "/api/validateMarket.js"
-    },
-    { 
-      "src": "/api/health-check", 
-      "dest": "/api/validateMarket.js"
-    },
-    { 
-      "src": "/api/categories", 
-      "dest": "/api/validateMarket.js"
-    },
-    { 
-      "src": "/api/test-cors", 
-      "dest": "/api/validateMarket.js"
+    {
+      "src": "/(.*)",
+      "dest": "/server.js",
+      "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
     }
   ]
 }
