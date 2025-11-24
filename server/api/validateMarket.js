@@ -1,3 +1,4 @@
+// server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -16,7 +17,7 @@ if (parseInt(process.versions.node.split('.')[0]) < 18) {
 
 const app = express();
 
-// Enhanced CORS configuration
+// -------------------- CORS CONFIG --------------------
 const corsOptions = {
   origin: [
     'https://sigma-predection.vercel.app',
@@ -41,11 +42,60 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware
-app.use(cors(corsOptions));
+// Apply the npm cors middleware (keeps compatibility)
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like curl or server-to-server)
+    if (!origin) return callback(null, true);
+    if (corsOptions.origin.indexOf(origin) !== -1) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS: ' + origin));
+    }
+  },
+  methods: corsOptions.methods,
+  allowedHeaders: corsOptions.allowedHeaders,
+  credentials: corsOptions.credentials,
+  optionsSuccessStatus: corsOptions.optionsSuccessStatus
+}));
 
-// Handle preflight requests
-app.options('*', cors(corsOptions));
+// Explicit custom CORS headers middleware — ensures headers always present (preflight handling)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  // If the origin is in the whitelist, echo it back. Otherwise do not set Access-Control-Allow-Origin.
+  if (origin && corsOptions.origin.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    // Required for caching proxies to know response varies by origin
+    res.setHeader('Vary', 'Origin');
+  }
+  // Always set these so browser sees allowed methods/headers on preflight
+  res.setHeader('Access-Control-Allow-Methods', corsOptions.methods.join(','));
+  res.setHeader('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','));
+  if (corsOptions.credentials) {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
+  // If it's a preflight request, immediately respond
+  if (req.method === 'OPTIONS') {
+    return res.status(corsOptions.optionsSuccessStatus).end();
+  }
+
+  next();
+});
+
+// Fallback route-level option handling (keeps safety)
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  if (origin && corsOptions.origin.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', corsOptions.methods.join(','));
+  res.setHeader('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','));
+  if (corsOptions.credentials) res.setHeader('Access-Control-Allow-Credentials', 'true');
+  return res.status(corsOptions.optionsSuccessStatus).end();
+});
+// ------------------ END CORS CONFIG ------------------
 
 app.use(bodyParser.json());
 
@@ -1101,7 +1151,7 @@ const initializeServer = async () => {
       if (resolutionService) {
         console.log(`🔗 Blockchain: Polling ✅ | Auto-resolution ✅`);
       }
-      console.log(`🌐 CORS enabled for: https://sigma-predection.vercel.app`);
+      console.log(`🌐 CORS enabled for: ${corsOptions.origin.join(', ')}`);
     });
 
   } catch (error) {
