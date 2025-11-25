@@ -157,25 +157,7 @@ const convertToFrontendMarket = (m: any, id: number | string) => {
 }
 
 
-const generatePriceHistory = (market: any, days: number = 7) => {
-  const history = []
-  const now = Date.now()
-  const basePrice = market.yesOdds || 50
-  const volatility = 5
 
-  for (let i = days - 1; i >= 0; i--) {
-    const time = now - (i * 24 * 60 * 60 * 1000)
-    const randomChange = (Math.random() - 0.5) * volatility * 2
-    const price = Math.max(10, Math.min(90, basePrice + randomChange))
-
-    history.push({
-      time,
-      price: Number(price.toFixed(2))
-    })
-  }
-
-  return history
-}
 
 const getPaymentTokenBadge = (token: string) => {
   const tokenConfig: Record<string, any> = {
@@ -225,6 +207,59 @@ export default function MarketPage() {
 
   const bnbHook = usePredictionMarketBNB()
   const pdxHook = usePredictionMarketPDX()
+
+  const { getMarketPriceHistory: getBNBHistory } = bnbHook
+  const { getMarketPriceHistory: getPDXHistory } = pdxHook
+
+  const fetchChartData = useCallback(async (market: any) => {
+    if (!market) return
+
+    // Ensure we have a numeric ID
+    const numericId = typeof market.id === 'string' && market.id.includes('-')
+      ? parseInt(market.id.split('-').pop()!)
+      : Number(market.id)
+
+    if (isNaN(numericId)) {
+      console.error("Invalid market ID for chart:", market.id)
+      setIsChartLoading(false)
+      return
+    }
+
+    setIsChartLoading(true)
+    try {
+      let history: any[] = []
+      if (market.paymentToken === "BNB") {
+        history = await getBNBHistory(numericId)
+      } else {
+        history = await getPDXHistory(numericId)
+      }
+
+      if (history.length === 0) {
+        console.log("No history found, using fallback with current price:", market.yesPrice)
+        const now = Date.now()
+        // Use current price from market object, defaulting to 50 if invalid
+        const currentPrice = (market.yesPrice && !isNaN(market.yesPrice)) ? market.yesPrice : 50
+
+        history = [
+          { timestamp: now - 86400000, price: 50 }, // Start at 50% 24h ago
+          { timestamp: now, price: currentPrice }   // End at current price
+        ]
+      }
+
+      const formattedData = history.map(p => ({
+        timestamp: p.timestamp,
+        date: new Date(p.timestamp).toLocaleDateString() + ' ' + new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        yesPrice: p.price,
+        noPrice: 100 - p.price
+      }))
+
+      setChartData(formattedData)
+    } catch (error) {
+      console.error("Error fetching chart data:", error)
+    } finally {
+      setIsChartLoading(false)
+    }
+  }, [getBNBHistory, getPDXHistory])
 
   const safeGetUserInvestment = useCallback(async (marketId: number, account: string) => {
     try {
@@ -367,13 +402,9 @@ export default function MarketPage() {
 
         setMarket(foundMarket)
 
-        const priceHistory = generatePriceHistory(foundMarket)
-        setChartData(priceHistory)
-
-        setTimeout(() => {
-          setIsChartLoading(false)
-          setIsLoading(false)
-        }, 300)
+        setMarket(foundMarket)
+        fetchChartData(foundMarket)
+        setIsLoading(false)
 
         console.log(`Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
         return;
@@ -436,11 +467,10 @@ export default function MarketPage() {
   }, [allMarkets.length, market, isLoading, loadMarketData])
 
   useEffect(() => {
-    if (market && !isChartLoading) {
-      const newChartData = generatePriceHistory(market)
-      setChartData(newChartData)
+    if (market) {
+      fetchChartData(market)
     }
-  }, [market?.yesOdds, market?.id, isChartLoading])
+  }, [market?.yesPrice, market?.id, fetchChartData])
 
   useEffect(() => {
     marketFoundRef.current = false

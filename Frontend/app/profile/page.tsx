@@ -13,6 +13,7 @@ import { ethers } from "ethers"
 import LightRays from "@/components/LightRays"
 import { useAccount, useChainId } from "wagmi"
 import TwitterShareModal from "@/components/twitter-share-modal"
+import ConnectTwitterButton from "@/components/connect-twitter-button"
 
 // Import ABIs
 import BNB_MARKET_ARTIFACT from "@/contracts/abi.json"
@@ -842,6 +843,22 @@ export default function ProfilePage() {
                       <ExternalLink className="w-4 h-4" />
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* X Account Card */}
+              <Card className="mb-6 backdrop-blur-sm bg-card/80">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Twitter className="h-5 w-5 text-blue-400" />
+                    X (Twitter) Account
+                  </CardTitle>
+                  <CardDescription>
+                    Link your X account to display your profile on the leaderboard
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ConnectTwitterButton />
                 </CardContent>
               </Card>
 

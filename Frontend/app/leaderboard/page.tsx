@@ -10,6 +10,8 @@ import { Trophy, Medal, ArrowLeft, Wallet, Loader2, TrendingUp, Users, BarChart3
 import { useRouter } from "next/navigation"
 import { ethers } from "ethers"
 import LightRays from "@/components/LightRays"
+import TwitterProfileDisplay from "@/components/twitter-profile-display"
+import { UserProfile } from "@/lib/supabase"
 
 // Import ABIs
 import BNB_MARKET_ARTIFACT from "@/contracts/abi.json"
@@ -100,11 +102,12 @@ export default function Leaderboard() {
   const [bnbMarkets, setBnbMarkets] = useState<Market[]>([])
   const [pdxMarkets, setPdxMarkets] = useState<Market[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [userProfiles, setUserProfiles] = useState<{ [address: string]: UserProfile }>({})
 
   // ============================================
   // ✅ CREATE CONTRACTS
   // ============================================
-  
+
   const getReadOnlyContracts = useCallback(() => {
     if (!BNB_MARKET_ADDRESS || !BNB_HELPER_ADDRESS || !PDX_MARKET_ADDRESS || !PDX_HELPER_ADDRESS) {
       throw new Error('Contract addresses not configured in environment variables')
@@ -112,21 +115,21 @@ export default function Leaderboard() {
 
     try {
       const provider = new ethers.JsonRpcProvider(RPC_URL)
-      
+
       // BNB Contracts
       const bnbMarketContract = new ethers.Contract(BNB_MARKET_ADDRESS, BNB_MARKET_ABI, provider)
       const bnbHelperContract = new ethers.Contract(BNB_HELPER_ADDRESS, BNB_HELPER_ABI, provider)
-      
+
       // PDX Contracts
       const pdxMarketContract = new ethers.Contract(PDX_MARKET_ADDRESS, PDX_MARKET_ABI, provider)
       const pdxHelperContract = new ethers.Contract(PDX_HELPER_ADDRESS, PDX_HELPER_ABI, provider)
-      
-      return { 
-        bnbMarketContract, 
+
+      return {
+        bnbMarketContract,
         bnbHelperContract,
         pdxMarketContract,
         pdxHelperContract,
-        provider 
+        provider
       }
     } catch (error) {
       console.error('Error creating read-only contracts:', error)
@@ -137,16 +140,16 @@ export default function Leaderboard() {
   // ============================================
   // ✅ FETCH BNB MARKETS
   // ============================================
-  
+
   const fetchBNBMarkets = useCallback(async (): Promise<Market[]> => {
     try {
       console.log("📋 Fetching BNB markets...")
       const { bnbMarketContract } = getReadOnlyContracts()
-      
+
       const nextId = await bnbMarketContract.nextMarketId()
       const marketCount = Number(nextId)
       console.log(`Found ${marketCount} BNB markets`)
-      
+
       if (marketCount === 0) return []
 
       const marketPromises: Promise<Market | null>[] = []
@@ -155,13 +158,13 @@ export default function Leaderboard() {
       }
 
       const marketsData = await Promise.all(marketPromises)
-      const validMarkets = marketsData.filter((market): market is Market => 
+      const validMarkets = marketsData.filter((market): market is Market =>
         market !== null && market.question !== undefined && market.question !== ''
       )
-      
+
       console.log(`✅ Loaded ${validMarkets.length} valid BNB markets`)
       return validMarkets
-      
+
     } catch (error) {
       console.error("❌ Error fetching BNB markets:", error)
       return []
@@ -171,16 +174,16 @@ export default function Leaderboard() {
   // ============================================
   // ✅ FETCH PDX MARKETS
   // ============================================
-  
+
   const fetchPDXMarkets = useCallback(async (): Promise<Market[]> => {
     try {
       console.log("📋 Fetching PDX markets...")
       const { pdxMarketContract } = getReadOnlyContracts()
-      
+
       const nextId = await pdxMarketContract.nextMarketId()
       const marketCount = Number(nextId)
       console.log(`Found ${marketCount} PDX markets`)
-      
+
       if (marketCount === 0) return []
 
       const marketPromises: Promise<Market | null>[] = []
@@ -189,13 +192,13 @@ export default function Leaderboard() {
       }
 
       const marketsData = await Promise.all(marketPromises)
-      const validMarkets = marketsData.filter((market): market is Market => 
+      const validMarkets = marketsData.filter((market): market is Market =>
         market !== null && market.question !== undefined && market.question !== ''
       )
-      
+
       console.log(`✅ Loaded ${validMarkets.length} valid PDX markets`)
       return validMarkets
-      
+
     } catch (error) {
       console.error("❌ Error fetching PDX markets:", error)
       return []
@@ -207,7 +210,7 @@ export default function Leaderboard() {
     try {
       const { bnbMarketContract } = getReadOnlyContracts()
       const marketData = await bnbMarketContract.markets(marketId)
-      
+
       let question = marketData[1] || `Market ${marketId}`
       if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
         question = question.slice(1, -1)
@@ -247,7 +250,7 @@ export default function Leaderboard() {
     try {
       const { pdxMarketContract } = getReadOnlyContracts()
       const marketData = await pdxMarketContract.markets(marketId)
-      
+
       if (!marketData || !marketData[0] || marketData[0] === "0x0000000000000000000000000000000000000000") {
         console.warn(`PDX Market ${marketId} is empty or not found`)
         return null
@@ -282,7 +285,7 @@ export default function Leaderboard() {
 
       console.log(`✅ PDX Market ${marketId}:`, { question, category: market.category })
       return market
-      
+
     } catch (error) {
       console.error(`❌ Error fetching PDX market ${marketId}:`, error)
       return null
@@ -293,7 +296,7 @@ export default function Leaderboard() {
   const getMarketStatusText = (status: number, endTime: number): "Active" | "Resolved" | "Cancelled" => {
     const resolutionDate = new Date(endTime * 1000)
     const now = new Date()
-    
+
     if (status === 0 && resolutionDate > now) return "Active"
     else if (status === 1 || status === 2) return "Resolved"
     else return "Resolved"
@@ -322,7 +325,7 @@ export default function Leaderboard() {
   const fetchAllTraders = useCallback(async (bnbMarkets: Market[], pdxMarkets: Market[]): Promise<string[]> => {
     try {
       const traders = new Set<string>()
-      
+
       bnbMarkets.forEach(market => {
         if (market?.creator && market.creator !== "0x0000000000000000000000000000000000000000") {
           traders.add(market.creator.toLowerCase())
@@ -407,13 +410,13 @@ export default function Leaderboard() {
   }, [getReadOnlyContracts, getPDXMarket])
 
   // Get total investment
-  const getTotalInvestment = useCallback(async (address: string): Promise<{bnb: string, pdx: string}> => {
+  const getTotalInvestment = useCallback(async (address: string): Promise<{ bnb: string, pdx: string }> => {
     try {
       const { bnbHelperContract, pdxHelperContract } = getReadOnlyContracts()
-      
+
       const bnbInvestment = await bnbHelperContract.getUserTotalInvestment(address)
       const pdxInvestment = await pdxHelperContract.getUserTotalInvestment(address)
-      
+
       return {
         bnb: ethers.formatEther(bnbInvestment),
         pdx: ethers.formatEther(pdxInvestment)
@@ -430,9 +433,9 @@ export default function Leaderboard() {
       const bnbPositions = await getUserBNBPositions(address)
       const pdxPositions = await getUserPDXPositions(address)
       const allPositions = [...bnbPositions, ...pdxPositions]
-      
+
       const investments = await getTotalInvestment(address)
-      
+
       let totalVolume = 0
       let currentPortfolioValue = 0
       let unrealizedPnl = 0
@@ -444,12 +447,12 @@ export default function Leaderboard() {
         const yesValue = parseFloat(position.yesBalance) * prices.yesPrice / 100
         const noValue = parseFloat(position.noBalance) * prices.noPrice / 100
         const positionValue = yesValue + noValue
-        
+
         const invested = parseFloat(position.bnbInvested || position.pdxInvested || "0")
-        
+
         totalVolume += invested
         currentPortfolioValue += positionValue
-        
+
         const positionPnl = positionValue - invested
         if (positionPnl > 0) {
           unrealizedPnl += positionPnl
@@ -464,7 +467,7 @@ export default function Leaderboard() {
       }
 
       const favoriteCategory = Object.entries(categoryCount)
-        .sort(([,a], [,b]) => b - a)[0]?.[0] || "General"
+        .sort(([, a], [, b]) => b - a)[0]?.[0] || "General"
 
       const totalPnl = unrealizedPnl
 
@@ -511,22 +514,22 @@ export default function Leaderboard() {
       const bnbPositions = await getUserBNBPositions(address)
       const pdxPositions = await getUserPDXPositions(address)
       const allPositions = [...bnbPositions, ...pdxPositions]
-      
+
       return allPositions.map(position => {
         const prices = calculatePrices(position.market.yesPool, position.market.noPool)
-        
+
         return {
           marketId: position.market.id,
           question: position.market.question,
           category: position.market.category || "General",
           yesTokens: parseFloat(position.yesBalance),
           noTokens: parseFloat(position.noBalance),
-          currentValue: parseFloat(position.yesBalance) * prices.yesPrice / 100 + 
-                       parseFloat(position.noBalance) * prices.noPrice / 100,
+          currentValue: parseFloat(position.yesBalance) * prices.yesPrice / 100 +
+            parseFloat(position.noBalance) * prices.noPrice / 100,
           investedAmount: parseFloat(position.bnbInvested || position.pdxInvested || "0"),
-          potentialPnl: (parseFloat(position.yesBalance) * prices.yesPrice / 100 + 
-                        parseFloat(position.noBalance) * prices.noPrice / 100) - 
-                       parseFloat(position.bnbInvested || position.pdxInvested || "0"),
+          potentialPnl: (parseFloat(position.yesBalance) * prices.yesPrice / 100 +
+            parseFloat(position.noBalance) * prices.noPrice / 100) -
+            parseFloat(position.bnbInvested || position.pdxInvested || "0"),
           status: getMarketStatusText(position.market.status, position.market.endTime),
           marketStatus: position.market.status,
           endTime: position.market.endTime,
@@ -551,10 +554,10 @@ export default function Leaderboard() {
 
     setIsLoading(true)
     setError(null)
-    
+
     try {
       console.log("🚀 Starting to fetch leaderboard data from BOTH BNB and PDX...")
-      
+
       const bnbMarketsData = await fetchBNBMarkets()
       setBnbMarkets(bnbMarketsData)
 
@@ -582,14 +585,14 @@ export default function Leaderboard() {
 
       const tradersToProcess = allTraders.slice(0, 15)
       console.log(`📊 Processing ${tradersToProcess.length} traders from BOTH BNB and PDX...`)
-      
+
       const statsPromises = tradersToProcess.map(trader => calculateUserStats(trader))
       const allStats = await Promise.all(statsPromises)
 
-      const activeTraders = allStats.filter(stats => 
+      const activeTraders = allStats.filter(stats =>
         stats.totalMarketsTraded > 0 || parseFloat(stats.totalInvestment) > 0
       )
-      
+
       activeTraders.sort((a, b) => b.totalPnl - a.totalPnl)
       console.log(`✅ Active traders with positions: ${activeTraders.length}`)
 
@@ -609,6 +612,24 @@ export default function Leaderboard() {
       }
 
       setUserPositions(positionsData)
+
+      // Fetch X profiles for top traders
+      const profilesData: { [address: string]: UserProfile } = {}
+      for (const trader of activeTraders.slice(0, 15)) {
+        try {
+          const response = await fetch(`/api/user/profile?wallet=${trader.address}`)
+          if (response.ok) {
+            const data = await response.json()
+            if (data.profile?.twitter_username) {
+              profilesData[trader.address.toLowerCase()] = data.profile
+            }
+          }
+        } catch (error) {
+          console.warn(`Error fetching profile for ${trader.address}:`, error)
+        }
+      }
+      setUserProfiles(profilesData)
+
       console.log("🎉 Leaderboard data loaded successfully from BNB + PDX")
 
     } catch (err: any) {
@@ -650,7 +671,7 @@ export default function Leaderboard() {
     }
   }
 
-  const activeMarketsCount = [...bnbMarkets, ...pdxMarkets].filter(market => 
+  const activeMarketsCount = [...bnbMarkets, ...pdxMarkets].filter(market =>
     isMarketActive(market.status, market.endTime)
   ).length
 
@@ -751,7 +772,7 @@ export default function Leaderboard() {
                   <div className="text-2xl font-bold">{activeMarketsCount}</div>
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  🔶 {bnbMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} BNB • 
+                  🔶 {bnbMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} BNB •
                   💎 {pdxMarkets.filter(m => isMarketActive(m.status, m.endTime)).length} PDX
                 </div>
               </CardContent>
@@ -776,11 +797,10 @@ export default function Leaderboard() {
               <CardContent>
                 <div className="flex items-center">
                   <Trophy className="w-8 h-8 text-primary mr-2" />
-                  <div className={`text-2xl font-bold ${
-                    userStats.reduce((sum, user) => sum + user.totalPnl, 0) >= 0 
-                      ? "text-green-600" 
-                      : "text-red-600"
-                  }`}>
+                  <div className={`text-2xl font-bold ${userStats.reduce((sum, user) => sum + user.totalPnl, 0) >= 0
+                    ? "text-green-600"
+                    : "text-red-600"
+                    }`}>
                     {userStats.reduce((sum, user) => sum + user.totalPnl, 0) >= 0 ? "+" : ""}
                     ${userStats.reduce((sum, user) => sum + user.totalPnl, 0).toLocaleString()}
                   </div>
@@ -820,9 +840,29 @@ export default function Leaderboard() {
                           </div>
                           <div>
                             <div className="flex items-center space-x-2">
-                              <span className="font-semibold">
-                                {formatAddress(user.address)}
-                              </span>
+                              {userProfiles[user.address.toLowerCase()] ? (
+                                <div className="flex items-center gap-2">
+                                  <TwitterProfileDisplay
+                                    username={userProfiles[user.address.toLowerCase()].twitter_username}
+                                    name={userProfiles[user.address.toLowerCase()].twitter_name}
+                                    avatarUrl={userProfiles[user.address.toLowerCase()].twitter_avatar_url}
+                                    showHandle={true}
+                                  />
+                                  <span className="text-xs text-muted-foreground">•</span>
+                                  <span className="font-mono text-sm">
+                                    {formatAddress(user.address)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col">
+                                  <span className="font-semibold">
+                                    {formatAddress(user.address)}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground italic">
+                                    Trader hasn't connected X
+                                  </span>
+                                </div>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -832,16 +872,15 @@ export default function Leaderboard() {
                                 <ExternalLink className="w-3 h-3" />
                               </Button>
                             </div>
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-muted-foreground mt-1">
                               {user.totalMarketsTraded} markets • {user.activePositions} active
                             </div>
                           </div>
                         </div>
 
                         <div className="text-right">
-                          <div className={`text-lg font-bold ${
-                            user.totalPnl >= 0 ? "text-green-600" : "text-red-600"
-                          }`}>
+                          <div className={`text-lg font-bold ${user.totalPnl >= 0 ? "text-green-600" : "text-red-600"
+                            }`}>
                             {user.totalPnl >= 0 ? "+" : ""}${user.totalPnl.toFixed(2)}
                           </div>
                           <div className="text-xs text-muted-foreground">
@@ -864,9 +903,8 @@ export default function Leaderboard() {
                         </div>
                         <div>
                           <span className="text-muted-foreground">Unrealized: </span>
-                          <span className={`font-medium ${
-                            user.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
-                          }`}>
+                          <span className={`font-medium ${user.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
+                            }`}>
                             {user.unrealizedPnl >= 0 ? "+" : ""}${user.unrealizedPnl.toFixed(2)}
                           </span>
                         </div>
@@ -885,15 +923,15 @@ export default function Leaderboard() {
                                 <div className="flex-1">
                                   <div className="font-medium truncate">{position.question}</div>
                                   <div className="text-xs text-muted-foreground">
-                                    {position.category} • 
-                                    <Badge 
-                                      variant="secondary" 
+                                    {position.category} •
+                                    <Badge
+                                      variant="secondary"
                                       className="ml-1 mr-1 backdrop-blur-sm"
                                     >
                                       {position.paymentToken === "BNB" ? "🔶 BNB" : "💎 PDX"}
                                     </Badge>
-                                    <Badge 
-                                      variant="secondary" 
+                                    <Badge
+                                      variant="secondary"
                                       className="ml-1 mr-1 backdrop-blur-sm"
                                     >
                                       {position.status}
@@ -902,9 +940,8 @@ export default function Leaderboard() {
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <div className={`font-medium ${
-                                    position.potentialPnl >= 0 ? "text-green-600" : "text-red-600"
-                                  }`}>
+                                  <div className={`font-medium ${position.potentialPnl >= 0 ? "text-green-600" : "text-red-600"
+                                    }`}>
                                     {position.potentialPnl >= 0 ? "+" : ""}${position.potentialPnl.toFixed(2)}
                                   </div>
                                   <div className="text-xs text-muted-foreground">

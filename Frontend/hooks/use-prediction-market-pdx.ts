@@ -25,6 +25,11 @@ export enum Outcome {
   No = 2
 }
 
+export interface PricePoint {
+  timestamp: number
+  price: number
+}
+
 export interface PDXMarket {
   id: number
   creator: string
@@ -104,7 +109,7 @@ export function usePredictionMarketPDX() {
   const { address: account, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
-  
+
   const [isLoading, setIsLoading] = useState(false)
   const [marketContract, setMarketContract] = useState<ethers.Contract | null>(null)
   const [helperContract, setHelperContract] = useState<ethers.Contract | null>(null)
@@ -114,7 +119,7 @@ export function usePredictionMarketPDX() {
   // Create ethers provider from wagmi public client (for read operations only)
   const getProvider = useCallback(() => {
     if (!publicClient) return null
-    
+
     // Create a proper ethers provider from viem public client
     return new ethers.JsonRpcProvider('https://data-seed-prebsc-1-s1.bnbchain.org:8545')
   }, [publicClient])
@@ -122,7 +127,7 @@ export function usePredictionMarketPDX() {
   // Get signer for write operations
   const getSigner = useCallback(async () => {
     if (!walletClient || !account) return null
-    
+
     // Create ethers wallet from wagmi wallet client
     const provider = getProvider()
     if (!provider) return null
@@ -136,7 +141,7 @@ export function usePredictionMarketPDX() {
   useEffect(() => {
     const initializeContracts = async () => {
       const provider = getProvider()
-      
+
       if (!provider) {
         setMarketContract(null)
         setHelperContract(null)
@@ -273,7 +278,7 @@ export function usePredictionMarketPDX() {
     try {
       const nextMarketId = await (marketContract as any).nextMarketId()
       const totalMarkets = Number(nextMarketId)
-      
+
       // Generate array of market IDs without loop
       return Array.from({ length: totalMarkets }, (_, i) => i)
     } catch (error) {
@@ -290,7 +295,7 @@ export function usePredictionMarketPDX() {
       // Batch fetch all markets in parallel
       const marketPromises = marketIds.map(id => getPDXMarket(id))
       const markets = await Promise.allSettled(marketPromises)
-      
+
       // Filter out failed fetches and return successful ones
       return markets
         .filter((result): result is PromiseFulfilledResult<PDXMarket> => result.status === 'fulfilled')
@@ -481,263 +486,263 @@ export function usePredictionMarketPDX() {
   // ==================== TRADING FUNCTIONS ====================
 
   const createMarketWithPDX = useCallback(async (
-  params: MarketCreationParams
-): Promise<number> => {
-  if (!walletClient || !account || !isConnected) {
-    throw new Error('Wallet not connected or wrong network')
-  }
-  if (!isContractReady || !marketContract || !pdxTokenContract) {
-    throw new Error('Contracts not ready')
-  }
-
-  // Get signer from wallet client
-  const signer = await getSigner()
-  if (!signer) throw new Error('Failed to get signer')
-
-  setIsLoading(true)
-  try {
-    const validation = await validatePDXMarketWithPerplexity(params)
-    if (!validation.valid) {
-      throw new Error(validation.reason || 'Market validation failed')
+    params: MarketCreationParams
+  ): Promise<number> => {
+    if (!walletClient || !account || !isConnected) {
+      throw new Error('Wallet not connected or wrong network')
+    }
+    if (!isContractReady || !marketContract || !pdxTokenContract) {
+      throw new Error('Contracts not ready')
     }
 
-    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
-    const pdxWithSigner = (pdxTokenContract as ethers.Contract).connect(signer) as ethers.Contract
+    // Get signer from wallet client
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
 
-    const initialYesWei = ethers.parseEther(params.initialYes)
-    const initialNoWei = ethers.parseEther(params.initialNo)
-    const totalValue = initialYesWei + initialNoWei
+    setIsLoading(true)
+    try {
+      const validation = await validatePDXMarketWithPerplexity(params)
+      if (!validation.valid) {
+        throw new Error(validation.reason || 'Market validation failed')
+      }
 
-    console.log('📊 Market Creation Details:', {
-      question: params.question,
-      category: validation.category || params.category,
-      endTime: params.endTime,
-      endTimeReadable: new Date(params.endTime * 1000).toLocaleString(),
-      initialYes: params.initialYes,
-      initialNo: params.initialNo,
-      totalPDX: ethers.formatEther(totalValue)
-    })
+      const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+      const pdxWithSigner = (pdxTokenContract as ethers.Contract).connect(signer) as ethers.Contract
 
-    // Validate parameters before proceeding
-    const now = Math.floor(Date.now() / 1000)
-    if (params.endTime <= now) {
-      throw new Error(`Invalid end time: ${params.endTime}. Must be in the future (current: ${now})`)
-    }
+      const initialYesWei = ethers.parseEther(params.initialYes)
+      const initialNoWei = ethers.parseEther(params.initialNo)
+      const totalValue = initialYesWei + initialNoWei
 
-    if (params.question.length > 200) {
-      throw new Error('Question too long (max 200 characters)')
-    }
+      console.log('📊 Market Creation Details:', {
+        question: params.question,
+        category: validation.category || params.category,
+        endTime: params.endTime,
+        endTimeReadable: new Date(params.endTime * 1000).toLocaleString(),
+        initialYes: params.initialYes,
+        initialNo: params.initialNo,
+        totalPDX: ethers.formatEther(totalValue)
+      })
 
-    // Check PDX balance
-    console.log('💰 Checking PDX balance...')
-    const balance = await (pdxWithSigner as any).balanceOf(account)
-    const balanceFormatted = ethers.formatEther(balance)
-    console.log(`Balance: ${balanceFormatted} PDX, Required: ${ethers.formatEther(totalValue)} PDX`)
+      // Validate parameters before proceeding
+      const now = Math.floor(Date.now() / 1000)
+      if (params.endTime <= now) {
+        throw new Error(`Invalid end time: ${params.endTime}. Must be in the future (current: ${now})`)
+      }
 
-    if (balance < totalValue) {
-      throw new Error(
-        `Insufficient PDX balance.\n` +
-        `Required: ${ethers.formatEther(totalValue)} PDX\n` +
-        `Available: ${balanceFormatted} PDX\n` +
-        `Shortage: ${ethers.formatEther(totalValue - balance)} PDX`
-      )
-    }
+      if (params.question.length > 200) {
+        throw new Error('Question too long (max 200 characters)')
+      }
 
-    // Check current allowance
-    console.log('🔍 Checking current PDX allowance...')
-    const currentAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
-    console.log(`Current allowance: ${ethers.formatEther(currentAllowance)} PDX`)
+      // Check PDX balance
+      console.log('💰 Checking PDX balance...')
+      const balance = await (pdxWithSigner as any).balanceOf(account)
+      const balanceFormatted = ethers.formatEther(balance)
+      console.log(`Balance: ${balanceFormatted} PDX, Required: ${ethers.formatEther(totalValue)} PDX`)
 
-    // Only approve if needed
-    if (currentAllowance < totalValue) {
-      console.log(`✍️ Approving ${ethers.formatEther(totalValue)} PDX...`)
-      
-      // Reset allowance to 0 first if there's an existing allowance (some tokens require this)
-      if (currentAllowance > BigInt(0)) {
-        console.log('Resetting existing allowance to 0...')
-        try {
-          const resetTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, BigInt(0))
-          const resetReceipt = await resetTx.wait()
-          console.log('✅ Allowance reset:', resetReceipt.hash)
-        } catch (resetError: any) {
-          console.warn('⚠️ Reset allowance failed (may not be required):', resetError.message)
-          // Continue anyway, some tokens don't require reset
+      if (balance < totalValue) {
+        throw new Error(
+          `Insufficient PDX balance.\n` +
+          `Required: ${ethers.formatEther(totalValue)} PDX\n` +
+          `Available: ${balanceFormatted} PDX\n` +
+          `Shortage: ${ethers.formatEther(totalValue - balance)} PDX`
+        )
+      }
+
+      // Check current allowance
+      console.log('🔍 Checking current PDX allowance...')
+      const currentAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
+      console.log(`Current allowance: ${ethers.formatEther(currentAllowance)} PDX`)
+
+      // Only approve if needed
+      if (currentAllowance < totalValue) {
+        console.log(`✍️ Approving ${ethers.formatEther(totalValue)} PDX...`)
+
+        // Reset allowance to 0 first if there's an existing allowance (some tokens require this)
+        if (currentAllowance > BigInt(0)) {
+          console.log('Resetting existing allowance to 0...')
+          try {
+            const resetTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, BigInt(0))
+            const resetReceipt = await resetTx.wait()
+            console.log('✅ Allowance reset:', resetReceipt.hash)
+          } catch (resetError: any) {
+            console.warn('⚠️ Reset allowance failed (may not be required):', resetError.message)
+            // Continue anyway, some tokens don't require reset
+          }
         }
+
+        const approveTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, totalValue)
+        console.log('⏳ Approval transaction sent:', approveTx.hash)
+        const approvalReceipt = await approveTx.wait()
+        console.log('✅ PDX approved for market creation. Gas used:', approvalReceipt.gasUsed.toString())
+      } else {
+        console.log('✅ Sufficient allowance already exists')
       }
 
-      const approveTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, totalValue)
-      console.log('⏳ Approval transaction sent:', approveTx.hash)
-      const approvalReceipt = await approveTx.wait()
-      console.log('✅ PDX approved for market creation. Gas used:', approvalReceipt.gasUsed.toString())
-    } else {
-      console.log('✅ Sufficient allowance already exists')
-    }
+      // Verify approval was successful
+      const newAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
+      console.log(`Verified allowance: ${ethers.formatEther(newAllowance)} PDX`)
 
-    // Verify approval was successful
-    const newAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
-    console.log(`Verified allowance: ${ethers.formatEther(newAllowance)} PDX`)
-
-    if (newAllowance < totalValue) {
-      throw new Error(
-        `Approval verification failed.\n` +
-        `Expected: ${ethers.formatEther(totalValue)} PDX\n` +
-        `Actual: ${ethers.formatEther(newAllowance)} PDX\n` +
-        `Please try again or contact support.`
-      )
-    }
-
-    // Check if contract is paused (if the contract has this function)
-    try {
-      const isPaused = await (marketWithSigner as any).paused?.()
-      if (isPaused) {
-        throw new Error('Market contract is currently paused. Please try again later.')
+      if (newAllowance < totalValue) {
+        throw new Error(
+          `Approval verification failed.\n` +
+          `Expected: ${ethers.formatEther(totalValue)} PDX\n` +
+          `Actual: ${ethers.formatEther(newAllowance)} PDX\n` +
+          `Please try again or contact support.`
+        )
       }
-      console.log('✅ Contract is not paused')
-    } catch (pauseError: any) {
-      // Contract doesn't have paused() function - skip check
-      console.log('ℹ️ Contract does not have paused() function - skipping pause check')
-      // Continue without throwing
-    }
 
-    // Estimate gas before sending transaction
-    console.log('⛽ Estimating gas for market creation...')
-    let gasEstimate
-    try {
-      gasEstimate = await (marketWithSigner as any).createMarket.estimateGas(
+      // Check if contract is paused (if the contract has this function)
+      try {
+        const isPaused = await (marketWithSigner as any).paused?.()
+        if (isPaused) {
+          throw new Error('Market contract is currently paused. Please try again later.')
+        }
+        console.log('✅ Contract is not paused')
+      } catch (pauseError: any) {
+        // Contract doesn't have paused() function - skip check
+        console.log('ℹ️ Contract does not have paused() function - skipping pause check')
+        // Continue without throwing
+      }
+
+      // Estimate gas before sending transaction
+      console.log('⛽ Estimating gas for market creation...')
+      let gasEstimate
+      try {
+        gasEstimate = await (marketWithSigner as any).createMarket.estimateGas(
+          params.question,
+          validation.category || params.category || 'General',
+          BigInt(params.endTime),
+          initialYesWei,
+          initialNoWei
+        )
+        console.log(`Gas estimate: ${gasEstimate.toString()}`)
+      } catch (estimateError: any) {
+        console.error('❌ Gas estimation failed:', estimateError)
+
+        // Provide specific error messages based on the error
+        if (estimateError.message?.includes('insufficient')) {
+          throw new Error('Insufficient funds for transaction or PDX balance too low')
+        }
+        if (estimateError.message?.includes('paused')) {
+          throw new Error('Contract is paused')
+        }
+        if (estimateError.message?.includes('MIN_LIQUIDITY')) {
+          throw new Error('Initial liquidity too low. Please increase the amounts.')
+        }
+        if (estimateError.data) {
+          // Try to decode the error
+          try {
+            const decodedError = marketWithSigner.interface.parseError(estimateError.data)
+            throw new Error(`Contract error: ${decodedError?.name || 'Unknown error'}`)
+          } catch {
+            // Could not decode
+          }
+        }
+
+        throw new Error(
+          `Transaction validation failed. Possible reasons:\n` +
+          `- Minimum liquidity requirement not met (try higher amounts)\n` +
+          `- Invalid resolution time (must be in future)\n` +
+          `- Contract restrictions or paused state\n` +
+          `- Network congestion\n\n` +
+          `Technical details: ${estimateError.message || estimateError.reason || 'Unknown error'}`
+        )
+      }
+
+      console.log('🚀 Creating market...')
+
+      // Add gas buffer to estimate (30% extra)
+      const gasLimit = (gasEstimate * BigInt(130)) / BigInt(100)
+      console.log(`Using gas limit: ${gasLimit.toString()} (estimate + 30% buffer)`)
+
+      const tx = await (marketWithSigner as any).createMarket(
         params.question,
         validation.category || params.category || 'General',
         BigInt(params.endTime),
         initialYesWei,
-        initialNoWei
+        initialNoWei,
+        { gasLimit } // Add explicit gas limit
       )
-      console.log(`Gas estimate: ${gasEstimate.toString()}`)
-    } catch (estimateError: any) {
-      console.error('❌ Gas estimation failed:', estimateError)
-      
-      // Provide specific error messages based on the error
-      if (estimateError.message?.includes('insufficient')) {
-        throw new Error('Insufficient funds for transaction or PDX balance too low')
+
+      console.log('⏳ Transaction sent:', tx.hash)
+      console.log('Waiting for confirmation...')
+      const receipt = await tx.wait()
+
+      if (!receipt) {
+        throw new Error('Transaction failed - no receipt returned')
       }
-      if (estimateError.message?.includes('paused')) {
-        throw new Error('Contract is paused')
+
+      if (receipt.status === 0) {
+        throw new Error('Transaction reverted on-chain')
       }
-      if (estimateError.message?.includes('MIN_LIQUIDITY')) {
-        throw new Error('Initial liquidity too low. Please increase the amounts.')
+
+      console.log(`✅ Transaction confirmed in block ${receipt.blockNumber}`)
+      console.log(`Gas used: ${receipt.gasUsed.toString()}`)
+
+      // Get the new market ID
+      const nextId = await (marketWithSigner as any).nextMarketId()
+      const marketId = Number(nextId) - 1
+
+      console.log(`✅ Market created successfully with ID: ${marketId}`)
+
+      // Verify the market was created
+      try {
+        const createdMarket = await getPDXMarket(marketId)
+        console.log('✅ Market verified:', {
+          id: createdMarket.id,
+          question: createdMarket.question,
+          category: createdMarket.category
+        })
+      } catch (verifyError) {
+        console.warn('⚠️ Could not verify market creation:', verifyError)
+        // Don't throw - market was likely created successfully
       }
-      if (estimateError.data) {
-        // Try to decode the error
-        try {
-          const decodedError = marketWithSigner.interface.parseError(estimateError.data)
-          throw new Error(`Contract error: ${decodedError?.name || 'Unknown error'}`)
-        } catch {
-          // Could not decode
-        }
+
+      return marketId
+
+    } catch (error: any) {
+      console.error('❌ Error creating market:', error)
+
+      // Enhanced error messages with specific handling
+      if (error.message?.includes('Insufficient PDX balance')) {
+        throw error // Already well formatted
+      } else if (error.message?.includes('Approval verification failed')) {
+        throw error // Already well formatted
+      } else if (error.message?.includes('Invalid end time')) {
+        throw error // Already well formatted
+      } else if (error.message?.includes('Question too long')) {
+        throw error // Already well formatted
+      } else if (error.message?.includes('paused')) {
+        throw new Error('Market contract is currently paused. Please try again later.')
+      } else if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected')) {
+        throw new Error('Transaction was cancelled by user')
+      } else if (error.code === 'CALL_EXCEPTION') {
+        throw new Error(
+          'Transaction would fail on-chain. Common causes:\n' +
+          '• Insufficient PDX balance or allowance\n' +
+          '• Contract is paused\n' +
+          '• Minimum liquidity not met (try 1 PDX or more for each side)\n' +
+          '• Invalid parameters (check question length, end time)\n' +
+          '• Network issues\n\n' +
+          'Please check your PDX balance and try again with higher amounts.'
+        )
+      } else if (error.code === 'INSUFFICIENT_FUNDS') {
+        throw new Error('Insufficient BNB for gas fees. Please add BNB to your wallet.')
+      } else if (error.code === 'NETWORK_ERROR') {
+        throw new Error('Network error. Please check your connection and try again.')
+      } else if (error.code === 'TIMEOUT') {
+        throw new Error('Transaction timed out. Please try again.')
+      } else {
+        throw new Error(
+          error.reason ||
+          error.message ||
+          'Failed to create market. Please try again or contact support.'
+        )
       }
-      
-      throw new Error(
-        `Transaction validation failed. Possible reasons:\n` +
-        `- Minimum liquidity requirement not met (try higher amounts)\n` +
-        `- Invalid resolution time (must be in future)\n` +
-        `- Contract restrictions or paused state\n` +
-        `- Network congestion\n\n` +
-        `Technical details: ${estimateError.message || estimateError.reason || 'Unknown error'}`
-      )
+    } finally {
+      setIsLoading(false)
     }
-
-    console.log('🚀 Creating market...')
-    
-    // Add gas buffer to estimate (30% extra)
-    const gasLimit = (gasEstimate * BigInt(130)) / BigInt(100)
-    console.log(`Using gas limit: ${gasLimit.toString()} (estimate + 30% buffer)`)
-
-    const tx = await (marketWithSigner as any).createMarket(
-      params.question,
-      validation.category || params.category || 'General',
-      BigInt(params.endTime),
-      initialYesWei,
-      initialNoWei,
-      { gasLimit } // Add explicit gas limit
-    )
-
-    console.log('⏳ Transaction sent:', tx.hash)
-    console.log('Waiting for confirmation...')
-    const receipt = await tx.wait()
-
-    if (!receipt) {
-      throw new Error('Transaction failed - no receipt returned')
-    }
-
-    if (receipt.status === 0) {
-      throw new Error('Transaction reverted on-chain')
-    }
-
-    console.log(`✅ Transaction confirmed in block ${receipt.blockNumber}`)
-    console.log(`Gas used: ${receipt.gasUsed.toString()}`)
-
-    // Get the new market ID
-    const nextId = await (marketWithSigner as any).nextMarketId()
-    const marketId = Number(nextId) - 1
-
-    console.log(`✅ Market created successfully with ID: ${marketId}`)
-    
-    // Verify the market was created
-    try {
-      const createdMarket = await getPDXMarket(marketId)
-      console.log('✅ Market verified:', {
-        id: createdMarket.id,
-        question: createdMarket.question,
-        category: createdMarket.category
-      })
-    } catch (verifyError) {
-      console.warn('⚠️ Could not verify market creation:', verifyError)
-      // Don't throw - market was likely created successfully
-    }
-
-    return marketId
-
-  } catch (error: any) {
-    console.error('❌ Error creating market:', error)
-    
-    // Enhanced error messages with specific handling
-    if (error.message?.includes('Insufficient PDX balance')) {
-      throw error // Already well formatted
-    } else if (error.message?.includes('Approval verification failed')) {
-      throw error // Already well formatted
-    } else if (error.message?.includes('Invalid end time')) {
-      throw error // Already well formatted
-    } else if (error.message?.includes('Question too long')) {
-      throw error // Already well formatted
-    } else if (error.message?.includes('paused')) {
-      throw new Error('Market contract is currently paused. Please try again later.')
-    } else if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected')) {
-      throw new Error('Transaction was cancelled by user')
-    } else if (error.code === 'CALL_EXCEPTION') {
-      throw new Error(
-        'Transaction would fail on-chain. Common causes:\n' +
-        '• Insufficient PDX balance or allowance\n' +
-        '• Contract is paused\n' +
-        '• Minimum liquidity not met (try 1 PDX or more for each side)\n' +
-        '• Invalid parameters (check question length, end time)\n' +
-        '• Network issues\n\n' +
-        'Please check your PDX balance and try again with higher amounts.'
-      )
-    } else if (error.code === 'INSUFFICIENT_FUNDS') {
-      throw new Error('Insufficient BNB for gas fees. Please add BNB to your wallet.')
-    } else if (error.code === 'NETWORK_ERROR') {
-      throw new Error('Network error. Please check your connection and try again.')
-    } else if (error.code === 'TIMEOUT') {
-      throw new Error('Transaction timed out. Please try again.')
-    } else {
-      throw new Error(
-        error.reason || 
-        error.message || 
-        'Failed to create market. Please try again or contact support.'
-      )
-    }
-  } finally {
-    setIsLoading(false)
-  }
-}, [walletClient, account, isConnected, isContractReady, marketContract, pdxTokenContract, getSigner, getPDXMarket])
+  }, [walletClient, account, isConnected, isContractReady, marketContract, pdxTokenContract, getSigner, getPDXMarket])
 
   // Debug helper function
   const debugMarketCreation = useCallback(async () => {
@@ -764,12 +769,12 @@ export function usePredictionMarketPDX() {
       console.log('Market Contract:', PDX_PREDICTION_MARKET_ADDRESS)
       console.log('PDX Token:', PDX_TOKEN_ADDRESS)
       console.log('Helper Contract:', PDX_HELPER_ADDRESS)
-      
+
       // Check contract status
       try {
         const nextMarketId = await (marketContract as any).nextMarketId()
         console.log('Total Markets:', Number(nextMarketId))
-        
+
         const owner = await (marketContract as any).owner()
         console.log('Contract Owner:', owner)
       } catch (contractError) {
@@ -968,6 +973,117 @@ export function usePredictionMarketPDX() {
     }
   }, [account, pdxTokenContract, getProvider])
 
+  const getMarketPriceHistory = useCallback(async (marketId: number): Promise<PricePoint[]> => {
+    if (!marketContract) return []
+
+    try {
+      console.log(`Fetching PDX market history for ${marketId}...`)
+
+      // Helper to fetch events in chunks
+      const fetchEventsInChunks = async (filter: any, startBlock: number, endBlock: number) => {
+        const CHUNK_SIZE = 49000 // Slightly under 50k to be safe
+        let allEvents: any[] = []
+        for (let i = startBlock; i < endBlock; i += CHUNK_SIZE) {
+          const to = Math.min(i + CHUNK_SIZE, endBlock)
+          try {
+            const chunk = await marketContract.queryFilter(filter, i, to)
+            allEvents.push(...chunk)
+          } catch (e) {
+            console.warn(`Failed to fetch chunk ${i}-${to}`, e)
+          }
+        }
+        return allEvents
+      }
+
+      const provider = marketContract.runner?.provider
+      if (!provider) throw new Error("No provider")
+
+      const currentBlock = await provider.getBlockNumber()
+      const startBlock = Math.max(0, currentBlock - 2000000) // Scan last ~2.5 months
+
+      // Get MarketCreated event
+      const createdFilter = marketContract.filters.MarketCreated(BigInt(marketId))
+      const createdEvents = await fetchEventsInChunks(createdFilter, startBlock, currentBlock)
+
+      const points: PricePoint[] = []
+
+      if (createdEvents.length > 0) {
+        const block = await createdEvents[0].getBlock()
+        points.push({
+          timestamp: block.timestamp * 1000,
+          price: 50 // Assume 50% start
+        })
+      }
+
+      // Get Buy events
+      const buyFilter = marketContract.filters.BuyWithPDX(BigInt(marketId))
+      const buyEvents = await fetchEventsInChunks(buyFilter, startBlock, currentBlock)
+      console.log(`Found ${buyEvents.length} PDX buy events`)
+
+      // Get Sell events
+      const sellFilter = marketContract.filters.SellForPDX(BigInt(marketId))
+      const sellEvents = await fetchEventsInChunks(sellFilter, startBlock, currentBlock)
+      console.log(`Found ${sellEvents.length} PDX sell events`)
+
+      // Process Buy events
+      for (const event of buyEvents) {
+        const block = await event.getBlock()
+        const { buyYes, pdxIn, tokenOut } = (event as any).args
+
+        const pricePerToken = Number(ethers.formatEther(pdxIn)) / Number(ethers.formatEther(tokenOut))
+
+        let yesPrice = 0
+        if (buyYes) {
+          yesPrice = pricePerToken * 100
+        } else {
+          yesPrice = 100 - (pricePerToken * 100)
+        }
+
+        points.push({
+          timestamp: block.timestamp * 1000,
+          price: Math.max(0, Math.min(100, yesPrice))
+        })
+      }
+
+      // Process Sell events
+      for (const event of sellEvents) {
+        const block = await event.getBlock()
+        const { sellYes, tokenIn, pdxOut } = (event as any).args
+
+        const pricePerToken = Number(ethers.formatEther(pdxOut)) / Number(ethers.formatEther(tokenIn))
+
+        let yesPrice = 0
+        if (sellYes) {
+          yesPrice = pricePerToken * 100
+        } else {
+          yesPrice = 100 - (pricePerToken * 100)
+        }
+
+        points.push({
+          timestamp: block.timestamp * 1000,
+          price: Math.max(0, Math.min(100, yesPrice))
+        })
+      }
+
+      points.sort((a, b) => a.timestamp - b.timestamp)
+
+      // Add current time point
+      if (points.length > 0) {
+        const lastPoint = points[points.length - 1]
+        points.push({
+          timestamp: Date.now(),
+          price: lastPoint.price
+        })
+      }
+
+      return points
+
+    } catch (error) {
+      console.error('Error fetching price history:', error)
+      return []
+    }
+  }, [marketContract])
+
   return {
     // Market management
     createMarketWithPDX,
@@ -997,6 +1113,7 @@ export function usePredictionMarketPDX() {
     // View
     getUserInvestment,
     checkPDXBalance,
+    getMarketPriceHistory,
 
     // State
     isLoading,

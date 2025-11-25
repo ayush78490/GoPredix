@@ -26,6 +26,11 @@ export enum Outcome {
   No = 2
 }
 
+export interface PricePoint {
+  timestamp: number
+  price: number
+}
+
 export interface BNBMarket {
   id: number
   creator: string
@@ -1051,6 +1056,117 @@ export function usePredictionMarketBNB() {
     return await tx.wait()
   }, [signer, isCorrectNetwork, marketContract])
 
+  const getMarketPriceHistory = useCallback(async (marketId: number): Promise<PricePoint[]> => {
+    if (!marketContract) return []
+
+    try {
+      console.log(`Fetching BNB market history for ${marketId}...`)
+
+      // Helper to fetch events in chunks
+      const fetchEventsInChunks = async (filter: any, startBlock: number, endBlock: number) => {
+        const CHUNK_SIZE = 49000 // Slightly under 50k to be safe
+        let allEvents: any[] = []
+        for (let i = startBlock; i < endBlock; i += CHUNK_SIZE) {
+          const to = Math.min(i + CHUNK_SIZE, endBlock)
+          try {
+            const chunk = await marketContract.queryFilter(filter, i, to)
+            allEvents.push(...chunk)
+          } catch (e) {
+            console.warn(`Failed to fetch chunk ${i}-${to}`, e)
+          }
+        }
+        return allEvents
+      }
+
+      const provider = marketContract.runner?.provider
+      if (!provider) throw new Error("No provider")
+
+      const currentBlock = await provider.getBlockNumber()
+      const startBlock = Math.max(0, currentBlock - 2000000) // Scan last ~2.5 months
+
+      // Get MarketCreated event
+      const createdFilter = marketContract.filters.MarketCreated(BigInt(marketId))
+      const createdEvents = await fetchEventsInChunks(createdFilter, startBlock, currentBlock)
+
+      const points: PricePoint[] = []
+
+      if (createdEvents.length > 0) {
+        const block = await createdEvents[0].getBlock()
+        points.push({
+          timestamp: block.timestamp * 1000,
+          price: 50 // Assume 50% start
+        })
+      }
+
+      // Get Buy events
+      const buyFilter = marketContract.filters.BuyWithBNB(BigInt(marketId))
+      const buyEvents = await fetchEventsInChunks(buyFilter, startBlock, currentBlock)
+      console.log(`Found ${buyEvents.length} BNB buy events`)
+
+      // Get Sell events
+      const sellFilter = marketContract.filters.SellForBNB(BigInt(marketId))
+      const sellEvents = await fetchEventsInChunks(sellFilter, startBlock, currentBlock)
+      console.log(`Found ${sellEvents.length} BNB sell events`)
+
+      // Process Buy events
+      for (const event of buyEvents) {
+        const block = await event.getBlock()
+        const { buyYes, bnbIn, tokenOut } = (event as any).args
+
+        const pricePerToken = Number(ethers.formatEther(bnbIn)) / Number(ethers.formatEther(tokenOut))
+
+        let yesPrice = 0
+        if (buyYes) {
+          yesPrice = pricePerToken * 100
+        } else {
+          yesPrice = 100 - (pricePerToken * 100)
+        }
+
+        points.push({
+          timestamp: block.timestamp * 1000,
+          price: Math.max(0, Math.min(100, yesPrice))
+        })
+      }
+
+      // Process Sell events
+      for (const event of sellEvents) {
+        const block = await event.getBlock()
+        const { sellYes, tokenIn, bnbOut } = (event as any).args
+
+        const pricePerToken = Number(ethers.formatEther(bnbOut)) / Number(ethers.formatEther(tokenIn))
+
+        let yesPrice = 0
+        if (sellYes) {
+          yesPrice = pricePerToken * 100
+        } else {
+          yesPrice = 100 - (pricePerToken * 100)
+        }
+
+        points.push({
+          timestamp: block.timestamp * 1000,
+          price: Math.max(0, Math.min(100, yesPrice))
+        })
+      }
+
+      points.sort((a, b) => a.timestamp - b.timestamp)
+
+      // Add current time point
+      if (points.length > 0) {
+        const lastPoint = points[points.length - 1]
+        points.push({
+          timestamp: Date.now(),
+          price: lastPoint.price
+        })
+      }
+
+      return points
+
+    } catch (error) {
+      console.error('Error fetching price history:', error)
+      return []
+    }
+  }, [marketContract])
+
   return {
     // Market management
     createMarket,
@@ -1098,6 +1214,7 @@ export function usePredictionMarketBNB() {
     // Status checks
     canRequestResolution,
     canDispute,
+    getMarketPriceHistory,
 
     // User positions
     getUserPositions,

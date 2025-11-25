@@ -215,9 +215,16 @@ export default function MarketsPage() {
       return;
     }
 
-    const marketKey = `${market.paymentToken}-${market.id}`;
-    setLoadingMarketId(marketKey);
-    router.push(`/markets/${marketKey}`);
+    // Generate SEO-friendly slug from question
+    const questionSlug = market.question
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .substring(0, 60);
+
+    const marketSlug = `${questionSlug}-${market.paymentToken}-${market.id}`;
+    setLoadingMarketId(`${market.paymentToken}-${market.id}`);
+    router.push(`/markets/${marketSlug}`);
   }
 
   return (
@@ -324,8 +331,8 @@ export default function MarketsPage() {
                   variant={selectedCategory === cat ? "default" : "outline"}
                   onClick={() => setSelectedCategory(cat)}
                   className={`backdrop-blur-sm ${selectedCategory === cat
-                      ? "bg-primary text-black border-primary"
-                      : "bg-card/80"
+                    ? "bg-primary text-black border-primary"
+                    : "bg-card/80"
                     }`}
                 >
                   {cat}
