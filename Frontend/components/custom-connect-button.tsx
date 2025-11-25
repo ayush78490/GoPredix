@@ -1,7 +1,6 @@
 "use client"
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useWeb3Context } from '@/lib/wallet-context';
 import { useAccount } from 'wagmi';
 
 interface CustomConnectButtonProps {
@@ -10,17 +9,15 @@ interface CustomConnectButtonProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-export function CustomConnectButton({ 
-  className = "", 
+export function CustomConnectButton({
+  className = "",
   variant = "default",
   size = "md"
 }: CustomConnectButtonProps) {
-  const { isMobile, connectWallet, account, isCorrectNetwork } = useWeb3Context();
-
   // Size classes
   const sizeClasses = {
     sm: "px-4 py-1.5 text-xs",
-    md: "px-7 py-2 text-sm", 
+    md: "px-7 py-2 text-sm",
     lg: "px-8 py-3 text-base"
   };
 
@@ -33,19 +30,7 @@ export function CustomConnectButton({
 
   const baseClasses = "rounded-full font-semibold transition-all duration-200";
 
-  // For mobile, use the existing custom flow
-  if (isMobile) {
-    return (
-      <button
-        onClick={connectWallet}
-        className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
-      >
-        {account ? "Connected" : "Login"}
-      </button>
-    );
-  }
-
-  // For desktop, use RainbowKit's ConnectButton
+  // Use RainbowKit's ConnectButton for both mobile and desktop
   return (
     <ConnectButton.Custom>
       {({
@@ -147,17 +132,15 @@ export function CustomConnectButton({
 
 // Export a hook to check connection status that can be used by other components
 export function useConnectStatus() {
-  const { account: contextAccount, isCorrectNetwork } = useWeb3Context();
-  const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount();
-  
-  // Unified connection state - consider connected if either system reports connection
-  const isConnected = wagmiConnected || !!contextAccount;
-  const account = wagmiAddress || contextAccount;
-  
+  const { address, isConnected, chain } = useAccount();
+
+  // Check if we're on the correct network (BSC Testnet - chainId 97)
+  const isCorrectNetwork = chain?.id === 97;
+
   return {
     isConnected,
     isCorrectNetwork,
-    account,
+    account: address,
     canTransact: isConnected && isCorrectNetwork
   };
 }
