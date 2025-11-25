@@ -338,8 +338,8 @@ export default function MarketsPage() {
               <Button
                 onClick={handleFaucet}
                 size="sm"
-                variant="outline"
-                className="backdrop-blur-sm bg-card/80"
+                // variant="default"
+                className="backdrop-blur-sm bg-card/80 border border-cyan-300 hover:bg-cyan-300 hover:text-black"
               >
                 <Droplets className="w-4 h-4 mr-2" />
                 Faucet PDX
@@ -349,7 +349,7 @@ export default function MarketsPage() {
                 onClick={handleHowItWorks}
                 size="sm"
                 variant="outline"
-                className="backdrop-blur-sm bg-card/80"
+                className="backdrop-blur-sm bg-card/80 border border-cyan-300 hover:bg-cyan-300 hover:text-black"
               >
                 <Info className="w-4 h-4 mr-2" />
                 Leaderboard
