@@ -32,26 +32,26 @@ export const generateSlug = (question: string, id: number | string): string => {
     .replace(/-+/g, '-')
     .substring(0, 60)
     .replace(/-$/, '')
-  
+
   return `${baseSlug}-${id}` || `market-${id}`
 }
 
-export const parseMarketSlug = (slug: string): { 
-  type: 'BNB' | 'PDX' | null, 
+export const parseMarketSlug = (slug: string): {
+  type: 'BNB' | 'PDX' | null,
   numericId: number | null,
   compositeId: string | null
 } => {
   if (!slug) return { type: null, numericId: null, compositeId: null }
-  
+
   // Try to find "BNB-X" or "PDX-X" pattern in the slug
   // e.g., "will-bitcoin-reach-100k-PDX-0" → type: "PDX", id: 0
   const parts = slug.split('-')
-  
+
   // Check from the end backwards for token-id pattern
   for (let i = parts.length - 2; i >= 0; i--) {
     const potentialType = parts[i]
     const potentialId = parts[i + 1]
-    
+
     if ((potentialType === 'BNB' || potentialType === 'PDX') && /^\d+$/.test(potentialId)) {
       const numericId = parseInt(potentialId, 10)
       return {
@@ -61,7 +61,7 @@ export const parseMarketSlug = (slug: string): {
       }
     }
   }
-  
+
   // Fallback: try direct numeric ID (assume BNB for backward compatibility)
   if (/^\d+$/.test(slug)) {
     return {
@@ -70,7 +70,7 @@ export const parseMarketSlug = (slug: string): {
       compositeId: `BNB-${slug}`
     }
   }
-  
+
   return { type: null, numericId: null, compositeId: null }
 }
 
@@ -107,7 +107,7 @@ const convertToFrontendMarket = (m: any, id: number | string) => {
   const yesPool = parseFloat(m?.yesPool ?? "0") || 0
   const noPool = parseFloat(m?.noPool ?? "0") || 0
   const totalPool = yesPool + noPool
-  
+
   const yesOdds = totalPool > 0 ? (yesPool / totalPool) * 100 : 50
   const noOdds = totalPool > 0 ? (noPool / totalPool) * 100 : 50
 
@@ -139,30 +139,30 @@ const generatePriceHistory = (market: any, days: number = 7) => {
   const now = Date.now()
   const basePrice = market.yesOdds || 50
   const volatility = 5
-  
+
   for (let i = days - 1; i >= 0; i--) {
     const time = now - (i * 24 * 60 * 60 * 1000)
     const randomChange = (Math.random() - 0.5) * volatility * 2
     const price = Math.max(10, Math.min(90, basePrice + randomChange))
-    
+
     history.push({
       time,
       price: Number(price.toFixed(2))
     })
   }
-  
+
   return history
 }
 
 const getPaymentTokenBadge = (token: string) => {
   const tokenConfig: Record<string, any> = {
-    "BNB": { 
-      label: "BNB", 
+    "BNB": {
+      label: "BNB",
       color: "bg-yellow-500/20 border-yellow-600/50 text-yellow-400",
       icon: "🔶"
     },
-    "PDX": { 
-      label: "PDX", 
+    "PDX": {
+      label: "PDX",
       color: "bg-purple-500/20 border-purple-600/50 text-purple-400",
       icon: "💜"
     }
@@ -199,7 +199,7 @@ export default function MarketPage() {
   const isCorrectNetwork = chainId === 97
 
   const { markets: allMarkets, isLoading: marketsLoading, getAllMarkets, isContractReady } = useAllMarkets()
-  
+
   const bnbHook = usePredictionMarketBNB()
   const pdxHook = usePredictionMarketPDX()
 
@@ -212,7 +212,7 @@ export default function MarketPage() {
           noBalance: "0"
         }
       }
-      
+
       const investment = await pdxHook.getUserInvestment(marketId, account)
       return investment || {
         totalInvested: "0",
@@ -247,7 +247,7 @@ export default function MarketPage() {
 
     try {
       let marketsToSearch = allMarkets
-      
+
       if (allMarkets.length === 0 && !marketsLoading && isContractReady) {
         console.log("No markets in cache, fetching from blockchain...")
         try {
@@ -266,7 +266,7 @@ export default function MarketPage() {
       // Try to find by composite ID first
       if (parsed.compositeId) {
         const market = marketsToSearch.find((m: any) => m.id === parsed.compositeId)
-        
+
         if (market) {
           console.log(`Found market by composite ID: ${parsed.compositeId}`)
           foundMarket = convertToFrontendMarket(market, parsed.compositeId)
@@ -279,7 +279,7 @@ export default function MarketPage() {
           const marketId = typeof m.id === 'string' ? parseInt(m.id) : Number(m.id)
           return marketId === parsed.numericId
         })
-        
+
         if (market) {
           console.log(`Found market by numeric ID: ${parsed.numericId}`)
           foundMarket = convertToFrontendMarket(market, parsed.numericId)
@@ -291,7 +291,7 @@ export default function MarketPage() {
           const marketData = marketsToSearch[i]
           const marketId = typeof marketData.id === 'string' ? parseInt(marketData.id) : Number(marketData.id)
           const formatted = convertToFrontendMarket(marketData, marketId)
-          
+
           if (formatted.slug === marketSlug || formatted.id === marketSlug) {
             console.log(`Found market by slug match: ${marketSlug}`)
             foundMarket = formatted
@@ -302,21 +302,21 @@ export default function MarketPage() {
 
       if (foundMarket) {
         marketFoundRef.current = true
-        
+
         // ✅ FIXED: Update the market object with the correct payment token from slug
         const paymentToken = parsed.type || foundMarket.paymentToken || "BNB"
         foundMarket.paymentToken = paymentToken  // 👈 ADD THIS LINE
         const marketId = parsed.numericId ?? (typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id))
-        
+
         console.log(`Market ${marketId} uses payment token: ${paymentToken} (parsed from slug: ${parsed.type})`)
-        
+
         try {
           if (paymentToken === "PDX" && pdxHook.isContractReady) {
             console.log("Fetching PDX market details...")
             const pdxMarket = await pdxHook.getPDXMarket(marketId)
-            
+
             const userInvestment = await safeGetUserInvestment(marketId, account || "")
-            
+
             foundMarket = {
               ...foundMarket,
               ...pdxMarket,
@@ -328,7 +328,7 @@ export default function MarketPage() {
           } else if (paymentToken === "BNB" && bnbHook.isContractReady) {
             console.log("Fetching BNB market details...")
             const bnbMarket = await bnbHook.getMarket(marketId)
-            
+
             foundMarket = {
               ...foundMarket,
               ...bnbMarket,
@@ -340,23 +340,23 @@ export default function MarketPage() {
         } catch (hookError) {
           console.warn("Could not fetch additional market data:", hookError)
         }
-        
+
         setMarket(foundMarket)
-        
+
         const priceHistory = generatePriceHistory(foundMarket)
         setChartData(priceHistory)
-        
+
         setTimeout(() => {
           setIsChartLoading(false)
           setIsLoading(false)
         }, 300)
-        
+
         console.log(`Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
         return;
-        
+
       } else {
         console.warn(`Market not found with slug: ${marketSlug}, retrying... (attempt ${retryCount + 1})`)
-        
+
         if (retryCount < 5) {
           setTimeout(() => {
             setRetryCount(prev => prev + 1)
@@ -378,7 +378,7 @@ export default function MarketPage() {
         setIsLoading(false)
         setIsChartLoading(false)
       }
-    } 
+    }
   }, [marketSlug, allMarkets, marketsLoading, isContractReady, bnbHook.isContractReady, pdxHook.isContractReady, account, safeGetUserInvestment, retryCount, getAllMarkets])
 
   useEffect(() => {
@@ -455,7 +455,7 @@ export default function MarketPage() {
   }
 
   const resolutionDate = market ? new Date(market.resolutionDate) : new Date()
-  
+
   const getStatusBadge = () => {
     if (market?.isActive) return { text: "Active", color: "bg-green-500/20 border-green-600/50 text-green-400" }
     if (market?.status === 3) return { text: "Resolved", color: "bg-blue-500/20 border-blue-600/50 text-blue-400" }
@@ -467,10 +467,10 @@ export default function MarketPage() {
 
   const memoizedMarketData = useMemo(() => {
     if (!market) return null
-    
+
     const tokenSymbol = market.paymentToken === "PDX" ? "PDX" : "BNB"
     const formattedLiquidity = market.totalLiquidity ? `${parseFloat(market.totalLiquidity).toFixed(2)} ${tokenSymbol}` : 'N/A'
-    
+
     return {
       tokenSymbol,
       formattedLiquidity,
@@ -500,9 +500,9 @@ export default function MarketPage() {
           <Header />
           <div className="max-w-6xl mx-auto px-4 py-8 mt-[10vh]">
             <div className="mb-6">
-              <Button 
+              <Button
                 onClick={handleBackNavigation}
-                variant="ghost" 
+                variant="ghost"
                 className="gap-2 backdrop-blur-sm bg-card/80"
                 disabled={isNavigatingBack}
               >
@@ -520,36 +520,21 @@ export default function MarketPage() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-[10vh]">
-              <div className="lg:col-span-2 space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-20 h-6 bg-gray-700 rounded-full animate-pulse"></div>
-                    <div className="w-48 h-8 bg-gray-700 rounded-lg animate-pulse"></div>
-                  </div>
-                  <div className="w-24 h-6 bg-gray-700 rounded-lg animate-pulse"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-[5vh]">
+
+              {/* Mobile Header Skeleton - Visible only on mobile, Order 1 */}
+              <div className="lg:hidden order-1 space-y-4">
+                <div className="flex gap-3">
+                  <div className="w-20 h-6 bg-gray-700 rounded-full animate-pulse"></div>
+                  <div className="w-24 h-6 bg-gray-700 rounded-full animate-pulse"></div>
                 </div>
-
-                <div className="w-full h-20 bg-gray-700 rounded-lg animate-pulse"></div>
-
-                <div className="w-full h-16 bg-gray-700 rounded-lg animate-pulse"></div>
-
-                <div className="w-full bg-card rounded-lg p-4 backdrop-blur-sm h-80">
-                  <div className="h-full flex flex-col items-center justify-center gap-4">
-                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
-                    <p className="text-muted-foreground">Loading market chart...</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-20 bg-gray-700 rounded-lg animate-pulse"></div>
-                  ))}
-                </div>
+                <div className="w-full h-8 bg-gray-700 rounded-lg animate-pulse"></div>
+                <div className="w-32 h-4 bg-gray-700 rounded-lg animate-pulse"></div>
               </div>
 
-              <div className="lg:col-span-1">
-                <Card className="p-6 sticky top-6 space-y-6 backdrop-blur-sm bg-card/80 h-96">
+              {/* Trade Card Skeleton - Mobile Order 2, Desktop Right Col */}
+              <div className="lg:col-span-1 lg:order-2 order-2">
+                <Card className="p-6 space-y-6 backdrop-blur-sm bg-card/80 h-96">
                   <div className="flex flex-col items-center justify-center h-full gap-4">
                     <Loader2 className="w-12 h-12 animate-spin text-primary" />
                     <p className="text-muted-foreground text-center">
@@ -562,6 +547,40 @@ export default function MarketPage() {
                     )}
                   </div>
                 </Card>
+              </div>
+
+              {/* Chart & Details Skeleton - Mobile Order 3, Desktop Left Col */}
+              <div className="lg:col-span-2 lg:order-1 order-3 space-y-6">
+
+                {/* Chart Skeleton - Mobile First (inside col), Desktop Second */}
+                <div className="order-1 lg:order-2 w-full bg-card rounded-lg p-4 backdrop-blur-sm h-80">
+                  <div className="h-full flex flex-col items-center justify-center gap-4">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                    <p className="text-muted-foreground">Loading market chart...</p>
+                  </div>
+                </div>
+
+                {/* Details Skeleton - Mobile Second (inside col), Desktop First */}
+                <div className="order-2 lg:order-1 space-y-6">
+                  {/* Desktop Header Skeleton - Hidden on Mobile */}
+                  <div className="hidden lg:flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-20 h-6 bg-gray-700 rounded-full animate-pulse"></div>
+                      <div className="w-48 h-8 bg-gray-700 rounded-lg animate-pulse"></div>
+                    </div>
+                    <div className="w-24 h-6 bg-gray-700 rounded-lg animate-pulse"></div>
+                  </div>
+
+                  <div className="w-full h-20 bg-gray-700 rounded-lg animate-pulse"></div>
+
+                  <div className="w-full h-16 bg-gray-700 rounded-lg animate-pulse"></div>
+                </div>
+
+                <div className="order-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-20 bg-gray-700 rounded-lg animate-pulse"></div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -589,9 +608,9 @@ export default function MarketPage() {
         <div className="relative z-10">
           <Header />
           <div className="max-w-6xl mx-auto px-4 py-8 mt-[10vh]">
-            <Button 
+            <Button
               onClick={handleBackNavigation}
-              variant="ghost" 
+              variant="ghost"
               className="mb-6 -ml-4 gap-2 text-muted-foreground hover:text-foreground backdrop-blur-sm bg-card/80"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -636,9 +655,9 @@ export default function MarketPage() {
 
         <div className="max-w-6xl mx-auto px-4 py-8">
           <div className="mb-4 flex items-center justify-between gap-4 mt-[10vh]">
-            <Button 
+            <Button
               onClick={handleBackNavigation}
-              variant="ghost" 
+              variant="ghost"
               className="gap-2 backdrop-blur-sm bg-card/80 relative"
               disabled={isNavigatingBack}
             >
@@ -675,45 +694,146 @@ export default function MarketPage() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+            {/* Mobile Header - Visible only on mobile, Order 1 */}
+            <div className="lg:hidden order-1 space-y-4">
+              <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-3">
                   <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold backdrop-blur-sm">
                     {market.category}
                   </div>
-                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-balance">{market.title}</h1>
-                </div>
-
-                <div className="sm:text-right text-sm text-muted-foreground">
                   <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${statusBadge.color} backdrop-blur-sm`}>
                     {statusBadge.text}
                   </div>
-                  <div className="mt-1 sm:mt-2">
-                    <div className="text-xs">Resolution: <span className="font-medium">{resolutionDate.toLocaleDateString()}</span></div>
+                </div>
+                <h1 className="text-2xl font-bold text-balance leading-tight">{market.title}</h1>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Resolution: <span className="font-medium">{resolutionDate.toLocaleDateString()}</span></span>
+                </div>
+              </div>
+            </div>
+
+            {/* Trade Card Column - Mobile Order 2, Desktop Right Col */}
+            <div className="lg:col-span-1 lg:order-2 order-2">
+              <Card className="p-6 sticky top-6 space-y-6 backdrop-blur-sm bg-card/80">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-lg font-semibold">Current Odds</h2>
+                    <div className="text-xs">
+                      {getPaymentTokenBadge(market.paymentToken)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleOpenModal("YES")}
+                    disabled={!market.isActive}
+                    className={`w-full p-4 rounded-lg border-2 transition-all text-left backdrop-blur-sm ${outcome === "YES"
+                      ? "border-green-500 bg-green-950/30"
+                      : market.isActive
+                        ? "border-green-900 bg-green-950/10 hover:bg-green-950/20"
+                        : "border-gray-600 bg-gray-900/20 cursor-not-allowed opacity-60"
+                      }`}
+                  >
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">YES</div>
+                      <div className="text-2xl sm:text-3xl font-bold text-green-500">{(market.yesOdds ?? 0).toFixed(1)}%</div>
+                      <div className="text-xs text-green-400 mt-1">${((market.yesOdds ?? 0) / 100).toFixed(2)} / token</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenModal("NO")}
+                    disabled={!market.isActive}
+                    className={`w-full p-4 rounded-lg border-2 transition-all text-left backdrop-blur-sm ${outcome === "NO"
+                      ? "border-red-500 bg-red-950/30"
+                      : market.isActive
+                        ? "border-red-900 bg-red-950/10 hover:bg-red-950/20"
+                        : "border-gray-600 bg-gray-900/20 cursor-not-allowed opacity-60"
+                      }`}
+                  >
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">NO</div>
+                      <div className="text-2xl sm:text-3xl font-bold text-red-500">{(market.noOdds ?? 0).toFixed(1)}%</div>
+                      <div className="text-xs text-red-400 mt-1">${((market.noOdds ?? 0) / 100).toFixed(2)} / token</div>
+                    </div>
+                  </button>
+                </div>
+
+                <Button
+                  className="w-full mt-2 backdrop-blur-sm bg-card/80"
+                  onClick={() => outcome && setShowModal(true)}
+                  disabled={!outcome || !market.isActive}
+                >
+                  {market.isActive ? 'Trade Now' : 'Market Closed'}
+                </Button>
+
+                {outcome && market.isActive && (
+                  <div className="pt-4 border-t border-border">
+                    <p className="text-xs text-muted-foreground text-center">Click a side to begin your trade</p>
+                  </div>
+                )}
+
+                {market.userInvestment && (Number(market.userInvestment.yesBalance) > 0 || Number(market.userInvestment.noBalance) > 0) && (
+                  <div className="mt-4 p-3 bg-blue-950/20 border border-blue-500/30 rounded-lg">
+                    <p className="text-xs text-blue-200 font-semibold mb-2">Your Position</p>
+                    <div className="flex justify-between text-sm">
+                      <span>YES: {Number(market.userInvestment.yesBalance).toFixed(2)}</span>
+                      <span>NO: {Number(market.userInvestment.noBalance).toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            {/* Details & Chart Column - Mobile Order 3, Desktop Left Col */}
+            <div className="lg:col-span-2 lg:order-1 order-3 flex flex-col gap-6">
+
+              {/* Chart Section - Mobile First (inside col), Desktop Second */}
+              <div className="order-1 lg:order-2 w-full bg-card rounded-lg p-4 backdrop-blur-sm">
+                <PriceChart data={chartData} isLoading={isChartLoading} />
+              </div>
+
+              {/* Market Info - Mobile Second (inside col), Desktop First */}
+              <div className="order-2 lg:order-1 space-y-6">
+                {/* Desktop Header - Hidden on Mobile */}
+                <div className="hidden lg:flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold backdrop-blur-sm">
+                      {market.category}
+                    </div>
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-balance">{market.title}</h1>
+                  </div>
+
+                  <div className="sm:text-right text-sm text-muted-foreground">
+                    <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${statusBadge.color} backdrop-blur-sm`}>
+                      {statusBadge.text}
+                    </div>
+                    <div className="mt-1 sm:mt-2">
+                      <div className="text-xs">Resolution: <span className="font-medium">{resolutionDate.toLocaleDateString()}</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-sm sm:text-base text-muted-foreground backdrop-blur-sm bg-card/80 p-4 rounded-lg">
+                  {market.description}
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-sm text-muted-foreground backdrop-blur-sm bg-card/80 p-4 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 flex-shrink-0" />
+                    <span>Created by: {formatAddress(market.creator)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 flex-shrink-0" />
+                    <span>Ends: {resolutionDate.toLocaleDateString()}</span>
                   </div>
                 </div>
               </div>
 
-              <p className="text-sm sm:text-base text-muted-foreground backdrop-blur-sm bg-card/80 p-4 rounded-lg">
-                {market.description}
-              </p>
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-sm text-muted-foreground backdrop-blur-sm bg-card/80 p-4 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 flex-shrink-0" />
-                  <span>Created by: {formatAddress(market.creator)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 flex-shrink-0" />
-                  <span>Ends: {resolutionDate.toLocaleDateString()}</span>
-                </div>
-              </div>
-
-              <div className="w-full bg-card rounded-lg p-4 backdrop-blur-sm">
-                <PriceChart data={chartData} isLoading={isChartLoading} />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Stats Cards - Always Last */}
+              <div className="order-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card className="p-4 backdrop-blur-sm bg-card/80">
                   <div className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
                     <Volume2 className="w-4 h-4" />
@@ -739,83 +859,18 @@ export default function MarketPage() {
                 </Card>
               </div>
             </div>
-
-            <div className="lg:col-span-1">
-              <Card className="p-6 sticky top-6 space-y-6 backdrop-blur-sm bg-card/80">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-lg font-semibold">Current Odds</h2>
-                    <div className="text-xs">
-                      {getPaymentTokenBadge(market.paymentToken)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    onClick={() => handleOpenModal("YES")}
-                    disabled={!market.isActive}
-                    className={`w-full p-4 rounded-lg border-2 transition-all text-left backdrop-blur-sm ${
-                      outcome === "YES"
-                        ? "border-green-500 bg-green-950/30"
-                        : market.isActive
-                        ? "border-green-900 bg-green-950/10 hover:bg-green-950/20"
-                        : "border-gray-600 bg-gray-900/20 cursor-not-allowed opacity-60"
-                    }`}
-                  >
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">YES</div>
-                      <div className="text-2xl sm:text-3xl font-bold text-green-500">{(market.yesOdds ?? 0).toFixed(1)}%</div>
-                      <div className="text-xs text-green-400 mt-1">${((market.yesOdds ?? 0) / 100).toFixed(2)} / token</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => handleOpenModal("NO")}
-                    disabled={!market.isActive}
-                    className={`w-full p-4 rounded-lg border-2 transition-all text-left backdrop-blur-sm ${
-                      outcome === "NO"
-                        ? "border-red-500 bg-red-950/30"
-                        : market.isActive
-                        ? "border-red-900 bg-red-950/10 hover:bg-red-950/20"
-                        : "border-gray-600 bg-gray-900/20 cursor-not-allowed opacity-60"
-                    }`}
-                  >
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">NO</div>
-                      <div className="text-2xl sm:text-3xl font-bold text-red-500">{(market.noOdds ?? 0).toFixed(1)}%</div>
-                      <div className="text-xs text-red-400 mt-1">${((market.noOdds ?? 0) / 100).toFixed(2)} / token</div>
-                    </div>
-                  </button>
-                </div>
-
-                <Button 
-                  className="w-full mt-2 backdrop-blur-sm bg-card/80"
-                  onClick={() => outcome && setShowModal(true)} 
-                  disabled={!outcome || !market.isActive}
-                >
-                  {market.isActive ? 'Trade Now' : 'Market Closed'}
-                </Button>
-
-                {outcome && market.isActive && (
-                  <div className="pt-4 border-t border-border">
-                    <p className="text-xs text-muted-foreground text-center">Click a side to begin your trade</p>
-                  </div>
-                )}
-              </Card>
-            </div>
           </div>
         </div>
 
         <Footer />
 
-        {showModal && market.isActive && (
-          <TradeModal 
-            market={market} 
+        {showModal && outcome && (
+          <TradeModal
+            market={market}
             paymentToken={market.paymentToken}
-            outcome={outcome} 
-            onOutcomeChange={setOutcome} 
-            onClose={handleCloseModal} 
+            outcome={outcome}
+            onOutcomeChange={(o) => setOutcome(o)}
+            onClose={handleCloseModal}
           />
         )}
       </div>

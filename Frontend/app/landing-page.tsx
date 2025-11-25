@@ -15,16 +15,22 @@ import AnimatedParagraphs from "@/components/animateParagraph";
 
 export default function LandingPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
   const router = useRouter()
 
   const { account, connectWallet, isCorrectNetwork, isConnecting, isInitialized } = useWeb3Context()
 
   const handleExplore = () => {
+    setIsNavigating(true)
     router.push("/markets")
   }
 
   const getPDX = () => {
     router.push("/faucetPDX")
+  }
+
+  const handleCreateMarket = () => {
+    setShowCreateModal(true)
   }
 
   return (
@@ -95,18 +101,18 @@ export default function LandingPage() {
 
               <div className="mb-[2%]">
                 <Shuffle
-              text="GOPREDIX"
-              shuffleDirection="right"
-              duration={0.35}
-              animationMode="evenodd"
-              shuffleTimes={1}
-              ease="power3.out"
-              stagger={0.03}
-              threshold={0.1}
-              triggerOnce={true}
-              triggerOnHover={true}
-              respectReducedMotion={true}
-            />
+                  text="GOPREDIX"
+                  shuffleDirection="right"
+                  duration={0.35}
+                  animationMode="evenodd"
+                  shuffleTimes={1}
+                  ease="power3.out"
+                  stagger={0.03}
+                  threshold={0.1}
+                  triggerOnce={true}
+                  triggerOnHover={true}
+                  respectReducedMotion={true}
+                />
               </div>
 
               {/* <p className="text-base md:text-lg text-white/80 max-w-2xl mb-10 font-mono">
@@ -115,29 +121,37 @@ export default function LandingPage() {
 
               <div className="">
                 <AnimatedParagraphs
-                paragraphs={[
-                  "Betting on the future so you can brag about it later.",
-                  "Markets powered by science, sarcasm, and questionable optimism.",
-                  "If your predictions flop, dont worry. We were obviously hacked.",
-                  "Fortune favors the bold, but true gains belong to the absolutely reckless.",
-                ]}
-              />
+                  paragraphs={[
+                    "Betting on the future so you can brag about it later.",
+                    "Markets powered by science, sarcasm, and questionable optimism.",
+                    "If your predictions flop, dont worry. We were obviously hacked.",
+                    "Fortune favors the bold, but true gains belong to the absolutely reckless.",
+                  ]}
+                />
               </div>
 
               {/* Hero Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 w-full justify-center mt-10">
                 <button
-                  className="px-8 py-3 rounded-full bg-cyan-300/15 text-white font-medium text-lg shadow hover:bg-[#ECFEFF] hover:text-black transition border border-cyan-50"
+                  className="px-8 py-3 rounded-full bg-cyan-300/15 text-white font-medium text-lg shadow hover:bg-[#ECFEFF] hover:text-black transition border border-cyan-50 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleExplore}
+                  disabled={isNavigating}
                 >
-                  Explore Markets
+                  {isNavigating ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Explore Markets"
+                  )}
                 </button>
 
                 <button
                   className="px-8 py-3 rounded-full border border-[#ECFEFF] font-medium text-lg text-white bg-transparent hover:bg-[#ECFEFF] hover:text-black transition"
-                  onClick={() => connectWallet()}
+                  onClick={handleCreateMarket}
                 >
-                  Login
+                  Create Market
                 </button>
               </div>
             </section>
@@ -191,10 +205,10 @@ export default function LandingPage() {
             </h2>
 
             <p className="text-white/70 max-w-3xl mx-auto leading-relaxed">
-              Prediction markets turn everyday insights into valuable information.  
+              Prediction markets turn everyday insights into valuable information.
               Instead of guessing, you participate in markets where collective confidence
-              shapes probabilities. By contributing your knowledge, you help build a more  
-              accurate, community-driven outlook on real-world events — from sports and  
+              shapes probabilities. By contributing your knowledge, you help build a more
+              accurate, community-driven outlook on real-world events — from sports and
               politics to technology and global trends.
             </p>
           </section>
