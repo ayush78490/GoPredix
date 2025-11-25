@@ -55,7 +55,7 @@ const getMarketStatus = (market: any) => {
   const nowInSeconds = Math.floor(Date.now() / 1000)
   const endTimeInSeconds = Number(market.endTime)
   const contractStatus = Number(market.status)
-  
+
   if (contractStatus === 3) {
     return {
       isActive: false,
@@ -65,7 +65,7 @@ const getMarketStatus = (market: any) => {
       statusColor: "green"
     }
   }
-  
+
   if (contractStatus === 4) {
     return {
       isActive: false,
@@ -75,7 +75,7 @@ const getMarketStatus = (market: any) => {
       statusColor: "orange"
     }
   }
-  
+
   if (contractStatus === 2) {
     return {
       isActive: false,
@@ -85,7 +85,7 @@ const getMarketStatus = (market: any) => {
       statusColor: "yellow"
     }
   }
-  
+
   if (nowInSeconds >= endTimeInSeconds) {
     return {
       isActive: false,
@@ -95,7 +95,7 @@ const getMarketStatus = (market: any) => {
       statusColor: "red"
     }
   }
-  
+
   if (contractStatus === 0) {
     return {
       isActive: true,
@@ -105,7 +105,7 @@ const getMarketStatus = (market: any) => {
       statusColor: "green"
     }
   }
-  
+
   return {
     isActive: false,
     isEnded: true,
@@ -118,7 +118,7 @@ const getMarketStatus = (market: any) => {
 const convertToFrontendMarket = (market: any) => {
   const prices = calculatePrices(market.yesPool, market.noPool)
   const statusInfo = getMarketStatus(market)
-  
+
   return {
     ...market,
     category: market.category || extractCategory(market.question),
@@ -143,14 +143,14 @@ export default function MarketsPage() {
   const { address: account, isConnected } = useAccount()
   const chainId = useChainId()
   const config = useConfig()
-  
+
   // Check if connected to BSC Testnet (chainId 97)
   const isCorrectNetwork = chainId === 97
-  
-  const { 
-    markets, 
-    isLoading, 
-    error, 
+
+  const {
+    markets,
+    isLoading,
+    error,
     refreshMarkets,
   } = useAllMarkets()
 
@@ -165,7 +165,7 @@ export default function MarketsPage() {
         selectedCategory.toLowerCase() === "all markets" || cat === selectedCategory.toLowerCase()
       const matchesSearch = market.question.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesPaymentToken = selectedPaymentToken === null || market.paymentToken === selectedPaymentToken
-      
+
       let matchesStatus = true
       if (selectedStatus === "active") {
         matchesStatus = market.isActive === true
@@ -174,7 +174,7 @@ export default function MarketsPage() {
       } else if (selectedStatus === "resolved") {
         matchesStatus = market.isResolved === true
       }
-      
+
       return matchesCategory && matchesSearch && matchesPaymentToken && matchesStatus
     })
   }, [formattedMarkets, selectedCategory, searchQuery, selectedPaymentToken, selectedStatus])
@@ -185,7 +185,7 @@ export default function MarketsPage() {
     const activeCount = formattedMarkets.filter(m => m.isActive === true).length
     const endedCount = formattedMarkets.filter(m => m.isEnded === true && m.isResolved === false).length
     const resolvedCount = formattedMarkets.filter(m => m.isResolved === true).length
-    
+
     return {
       bnbMarketCount: bnbCount,
       pdxMarketCount: pdxCount,
@@ -214,7 +214,7 @@ export default function MarketsPage() {
       }
       return;
     }
-  
+
     const marketKey = `${market.paymentToken}-${market.id}`;
     setLoadingMarketId(marketKey);
     router.push(`/markets/${marketKey}`);
@@ -323,17 +323,16 @@ export default function MarketsPage() {
                   size="sm"
                   variant={selectedCategory === cat ? "default" : "outline"}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`backdrop-blur-sm ${
-                    selectedCategory === cat 
-                      ? "bg-primary text-black border-primary" 
+                  className={`backdrop-blur-sm ${selectedCategory === cat
+                      ? "bg-primary text-black border-primary"
                       : "bg-card/80"
-                  }`}
+                    }`}
                 >
                   {cat}
                 </Button>
               ))}
             </div>
-            
+
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={handleFaucet}
@@ -344,7 +343,7 @@ export default function MarketsPage() {
                 <Droplets className="w-4 h-4 mr-2" />
                 Faucet PDX
               </Button>
-              
+
               <Button
                 onClick={handleHowItWorks}
                 size="sm"
@@ -385,7 +384,7 @@ export default function MarketsPage() {
                     {filteredMarkets.map((market) => {
                       const marketKey = `${market.paymentToken}-${market.id}`;
                       const isLoadingMarket = loadingMarketId === marketKey;
-                      
+
                       return (
                         <MarketCard
                           key={marketKey}
@@ -401,13 +400,13 @@ export default function MarketsPage() {
               ) : (
                 <div className="text-center py-16 bg-card/50 rounded-lg backdrop-blur-sm">
                   <p className="text-muted-foreground text-lg mb-2">
-                    {stats.totalMarkets === 0 
-                      ? " No markets yet. Be the first to create one!" 
+                    {stats.totalMarkets === 0
+                      ? " No markets yet. Be the first to create one!"
                       : " No markets match your filters."}
                   </p>
                   {stats.totalMarkets > 0 && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => {
                         setSelectedCategory("All Markets")

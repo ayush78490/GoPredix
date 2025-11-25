@@ -114,6 +114,27 @@ const convertToFrontendMarket = (m: any, id: number | string) => {
   const slug = generateSlug(question, id)
   const paymentToken = m?.paymentToken || "BNB"
 
+  // ✅ FIXED: Extract numeric ID from composite ID (e.g., "BNB-0" -> 0)
+  let numericId: number
+  if (typeof id === 'string') {
+    // Check if it's a composite ID like "BNB-0" or "PDX-1"
+    const parts = id.split('-')
+    const lastPart = parts[parts.length - 1]
+    if (/^\d+$/.test(lastPart)) {
+      numericId = parseInt(lastPart, 10)
+    } else {
+      // If it's just a numeric string like "0"
+      numericId = parseInt(id, 10)
+    }
+  } else {
+    numericId = id
+  }
+
+  // Fallback to m.numericId if extraction failed
+  if (isNaN(numericId) && m?.numericId !== undefined) {
+    numericId = m.numericId
+  }
+
   return {
     id: id.toString(),
     title: question,
@@ -130,9 +151,11 @@ const convertToFrontendMarket = (m: any, id: number | string) => {
     daysLeft: Math.max(0, Math.ceil((resolutionDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))),
     creator: m?.creator || "Unknown",
     totalLiquidity: totalPool,
-    paymentToken
+    paymentToken,
+    numericId
   }
 }
+
 
 const generatePriceHistory = (market: any, days: number = 7) => {
   const history = []
@@ -289,7 +312,8 @@ export default function MarketPage() {
       if (!foundMarket) {
         for (let i = 0; i < marketsToSearch.length; i++) {
           const marketData = marketsToSearch[i]
-          const marketId = typeof marketData.id === 'string' ? parseInt(marketData.id) : Number(marketData.id)
+          // ✅ FIXED: Use numericId if available, otherwise parse id
+          const marketId = marketData.numericId ?? (typeof marketData.id === 'string' ? parseInt(marketData.id) : Number(marketData.id))
           const formatted = convertToFrontendMarket(marketData, marketId)
 
           if (formatted.slug === marketSlug || formatted.id === marketSlug) {
@@ -306,7 +330,7 @@ export default function MarketPage() {
         // ✅ FIXED: Update the market object with the correct payment token from slug
         const paymentToken = parsed.type || foundMarket.paymentToken || "BNB"
         foundMarket.paymentToken = paymentToken  // 👈 ADD THIS LINE
-        const marketId = parsed.numericId ?? (typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id))
+        const marketId = parsed.numericId ?? foundMarket.numericId ?? (typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id))
 
         console.log(`Market ${marketId} uses payment token: ${paymentToken} (parsed from slug: ${parsed.type})`)
 
@@ -865,13 +889,21 @@ export default function MarketPage() {
         <Footer />
 
         {showModal && outcome && (
-          <TradeModal
-            market={market}
-            paymentToken={market.paymentToken}
-            outcome={outcome}
-            onOutcomeChange={(o) => setOutcome(o)}
-            onClose={handleCloseModal}
-          />
+          <>
+            {console.log('🔍 DEBUG: Opening TradeModal with market:', {
+              id: market.id,
+              numericId: market.numericId,
+              paymentToken: market.paymentToken,
+              fullMarket: market
+            })}
+            <TradeModal
+              market={market}
+              paymentToken={market.paymentToken}
+              outcome={outcome}
+              onOutcomeChange={(o) => setOutcome(o)}
+              onClose={handleCloseModal}
+            />
+          </>
         )}
       </div>
     </main>
