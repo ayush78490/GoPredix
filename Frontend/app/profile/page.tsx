@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Trophy, Medal, ArrowLeft, Wallet, Loader2, TrendingUp, Users, BarChart3, ExternalLink, AlertTriangle } from "lucide-react"
+import { Trophy, Medal, ArrowLeft, Wallet, Loader2, TrendingUp, Users, BarChart3, ExternalLink, AlertTriangle, Twitter } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { ethers } from "ethers"
 import LightRays from "@/components/LightRays"
 import { useAccount, useChainId } from "wagmi"
+import TwitterShareModal from "@/components/twitter-share-modal"
 
 // Import ABIs
 import BNB_MARKET_ARTIFACT from "@/contracts/abi.json"
@@ -30,11 +31,11 @@ const BNB_HELPER_ABI = extractABI(BNB_HELPER_ARTIFACT)
 const PDX_MARKET_ABI = extractABI(PDX_MARKET_ARTIFACT)
 const PDX_HELPER_ABI = extractABI(PDX_HELPER_ARTIFACT)
 
-// Contract addresses
-const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
-const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS
-const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_PREDICTION_MARKET_ADDRESS || "0x275fa689f785fa232861a076aD4cc1955F88171A"
-const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || "0x02D4E1573ec5ade27eC852fBBf873d7073219E21"
+// Contract addresses - MUST MATCH the hooks!
+const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x12FD6C9B618949d940806B0E59e3c65507eC37E8'
+const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0xC940106a30742F21daE111d41e8F41d482feda15'
+const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x7d46139e1513571f19c9B87cE9A01D21cA9ef665'
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || '0x0CCaDd82A453075B8C0193809cC3693ef58E46D1'
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
 
 interface UserStats {
@@ -96,7 +97,7 @@ export default function ProfilePage() {
   const router = useRouter()
   const { address: account, isConnected } = useAccount()
   const chainId = useChainId()
-  
+
   const [userStats, setUserStats] = useState<UserStats | null>(null)
   const [userPositions, setUserPositions] = useState<MarketPosition[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -111,6 +112,9 @@ export default function ProfilePage() {
   const [minReceive, setMinReceive] = useState("")
   const [stopLossPrice, setStopLossPrice] = useState("")
   const [takeProfitPrice, setTakeProfitPrice] = useState("")
+  const [createdMarkets, setCreatedMarkets] = useState<Market[]>([])
+  const [showTwitterModal, setShowTwitterModal] = useState(false)
+  const [selectedMarketForTweet, setSelectedMarketForTweet] = useState<Market | null>(null)
 
   const isCorrectNetwork = chainId === 97
   const canFetchData = isConnected && isCorrectNetwork && account
@@ -118,7 +122,7 @@ export default function ProfilePage() {
   // ============================================
   // ✅ CREATE CONTRACTS
   // ============================================
-  
+
   const getReadOnlyContracts = useCallback(() => {
     if (!BNB_MARKET_ADDRESS || !BNB_HELPER_ADDRESS || !PDX_MARKET_ADDRESS || !PDX_HELPER_ADDRESS) {
       throw new Error('Contract addresses not configured in environment variables')
@@ -126,21 +130,21 @@ export default function ProfilePage() {
 
     try {
       const provider = new ethers.JsonRpcProvider(RPC_URL)
-      
+
       // BNB Contracts
       const bnbMarketContract = new ethers.Contract(BNB_MARKET_ADDRESS, BNB_MARKET_ABI, provider)
       const bnbHelperContract = new ethers.Contract(BNB_HELPER_ADDRESS, BNB_HELPER_ABI, provider)
-      
+
       // PDX Contracts
       const pdxMarketContract = new ethers.Contract(PDX_MARKET_ADDRESS, PDX_MARKET_ABI, provider)
       const pdxHelperContract = new ethers.Contract(PDX_HELPER_ADDRESS, PDX_HELPER_ABI, provider)
-      
-      return { 
-        bnbMarketContract, 
+
+      return {
+        bnbMarketContract,
         bnbHelperContract,
         pdxMarketContract,
         pdxHelperContract,
-        provider 
+        provider
       }
     } catch (error) {
       console.error('Error creating read-only contracts:', error)
@@ -153,7 +157,7 @@ export default function ProfilePage() {
     try {
       const { bnbMarketContract } = getReadOnlyContracts()
       const marketData = await bnbMarketContract.markets(marketId)
-      
+
       let question = marketData[1] || `Market ${marketId}`
       if (typeof question === 'string' && question.startsWith('"') && question.endsWith('"')) {
         question = question.slice(1, -1)
@@ -193,7 +197,7 @@ export default function ProfilePage() {
     try {
       const { pdxMarketContract } = getReadOnlyContracts()
       const marketData = await pdxMarketContract.markets(marketId)
-      
+
       if (!marketData || !marketData[0] || marketData[0] === "0x0000000000000000000000000000000000000000") {
         console.warn(`PDX Market ${marketId} is empty or not found`)
         return null
@@ -227,7 +231,7 @@ export default function ProfilePage() {
       }
 
       return market
-      
+
     } catch (error) {
       console.error(`❌ Error fetching PDX market ${marketId}:`, error)
       return null
@@ -238,7 +242,7 @@ export default function ProfilePage() {
   const getMarketStatusText = (status: number, endTime: number): "Active" | "Resolved" | "Cancelled" => {
     const resolutionDate = new Date(endTime * 1000)
     const now = new Date()
-    
+
     if (status === 0 && resolutionDate > now) return "Active"
     else if (status === 1 || status === 2) return "Resolved"
     else return "Resolved"
@@ -326,13 +330,13 @@ export default function ProfilePage() {
   }, [getReadOnlyContracts, getPDXMarket])
 
   // Get total investment
-  const getTotalInvestment = useCallback(async (address: string): Promise<{bnb: string, pdx: string}> => {
+  const getTotalInvestment = useCallback(async (address: string): Promise<{ bnb: string, pdx: string }> => {
     try {
       const { bnbHelperContract, pdxHelperContract } = getReadOnlyContracts()
-      
+
       const bnbInvestment = await bnbHelperContract.getUserTotalInvestment(address)
       const pdxInvestment = await pdxHelperContract.getUserTotalInvestment(address)
-      
+
       return {
         bnb: ethers.formatEther(bnbInvestment),
         pdx: ethers.formatEther(pdxInvestment)
@@ -349,9 +353,9 @@ export default function ProfilePage() {
       const bnbPositions = await getUserBNBPositions(address)
       const pdxPositions = await getUserPDXPositions(address)
       const allPositions = [...bnbPositions, ...pdxPositions]
-      
+
       const investments = await getTotalInvestment(address)
-      
+
       let totalVolume = 0
       let currentPortfolioValue = 0
       let unrealizedPnl = 0
@@ -363,12 +367,12 @@ export default function ProfilePage() {
         const yesValue = parseFloat(position.yesBalance) * prices.yesPrice / 100
         const noValue = parseFloat(position.noBalance) * prices.noPrice / 100
         const positionValue = yesValue + noValue
-        
+
         const invested = parseFloat(position.bnbInvested || position.pdxInvested || "0")
-        
+
         totalVolume += invested
         currentPortfolioValue += positionValue
-        
+
         const positionPnl = positionValue - invested
         if (positionPnl > 0) {
           unrealizedPnl += positionPnl
@@ -383,7 +387,7 @@ export default function ProfilePage() {
       }
 
       const favoriteCategory = Object.entries(categoryCount)
-        .sort(([,a], [,b]) => b - a)[0]?.[0] || "General"
+        .sort(([, a], [, b]) => b - a)[0]?.[0] || "General"
 
       const totalPnl = unrealizedPnl
 
@@ -430,22 +434,22 @@ export default function ProfilePage() {
       const bnbPositions = await getUserBNBPositions(address)
       const pdxPositions = await getUserPDXPositions(address)
       const allPositions = [...bnbPositions, ...pdxPositions]
-      
+
       return allPositions.map(position => {
         const prices = calculatePrices(position.market.yesPool, position.market.noPool)
-        
+
         return {
           marketId: position.market.id,
           question: position.market.question,
           category: position.market.category || "General",
           yesTokens: parseFloat(position.yesBalance),
           noTokens: parseFloat(position.noBalance),
-          currentValue: parseFloat(position.yesBalance) * prices.yesPrice / 100 + 
-                       parseFloat(position.noBalance) * prices.noPrice / 100,
+          currentValue: parseFloat(position.yesBalance) * prices.yesPrice / 100 +
+            parseFloat(position.noBalance) * prices.noPrice / 100,
           investedAmount: parseFloat(position.bnbInvested || position.pdxInvested || "0"),
-          potentialPnl: (parseFloat(position.yesBalance) * prices.yesPrice / 100 + 
-                        parseFloat(position.noBalance) * prices.noPrice / 100) - 
-                       parseFloat(position.bnbInvested || position.pdxInvested || "0"),
+          potentialPnl: (parseFloat(position.yesBalance) * prices.yesPrice / 100 +
+            parseFloat(position.noBalance) * prices.noPrice / 100) -
+            parseFloat(position.bnbInvested || position.pdxInvested || "0"),
           status: getMarketStatusText(position.market.status, position.market.endTime),
           marketStatus: position.market.status,
           endTime: position.market.endTime,
@@ -461,6 +465,51 @@ export default function ProfilePage() {
     }
   }, [getUserBNBPositions, getUserPDXPositions])
 
+  // Get markets created by user
+  const getUserCreatedMarkets = useCallback(async (address: string): Promise<Market[]> => {
+    try {
+      const { bnbMarketContract, pdxMarketContract } = getReadOnlyContracts()
+      const createdMarkets: Market[] = []
+
+      // Fetch BNB markets
+      try {
+        const nextBNBMarketId = await bnbMarketContract.nextMarketId()
+        const totalBNBMarkets = Number(nextBNBMarketId)
+
+        for (let i = 0; i < totalBNBMarkets; i++) {
+          const market = await getBNBMarket(i)
+          if (market && market.creator.toLowerCase() === address.toLowerCase()) {
+            createdMarkets.push(market)
+          }
+        }
+      } catch (error) {
+        console.warn('Error fetching BNB created markets:', error)
+      }
+
+      // Fetch PDX markets
+      try {
+        const nextPDXMarketId = await pdxMarketContract.nextMarketId()
+        const totalPDXMarkets = Number(nextPDXMarketId)
+
+        for (let i = 0; i < totalPDXMarkets; i++) {
+          const market = await getPDXMarket(i)
+          if (market && market.creator.toLowerCase() === address.toLowerCase()) {
+            createdMarkets.push(market)
+          }
+        }
+      } catch (error) {
+        console.warn('Error fetching PDX created markets:', error)
+      }
+
+      console.log(`Found ${createdMarkets.length} markets created by ${address}`)
+      return createdMarkets
+
+    } catch (error) {
+      console.error(`Error fetching created markets for ${address}:`, error)
+      return []
+    }
+  }, [getReadOnlyContracts, getBNBMarket, getPDXMarket])
+
   // Main data fetching
   const fetchUserData = useCallback(async () => {
     if (!canFetchData || !account) {
@@ -469,15 +518,18 @@ export default function ProfilePage() {
 
     setIsLoading(true)
     setError(null)
-    
+
     try {
       console.log(`🚀 Fetching data for wallet: ${account}`)
-      
+
       const stats = await calculateUserStats(account)
       setUserStats(stats)
 
       const positions = await fetchUserMarketPositions(account)
       setUserPositions(positions)
+
+      const markets = await getUserCreatedMarkets(account)
+      setCreatedMarkets(markets)
 
       console.log("🎉 User data loaded successfully")
 
@@ -486,10 +538,11 @@ export default function ProfilePage() {
       setError(err.message || 'Failed to load user data from blockchain')
       setUserStats(null)
       setUserPositions([])
+      setCreatedMarkets([])
     } finally {
       setIsLoading(false)
     }
-  }, [canFetchData, account, calculateUserStats, fetchUserMarketPositions])
+  }, [canFetchData, account, calculateUserStats, fetchUserMarketPositions, getUserCreatedMarkets])
 
   useEffect(() => {
     if (canFetchData) {
@@ -505,8 +558,15 @@ export default function ProfilePage() {
     await fetchUserData()
   }, [fetchUserData])
 
+  // ==================== TWITTER SHARE HANDLER ====================
+
+  const handleShareOnTwitter = (market: Market) => {
+    setSelectedMarketForTweet(market)
+    setShowTwitterModal(true)
+  }
+
   // ==================== SELL TOKEN HANDLERS ====================
-  
+
   const handleSellTokens = (position: MarketPosition, tokenType: "YES" | "NO") => {
     setSelectedPosition(position)
     setSellTokenType(tokenType)
@@ -530,7 +590,7 @@ export default function ProfilePage() {
       // For now, showing the structure
       console.log(`Selling ${sellAmount} ${sellTokenType} tokens from market ${selectedPosition.marketId}`)
       console.log(`Minimum to receive: ${minReceive} ${selectedPosition.paymentToken}`)
-      
+
       // TODO: Call actual contract function based on paymentToken
       // if (selectedPosition.paymentToken === "BNB") {
       //   if (sellTokenType === "YES") {
@@ -548,7 +608,7 @@ export default function ProfilePage() {
 
       setShowSellModal(false)
       await refreshData()
-      
+
     } catch (err: any) {
       console.error("Error selling tokens:", err)
       setError(err.message || "Failed to sell tokens")
@@ -558,7 +618,7 @@ export default function ProfilePage() {
   }
 
   // ==================== STOP LOSS HANDLERS ====================
-  
+
   const handleSetStopLoss = (position: MarketPosition) => {
     setSelectedPosition(position)
     setStopLossPrice("")
@@ -576,7 +636,7 @@ export default function ProfilePage() {
 
     try {
       console.log(`Setting stop loss for market ${selectedPosition.marketId} at price ${stopLossPrice}`)
-      
+
       // TODO: Call actual contract function
       // Determine which token has more value
       // const isYes = selectedPosition.yesTokens > selectedPosition.noTokens
@@ -600,7 +660,7 @@ export default function ProfilePage() {
 
       setShowStopLossModal(false)
       await refreshData()
-      
+
     } catch (err: any) {
       console.error("Error setting stop loss:", err)
       setError(err.message || "Failed to set stop loss")
@@ -610,7 +670,7 @@ export default function ProfilePage() {
   }
 
   // ==================== TAKE PROFIT HANDLERS ====================
-  
+
   const handleSetTakeProfit = (position: MarketPosition) => {
     setSelectedPosition(position)
     setTakeProfitPrice("")
@@ -628,7 +688,7 @@ export default function ProfilePage() {
 
     try {
       console.log(`Setting take profit for market ${selectedPosition.marketId} at price ${takeProfitPrice}`)
-      
+
       // TODO: Call actual contract function
       // Determine which token has more value
       // const isYes = selectedPosition.yesTokens > selectedPosition.noTokens
@@ -652,7 +712,7 @@ export default function ProfilePage() {
 
       setShowTakeProfitModal(false)
       await refreshData()
-      
+
     } catch (err: any) {
       console.error("Error setting take profit:", err)
       setError(err.message || "Failed to set take profit")
@@ -821,7 +881,7 @@ export default function ProfilePage() {
                           <div className="text-2xl font-bold">{userStats.totalInvestment}</div>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
-                          🔶 {parseFloat(userStats.bnbInvestment).toFixed(4)} BNB • 
+                          🔶 {parseFloat(userStats.bnbInvestment).toFixed(4)} BNB •
                           💎 {parseFloat(userStats.pdxInvestment).toFixed(4)} PDX
                         </div>
                       </CardContent>
@@ -851,9 +911,8 @@ export default function ProfilePage() {
                       <CardContent>
                         <div className="flex items-center">
                           <Medal className="w-8 h-8 text-primary mr-2" />
-                          <div className={`text-2xl font-bold ${
-                            userStats.totalPnl >= 0 ? "text-green-600" : "text-red-600"
-                          }`}>
+                          <div className={`text-2xl font-bold ${userStats.totalPnl >= 0 ? "text-green-600" : "text-red-600"
+                            }`}>
                             {userStats.totalPnl >= 0 ? "+" : ""}${userStats.totalPnl.toFixed(2)}
                           </div>
                         </div>
@@ -893,9 +952,8 @@ export default function ProfilePage() {
                         <CardTitle className="text-sm font-medium">Unrealized P&L</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className={`text-xl font-bold ${
-                          userStats.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
-                        }`}>
+                        <div className={`text-xl font-bold ${userStats.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
+                          }`}>
                           {userStats.unrealizedPnl >= 0 ? "+" : ""}${userStats.unrealizedPnl.toFixed(2)}
                         </div>
                       </CardContent>
@@ -927,13 +985,13 @@ export default function ProfilePage() {
                                         <Badge variant="secondary" className="backdrop-blur-sm">
                                           {position.category}
                                         </Badge>
-                                        <Badge 
-                                          variant="secondary" 
+                                        <Badge
+                                          variant="secondary"
                                           className="backdrop-blur-sm"
                                         >
                                           {position.paymentToken === "BNB" ? "🔶 BNB" : "💎 PDX"}
                                         </Badge>
-                                        <Badge 
+                                        <Badge
                                           variant={position.status === "Active" ? "default" : "secondary"}
                                           className="backdrop-blur-sm"
                                         >
@@ -982,9 +1040,8 @@ export default function ProfilePage() {
                                   </div>
                                   <div>
                                     <span className="text-sm text-muted-foreground">P&L</span>
-                                    <div className={`text-xl font-bold ${
-                                      position.potentialPnl >= 0 ? "text-green-600" : "text-red-600"
-                                    }`}>
+                                    <div className={`text-xl font-bold ${position.potentialPnl >= 0 ? "text-green-600" : "text-red-600"
+                                      }`}>
                                       {position.potentialPnl >= 0 ? "+" : ""}${position.potentialPnl.toFixed(2)}
                                     </div>
                                   </div>
@@ -1000,7 +1057,7 @@ export default function ProfilePage() {
                                 >
                                   View Market
                                 </Button>
-                                
+
                                 {position.yesTokens > 0 && (
                                   <Button
                                     variant="outline"
@@ -1011,7 +1068,7 @@ export default function ProfilePage() {
                                     Sell YES ({position.yesTokens.toFixed(4)})
                                   </Button>
                                 )}
-                                
+
                                 {position.noTokens > 0 && (
                                   <Button
                                     variant="outline"
@@ -1022,7 +1079,7 @@ export default function ProfilePage() {
                                     Sell NO ({position.noTokens.toFixed(4)})
                                   </Button>
                                 )}
-                                
+
                                 {position.status === "Active" && (
                                   <>
                                     <Button
@@ -1082,7 +1139,7 @@ export default function ProfilePage() {
                   <Wallet className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-xl font-semibold mb-2">Connect Your Wallet</h3>
                   <p className="text-muted-foreground mb-6">
-                    {!isConnected 
+                    {!isConnected
                       ? "Connect your wallet to view your trading profile and statistics"
                       : "Switch to BSC Testnet to view your profile data"
                     }
@@ -1297,6 +1354,97 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Markets I Created Section */}
+        {canFetchData && !isLoading && createdMarkets.length > 0 && (
+          <div className="max-w-7xl mx-auto px-4 pb-8">
+            <Card className="backdrop-blur-sm bg-card/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Markets I Created
+                </CardTitle>
+                <CardDescription>
+                  Share your markets on X (Twitter) to attract more traders and increase liquidity
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4">
+                  {createdMarkets.map((market) => {
+                    const prices = calculatePrices(market.yesPool, market.noPool)
+                    const isActive = market.status === 0 && new Date(market.endTime * 1000) > new Date()
+
+                    return (
+                      <div
+                        key={`${market.paymentToken}-${market.id}`}
+                        className="flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-lg hover:border-primary/50 transition-colors gap-4"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold">{market.question}</h4>
+                            {isActive ? (
+                              <Badge variant="default" className="bg-green-500/20 text-green-400 border-green-500/50">
+                                Active
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">Closed</Badge>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                            <span className="px-2 py-1 bg-primary/10 text-primary rounded text-xs">
+                              {market.category}
+                            </span>
+                            <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded text-xs">
+                              {market.paymentToken}
+                            </span>
+                            <span>•</span>
+                            <span>Volume: {parseFloat(market.totalBacking).toFixed(4)} {market.paymentToken}</span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-sm max-w-xs">
+                            <div className="p-2 bg-green-500/10 rounded">
+                              <span className="text-green-400 font-semibold">YES: {prices.yesPrice}%</span>
+                            </div>
+                            <div className="p-2 bg-red-500/10 rounded">
+                              <span className="text-red-400 font-semibold">NO: {prices.noPrice}%</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => handleShareOnTwitter(market)}
+                            variant="outline"
+                            className="gap-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border-blue-500/50"
+                          >
+                            <Twitter className="w-4 h-4" />
+                            Share on X
+                          </Button>
+                          <Button
+                            onClick={() => router.push(`/markets/${market.question.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 60)}-${market.paymentToken}-${market.id}`)}
+                            variant="ghost"
+                            size="icon"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Twitter Share Modal */}
+        {showTwitterModal && selectedMarketForTweet && (
+          <TwitterShareModal
+            market={selectedMarketForTweet}
+            onClose={() => {
+              setShowTwitterModal(false)
+              setSelectedMarketForTweet(null)
+            }}
+          />
         )}
 
         <Footer />
