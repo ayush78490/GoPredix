@@ -165,7 +165,6 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     const url = new URL(window.location.href);
     const hasDeepLinkParams = url.searchParams.has('fromDeepLink') || url.searchParams.has('wallet');
     if (hasDeepLinkParams) {
-      console.log("🧹 Cleaning deep link parameters immediately...");
       url.searchParams.delete('fromDeepLink');
       url.searchParams.delete('wallet');
       window.history.replaceState({}, '', url.toString());
@@ -188,12 +187,10 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window !== "undefined" && window.ethereum) {
       const handleChainChanged = (chainId: string) => {
-        console.log("🔄 Chain changed:", chainId)
         checkNetworkStatus(chainId)
         window.location.reload()
       }
       const handleAccountsChanged = (accounts: string[]) => {
-        console.log("👤 Accounts changed:", accounts)
         if (accounts.length === 0) {
           web3.disconnectWallet()
         } else {
@@ -238,16 +235,12 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     const userAgent = navigator.userAgent.toLowerCase()
     if (userAgent.includes('metamask')) {
       setDetectedWallet('METAMASK')
-      console.log("🦊 MetaMask browser detected")
     } else if (userAgent.includes('trust')) {
       setDetectedWallet('TRUSTWALLET')
-      console.log("🔷 Trust Wallet detected")
     } else if (userAgent.includes('binance')) {
       setDetectedWallet('BINANCE')
-      console.log("🟡 Binance Wallet detected")
     } else if (userAgent.includes('safepal')) {
       setDetectedWallet('SAFEPAL')
-      console.log("🟣 SafePal detected")
     }
   }
 
@@ -268,7 +261,6 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       } else {
         deepLinkUrl = `${walletConfig.android}${targetUrl}`
       }
-      console.log(`🔗 Opening ${walletConfig.name} with URL:`, deepLinkUrl)
       window.location.href = deepLinkUrl
     } catch (error) {
       console.error("❌ Deep link connection failed:", error)
@@ -279,17 +271,14 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const enhancedConnectWallet = async () => {
     try {
       if (isMobile && window.ethereum) {
-        console.log("📱 Detected in-app wallet browser, connecting directly...")
         await web3.connectWallet()
         if (web3.account) await checkCurrentNetwork()
         return
       }
       if (isMobile && !window.ethereum) {
-        console.log("📱 Mobile device, no provider - showing wallet selector...")
         setShowWalletSelector(true)
         return
       }
-      console.log("💻 Desktop connection...")
       await web3.connectWallet()
       if (web3.account) await checkCurrentNetwork()
     } catch (error) {
@@ -423,18 +412,15 @@ export function NetworkSelector() {
 
   const handleNetworkSwitch = async (network: NetworkConfig) => {
     try {
-      console.log(`🔄 Switching to ${network.name}...`)
       const provider = getProvider()
       try {
         await provider.request({
           method: "wallet_switchEthereumChain",
           params: [{ chainId: network.chainId }],
         })
-        console.log(`✅ Successfully switched to ${network.name}`)
         setShowNetworkSelector(false)
       } catch (switchError: any) {
         if (switchError.code === 4902) {
-          console.log(`📝 Adding ${network.name} to wallet...`)
           const networkConfig = {
             chainId: network.chainId,
             chainName: network.name,
@@ -450,10 +436,8 @@ export function NetworkSelector() {
             method: "wallet_addEthereumChain",
             params: [networkConfig],
           })
-          console.log(`✅ Successfully added ${network.name}`)
           setShowNetworkSelector(false)
         } else if (switchError.code === 4001) {
-          console.log("❌ User rejected network switch")
         } else {
           throw switchError
         }
@@ -553,7 +537,6 @@ export const connectWalletWithNetworkCheck = async (): Promise<{
       }
     }
     const provider = getProvider()
-    console.log("🔍 Requesting accounts...")
     const accounts = await provider.request({
       method: "eth_requestAccounts",
     })
@@ -561,19 +544,15 @@ export const connectWalletWithNetworkCheck = async (): Promise<{
       return { success: false, error: "No accounts found" }
     }
     const account = accounts[0]
-    console.log("✅ Connected account:", account)
     const chainId = await provider.request({ method: "eth_chainId" })
-    console.log("🌐 Current chain ID:", chainId)
     const isCorrectNetwork = chainId === BSC_TESTNET_CONFIG.chainId
     if (!isCorrectNetwork) {
-      console.log("🔄 Wrong network detected")
       return { 
         success: true, 
         account,
         error: "WRONG_NETWORK"
       }
     }
-    console.log("🎉 Wallet connected successfully on BNB Smart Chain Testnet")
     return { success: true, account }
   } catch (error: any) {
     console.error("❌ Connection failed:", error)
@@ -592,23 +571,19 @@ export const switchToBSCTestnet = async (): Promise<boolean> => {
       throw new Error("Wallet not available")
     }
     const provider = getProvider()
-    console.log("🔄 Attempting to switch to BNB Smart Chain Testnet...")
     try {
       await provider.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: BSC_TESTNET_CONFIG.chainId }],
       })
-      console.log("✅ Successfully switched to BNB Smart Chain Testnet")
       return true
     } catch (switchError: any) {
       if (switchError.code === 4902) {
-        console.log("📝 Adding BNB Smart Chain Testnet to wallet...")
         try {
           await provider.request({
             method: "wallet_addEthereumChain",
             params: [BSC_TESTNET_CONFIG],
           })
-          console.log("✅ Successfully added BNB Smart Chain Testnet")
           return true
         } catch (addError: any) {
           console.error("❌ Failed to add network:", addError)
@@ -636,12 +611,9 @@ export const ensureCorrectNetwork = async (): Promise<boolean> => {
     }
     const provider = getProvider()
     const chainId = await provider.request({ method: "eth_chainId" })
-    console.log("🔍 Checking network...", { currentChainId: chainId, requiredChainId: BSC_TESTNET_CONFIG.chainId })
     if (chainId === BSC_TESTNET_CONFIG.chainId) {
-      console.log("✅ Already on BNB Smart Chain Testnet")
       return true
     }
-    console.log("🔄 Wrong network, prompting switch...")
     const result = await switchToBSCTestnet()
     return result
   } catch (error) {
@@ -687,16 +659,13 @@ export function useWallet() {
 
 export const getAccounts = async (): Promise<string[]> => {
   if (typeof window === "undefined" || !window.ethereum) {
-    console.warn("⚠️ Wallet not available")
     return []
   }
   try {
     const provider = getProvider()
-    console.log("🔍 Requesting accounts from provider...")
     const accounts = (await provider.request({
       method: "eth_requestAccounts",
     })) as string[]
-    console.log(`✅ Got ${accounts.length} accounts:`, accounts[0])
     return accounts
   } catch (error: any) {
     console.error("❌ Error getting accounts:", error?.message || error)
@@ -724,15 +693,12 @@ export const getProvider = () => {
 export const getOrCreateProvider = async (): Promise<ethers.BrowserProvider | ethers.JsonRpcProvider> => {
   try {
     if (typeof window === "undefined" || !window.ethereum) {
-      console.log("📡 Using read-only RPC provider")
       return new ethers.JsonRpcProvider(BSC_TESTNET_RPC)
     }
     const ethereumProvider = getProvider()
     const browserProvider = new ethers.BrowserProvider(ethereumProvider)
-    console.log("✅ Created BrowserProvider from wallet")
     return browserProvider
   } catch (error) {
-    console.warn("⚠️ Failed to create BrowserProvider, using RPC:", error)
     return new ethers.JsonRpcProvider(BSC_TESTNET_RPC)
   }
 }
@@ -740,15 +706,12 @@ export const getOrCreateProvider = async (): Promise<ethers.BrowserProvider | et
 export const getSigner = async (provider: ethers.BrowserProvider | ethers.JsonRpcProvider): Promise<ethers.Signer | null> => {
   try {
     if (provider instanceof ethers.JsonRpcProvider) {
-      console.log("ℹ️ Read-only provider - no signer available")
       return null
     }
     const signer = await provider.getSigner()
     const address = await signer.getAddress()
-    console.log("✅ Got signer for address:", address)
     return signer
   } catch (error) {
-    console.warn("⚠️ Failed to get signer:", error)
     return null
   }
 }
@@ -757,12 +720,6 @@ export const checkNetwork = async (provider: ethers.BrowserProvider): Promise<bo
   try {
     const network = await provider.getNetwork()
     const isCorrect = Number(network.chainId) === BSC_TESTNET_CHAIN_ID
-    console.log("🌐 Network check:", {
-      chainId: network.chainId.toString(),
-      name: network.name,
-      isCorrect,
-      requiredChainId: BSC_TESTNET_CHAIN_ID
-    })
     return isCorrect
   } catch (error) {
     console.error("❌ Failed to check network:", error)

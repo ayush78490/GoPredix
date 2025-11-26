@@ -68,7 +68,6 @@ export default function Header() {
   }
 
   const handleSwitchNetwork = () => {
-    console.log("🔄 Switch network clicked")
     switchNetwork()
   }
 

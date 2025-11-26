@@ -235,7 +235,6 @@ export default function MarketPage() {
       }
 
       if (history.length === 0) {
-        console.log("No history found, using fallback with current price:", market.yesPrice)
         const now = Date.now()
         // Use current price from market object, defaulting to 50 if invalid
         const currentPrice = (market.yesPrice && !isNaN(market.yesPrice)) ? market.yesPrice : 50
@@ -278,7 +277,6 @@ export default function MarketPage() {
         noBalance: "0"
       }
     } catch (error) {
-      console.warn("Could not fetch user investment:", error)
       return {
         totalInvested: "0",
         yesBalance: "0",
@@ -289,7 +287,6 @@ export default function MarketPage() {
 
   const loadMarketData = useCallback(async () => {
     if (marketFoundRef.current) {
-      console.log("Market already found, skipping search")
       return
     }
 
@@ -307,11 +304,9 @@ export default function MarketPage() {
       let marketsToSearch = allMarkets
 
       if (allMarkets.length === 0 && !marketsLoading && isContractReady) {
-        console.log("No markets in cache, fetching from blockchain...")
         try {
           marketsToSearch = await getAllMarkets()
         } catch (fetchError) {
-          console.warn("Could not fetch markets, using empty array:", fetchError)
           marketsToSearch = []
         }
       }
@@ -319,14 +314,12 @@ export default function MarketPage() {
       let foundMarket: any = null
       const parsed = parseMarketSlug(marketSlug)
 
-      console.log(`Looking for market with slug: "${marketSlug}"`, parsed)
 
       // Try to find by composite ID first
       if (parsed.compositeId) {
         const market = marketsToSearch.find((m: any) => m.id === parsed.compositeId)
 
         if (market) {
-          console.log(`Found market by composite ID: ${parsed.compositeId}`)
           foundMarket = convertToFrontendMarket(market, parsed.compositeId)
         }
       }
@@ -339,7 +332,6 @@ export default function MarketPage() {
         })
 
         if (market) {
-          console.log(`Found market by numeric ID: ${parsed.numericId}`)
           foundMarket = convertToFrontendMarket(market, parsed.numericId)
         }
       }
@@ -352,7 +344,6 @@ export default function MarketPage() {
           const formatted = convertToFrontendMarket(marketData, marketId)
 
           if (formatted.slug === marketSlug || formatted.id === marketSlug) {
-            console.log(`Found market by slug match: ${marketSlug}`)
             foundMarket = formatted
             break
           }
@@ -367,11 +358,9 @@ export default function MarketPage() {
         foundMarket.paymentToken = paymentToken  // 👈 ADD THIS LINE
         const marketId = parsed.numericId ?? foundMarket.numericId ?? (typeof foundMarket.id === 'string' ? parseInt(foundMarket.id) : Number(foundMarket.id))
 
-        console.log(`Market ${marketId} uses payment token: ${paymentToken} (parsed from slug: ${parsed.type})`)
 
         try {
           if (paymentToken === "PDX" && pdxHook.isContractReady) {
-            console.log("Fetching PDX market details...")
             const pdxMarket = await pdxHook.getPDXMarket(marketId)
 
             const userInvestment = await safeGetUserInvestment(marketId, account || "")
@@ -383,9 +372,7 @@ export default function MarketPage() {
               paymentToken: "PDX",
               userInvestment
             }
-            console.log("PDX market data loaded")
           } else if (paymentToken === "BNB" && bnbHook.isContractReady) {
-            console.log("Fetching BNB market details...")
             const bnbMarket = await bnbHook.getMarket(marketId)
 
             foundMarket = {
@@ -394,10 +381,8 @@ export default function MarketPage() {
               id: marketId.toString(),
               paymentToken: "BNB"
             }
-            console.log("BNB market data loaded")
           }
         } catch (hookError) {
-          console.warn("Could not fetch additional market data:", hookError)
         }
 
         setMarket(foundMarket)
@@ -406,11 +391,9 @@ export default function MarketPage() {
         fetchChartData(foundMarket)
         setIsLoading(false)
 
-        console.log(`Found market: "${foundMarket.title}" (${foundMarket.paymentToken})`)
         return;
 
       } else {
-        console.warn(`Market not found with slug: ${marketSlug}, retrying... (attempt ${retryCount + 1})`)
 
         if (retryCount < 5) {
           setTimeout(() => {
@@ -454,14 +437,12 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (retryCount > 0 && retryCount <= 5 && !marketFoundRef.current) {
-      console.log(`Retry attempt ${retryCount} for market: ${marketSlug}`)
       loadMarketData()
     }
   }, [retryCount, marketSlug, loadMarketData])
 
   useEffect(() => {
     if (allMarkets.length > 0 && !market && isLoading && !marketFoundRef.current) {
-      console.log("Markets data updated, retrying search...")
       loadMarketData()
     }
   }, [allMarkets.length, market, isLoading, loadMarketData])
@@ -920,12 +901,6 @@ export default function MarketPage() {
 
         {showModal && outcome && (
           <>
-            {console.log('🔍 DEBUG: Opening TradeModal with market:', {
-              id: market.id,
-              numericId: market.numericId,
-              paymentToken: market.paymentToken,
-              fullMarket: market
-            })}
             <TradeModal
               market={market}
               paymentToken={market.paymentToken}

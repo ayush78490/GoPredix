@@ -155,7 +155,6 @@ export function usePredictionMarketPDX() {
 
         // compare as number to avoid BigInt literal issues in TS targets < ES2020
         if (Number(network.chainId) !== 97) {
-          console.warn("⚠️ Not on BSC Testnet. Current chain:", network.chainId?.toString?.() ?? network.chainId)
           setMarketContract(null)
           setHelperContract(null)
           setPdxTokenContract(null)
@@ -183,13 +182,10 @@ export function usePredictionMarketPDX() {
 
         try {
           const owner = await (marketInstance as any).owner()
-          console.log('✅ PDX Market contract connected. Owner:', owner)
 
           const nextMarketId = await (marketInstance as any).nextMarketId()
-          console.log('✅ Total markets:', Number(nextMarketId))
 
           const pdxBalance = await (pdxInstance as any).balanceOf(PDX_PREDICTION_MARKET_ADDRESS)
-          console.log('✅ PDX token contract connected. Market balance:', ethers.formatEther(pdxBalance))
 
           setMarketContract(marketInstance)
           setHelperContract(helperInstance)
@@ -513,15 +509,6 @@ export function usePredictionMarketPDX() {
       const initialNoWei = ethers.parseEther(params.initialNo)
       const totalValue = initialYesWei + initialNoWei
 
-      console.log('📊 Market Creation Details:', {
-        question: params.question,
-        category: validation.category || params.category,
-        endTime: params.endTime,
-        endTimeReadable: new Date(params.endTime * 1000).toLocaleString(),
-        initialYes: params.initialYes,
-        initialNo: params.initialNo,
-        totalPDX: ethers.formatEther(totalValue)
-      })
 
       // Validate parameters before proceeding
       const now = Math.floor(Date.now() / 1000)
@@ -534,10 +521,8 @@ export function usePredictionMarketPDX() {
       }
 
       // Check PDX balance
-      console.log('💰 Checking PDX balance...')
       const balance = await (pdxWithSigner as any).balanceOf(account)
       const balanceFormatted = ethers.formatEther(balance)
-      console.log(`Balance: ${balanceFormatted} PDX, Required: ${ethers.formatEther(totalValue)} PDX`)
 
       if (balance < totalValue) {
         throw new Error(
@@ -549,38 +534,28 @@ export function usePredictionMarketPDX() {
       }
 
       // Check current allowance
-      console.log('🔍 Checking current PDX allowance...')
       const currentAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
-      console.log(`Current allowance: ${ethers.formatEther(currentAllowance)} PDX`)
 
       // Only approve if needed
       if (currentAllowance < totalValue) {
-        console.log(`✍️ Approving ${ethers.formatEther(totalValue)} PDX...`)
 
         // Reset allowance to 0 first if there's an existing allowance (some tokens require this)
         if (currentAllowance > BigInt(0)) {
-          console.log('Resetting existing allowance to 0...')
           try {
             const resetTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, BigInt(0))
             const resetReceipt = await resetTx.wait()
-            console.log('✅ Allowance reset:', resetReceipt.hash)
           } catch (resetError: any) {
-            console.warn('⚠️ Reset allowance failed (may not be required):', resetError.message)
             // Continue anyway, some tokens don't require reset
           }
         }
 
         const approveTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, totalValue)
-        console.log('⏳ Approval transaction sent:', approveTx.hash)
         const approvalReceipt = await approveTx.wait()
-        console.log('✅ PDX approved for market creation. Gas used:', approvalReceipt.gasUsed.toString())
       } else {
-        console.log('✅ Sufficient allowance already exists')
       }
 
       // Verify approval was successful
       const newAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
-      console.log(`Verified allowance: ${ethers.formatEther(newAllowance)} PDX`)
 
       if (newAllowance < totalValue) {
         throw new Error(
@@ -597,15 +572,12 @@ export function usePredictionMarketPDX() {
         if (isPaused) {
           throw new Error('Market contract is currently paused. Please try again later.')
         }
-        console.log('✅ Contract is not paused')
       } catch (pauseError: any) {
         // Contract doesn't have paused() function - skip check
-        console.log('ℹ️ Contract does not have paused() function - skipping pause check')
         // Continue without throwing
       }
 
       // Estimate gas before sending transaction
-      console.log('⛽ Estimating gas for market creation...')
       let gasEstimate
       try {
         gasEstimate = await (marketWithSigner as any).createMarket.estimateGas(
@@ -615,7 +587,6 @@ export function usePredictionMarketPDX() {
           initialYesWei,
           initialNoWei
         )
-        console.log(`Gas estimate: ${gasEstimate.toString()}`)
       } catch (estimateError: any) {
         console.error('❌ Gas estimation failed:', estimateError)
 
@@ -649,11 +620,9 @@ export function usePredictionMarketPDX() {
         )
       }
 
-      console.log('🚀 Creating market...')
 
       // Add gas buffer to estimate (30% extra)
       const gasLimit = (gasEstimate * BigInt(130)) / BigInt(100)
-      console.log(`Using gas limit: ${gasLimit.toString()} (estimate + 30% buffer)`)
 
       const tx = await (marketWithSigner as any).createMarket(
         params.question,
@@ -664,8 +633,6 @@ export function usePredictionMarketPDX() {
         { gasLimit } // Add explicit gas limit
       )
 
-      console.log('⏳ Transaction sent:', tx.hash)
-      console.log('Waiting for confirmation...')
       const receipt = await tx.wait()
 
       if (!receipt) {
@@ -676,14 +643,11 @@ export function usePredictionMarketPDX() {
         throw new Error('Transaction reverted on-chain')
       }
 
-      console.log(`✅ Transaction confirmed in block ${receipt.blockNumber}`)
-      console.log(`Gas used: ${receipt.gasUsed.toString()}`)
 
       // Get the new market ID
       const nextId = await (marketWithSigner as any).nextMarketId()
       const marketId = Number(nextId) - 1
 
-      console.log(`✅ Market created successfully with ID: ${marketId}`)
 
       // ✅ Store market creation date in Supabase to avoid block scanning later
       try {
@@ -703,21 +667,13 @@ export function usePredictionMarketPDX() {
             endTime: params.endTime,
           }),
         })
-        console.log(`✅ Stored market creation date for PDX-${marketId}`)
       } catch (storeError) {
-        console.warn('⚠️ Failed to store market creation date (non-critical):', storeError)
       }
 
       // Verify the market was created
       try {
         const createdMarket = await getPDXMarket(marketId)
-        console.log('✅ Market verified:', {
-          id: createdMarket.id,
-          question: createdMarket.question,
-          category: createdMarket.category
-        })
       } catch (verifyError) {
-        console.warn('⚠️ Could not verify market creation:', verifyError)
         // Don't throw - market was likely created successfully
       }
 
@@ -783,23 +739,12 @@ export function usePredictionMarketPDX() {
       const allowance = await (pdxInstance as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
       const network = await provider.getNetwork()
 
-      console.log('🔍 Debug Information:')
-      console.log('━'.repeat(50))
-      console.log('Wallet Address:', account)
-      console.log('Network:', network.name, '(Chain ID:', network.chainId.toString(), ')')
-      console.log('PDX Balance:', ethers.formatEther(balance), 'PDX')
-      console.log('PDX Allowance:', ethers.formatEther(allowance), 'PDX')
-      console.log('Market Contract:', PDX_PREDICTION_MARKET_ADDRESS)
-      console.log('PDX Token:', PDX_TOKEN_ADDRESS)
-      console.log('Helper Contract:', PDX_HELPER_ADDRESS)
 
       // Check contract status
       try {
         const nextMarketId = await (marketContract as any).nextMarketId()
-        console.log('Total Markets:', Number(nextMarketId))
 
         const owner = await (marketContract as any).owner()
-        console.log('Contract Owner:', owner)
       } catch (contractError) {
         console.error('❌ Contract check failed:', contractError)
       }
@@ -807,12 +752,9 @@ export function usePredictionMarketPDX() {
       // Check if paused
       try {
         const isPaused = await (marketContract as any).paused()
-        console.log('Contract Paused:', isPaused ? 'YES ⚠️' : 'NO ✅')
       } catch {
-        console.log('Contract Paused: Unknown (no paused() function)')
       }
 
-      console.log('━'.repeat(50))
     } catch (error) {
       console.error('❌ Debug failed:', error)
     }
@@ -837,7 +779,6 @@ export function usePredictionMarketPDX() {
 
     const approveTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, pdxAmountWei)
     await approveTx.wait()
-    console.log('✅ PDX approved for buy YES')
 
     // ✅ FIXED: Swap - call buyNoWithPDXFor to actually buy YES tokens
     const tx = await (marketWithSigner as any).buyNoWithPDXFor(
@@ -870,7 +811,6 @@ export function usePredictionMarketPDX() {
 
     const approveTx = await (pdxWithSigner as any).approve(PDX_PREDICTION_MARKET_ADDRESS, pdxAmountWei)
     await approveTx.wait()
-    console.log('✅ PDX approved for buy NO')
 
     // ✅ FIXED: Swap - call buyYesWithPDXFor to actually buy NO tokens
     const tx = await (marketWithSigner as any).buyYesWithPDXFor(
@@ -1000,7 +940,6 @@ export function usePredictionMarketPDX() {
     if (!marketContract) return []
 
     try {
-      console.log(`Fetching PDX market history for ${marketId}...`)
 
       const points: PricePoint[] = []
 
@@ -1015,13 +954,10 @@ export function usePredictionMarketPDX() {
               timestamp: createdAt,
               price: 50 // Markets start at 50%
             })
-            console.log(`✅ Using stored creation date: ${result.data.created_at}`)
           } else {
-            console.log('ℹ️ No stored creation date found, will start from first trade')
           }
         }
       } catch (fetchError) {
-        console.warn('⚠️ Could not fetch creation date from Supabase:', fetchError)
       }
 
       const provider = marketContract.runner?.provider
@@ -1036,9 +972,7 @@ export function usePredictionMarketPDX() {
       let buyEvents: any[] = []
       try {
         buyEvents = await marketContract.queryFilter(buyFilter, startBlock, currentBlock)
-        console.log(`Found ${buyEvents.length} PDX buy events`)
       } catch (e) {
-        console.warn('Failed to fetch buy events:', e)
       }
 
       // Get Sell events
@@ -1046,9 +980,7 @@ export function usePredictionMarketPDX() {
       let sellEvents: any[] = []
       try {
         sellEvents = await marketContract.queryFilter(sellFilter, startBlock, currentBlock)
-        console.log(`Found ${sellEvents.length} PDX sell events`)
       } catch (e) {
-        console.warn('Failed to fetch sell events:', e)
       }
 
       // Process Buy events
@@ -1071,7 +1003,6 @@ export function usePredictionMarketPDX() {
             price: Math.max(0, Math.min(100, yesPrice))
           })
         } catch (e) {
-          console.warn('Failed to process buy event:', e)
         }
       }
 
@@ -1095,7 +1026,6 @@ export function usePredictionMarketPDX() {
             price: Math.max(0, Math.min(100, yesPrice))
           })
         } catch (e) {
-          console.warn('Failed to process sell event:', e)
         }
       }
 

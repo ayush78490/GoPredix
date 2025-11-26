@@ -143,12 +143,10 @@ export default function Leaderboard() {
 
   const fetchBNBMarkets = useCallback(async (): Promise<Market[]> => {
     try {
-      console.log("📋 Fetching BNB markets...")
       const { bnbMarketContract } = getReadOnlyContracts()
 
       const nextId = await bnbMarketContract.nextMarketId()
       const marketCount = Number(nextId)
-      console.log(`Found ${marketCount} BNB markets`)
 
       if (marketCount === 0) return []
 
@@ -162,7 +160,6 @@ export default function Leaderboard() {
         market !== null && market.question !== undefined && market.question !== ''
       )
 
-      console.log(`✅ Loaded ${validMarkets.length} valid BNB markets`)
       return validMarkets
 
     } catch (error) {
@@ -177,12 +174,10 @@ export default function Leaderboard() {
 
   const fetchPDXMarkets = useCallback(async (): Promise<Market[]> => {
     try {
-      console.log("📋 Fetching PDX markets...")
       const { pdxMarketContract } = getReadOnlyContracts()
 
       const nextId = await pdxMarketContract.nextMarketId()
       const marketCount = Number(nextId)
-      console.log(`Found ${marketCount} PDX markets`)
 
       if (marketCount === 0) return []
 
@@ -196,7 +191,6 @@ export default function Leaderboard() {
         market !== null && market.question !== undefined && market.question !== ''
       )
 
-      console.log(`✅ Loaded ${validMarkets.length} valid PDX markets`)
       return validMarkets
 
     } catch (error) {
@@ -252,7 +246,6 @@ export default function Leaderboard() {
       const marketData = await pdxMarketContract.markets(marketId)
 
       if (!marketData || !marketData[0] || marketData[0] === "0x0000000000000000000000000000000000000000") {
-        console.warn(`PDX Market ${marketId} is empty or not found`)
         return null
       }
 
@@ -283,7 +276,6 @@ export default function Leaderboard() {
         paymentToken: "PDX"
       }
 
-      console.log(`✅ PDX Market ${marketId}:`, { question, category: market.category })
       return market
 
     } catch (error) {
@@ -338,7 +330,6 @@ export default function Leaderboard() {
         }
       })
 
-      console.log(`👥 Found ${traders.size} unique traders`)
       return Array.from(traders)
 
     } catch (error) {
@@ -367,7 +358,6 @@ export default function Leaderboard() {
             })
           }
         } catch (error) {
-          console.warn(`Error processing BNB position for market ${pos.marketId}:`, error)
         }
       }
 
@@ -398,7 +388,6 @@ export default function Leaderboard() {
             })
           }
         } catch (error) {
-          console.warn(`Error processing PDX position for market ${pos.marketId}:`, error)
         }
       }
 
@@ -556,7 +545,6 @@ export default function Leaderboard() {
     setError(null)
 
     try {
-      console.log("🚀 Starting to fetch leaderboard data from BOTH BNB and PDX...")
 
       const bnbMarketsData = await fetchBNBMarkets()
       setBnbMarkets(bnbMarketsData)
@@ -584,7 +572,6 @@ export default function Leaderboard() {
       }
 
       const tradersToProcess = allTraders.slice(0, 15)
-      console.log(`📊 Processing ${tradersToProcess.length} traders from BOTH BNB and PDX...`)
 
       const statsPromises = tradersToProcess.map(trader => calculateUserStats(trader))
       const allStats = await Promise.all(statsPromises)
@@ -594,7 +581,6 @@ export default function Leaderboard() {
       )
 
       activeTraders.sort((a, b) => b.totalPnl - a.totalPnl)
-      console.log(`✅ Active traders with positions: ${activeTraders.length}`)
 
       setUserStats(activeTraders)
 
@@ -606,7 +592,6 @@ export default function Leaderboard() {
           const positions = await fetchUserMarketPositions(trader.address)
           positionsData[trader.address] = positions.slice(0, 2)
         } catch (error) {
-          console.warn(`Error fetching positions for ${trader.address}:`, error)
           positionsData[trader.address] = []
         }
       }
@@ -625,12 +610,10 @@ export default function Leaderboard() {
             }
           }
         } catch (error) {
-          console.warn(`Error fetching profile for ${trader.address}:`, error)
         }
       }
       setUserProfiles(profilesData)
 
-      console.log("🎉 Leaderboard data loaded successfully from BNB + PDX")
 
     } catch (err: any) {
       console.error("❌ Error fetching leaderboard data:", err)

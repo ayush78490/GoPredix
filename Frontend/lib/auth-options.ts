@@ -23,10 +23,6 @@ export const authOptions: NextAuthOptions = {
         async signIn({ user, account, profile }) {
             // Store Twitter data in session
             if (account?.provider === 'twitter' && profile) {
-                console.log('✅ Twitter sign-in successful:', {
-                    userId: user.id,
-                    username: (profile as any).data?.username || (profile as any).username
-                })
                 return true
             }
             return true
@@ -48,7 +44,6 @@ export const authOptions: NextAuthOptions = {
                     name: twitterProfile.data?.name || twitterProfile.name || '',
                     profile_image_url: twitterProfile.data?.profile_image_url || twitterProfile.profile_image_url || '',
                 }
-                console.log('✅ Twitter data stored in JWT:', token.twitter)
             }
             return token
         },

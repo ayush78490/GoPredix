@@ -112,12 +112,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     endDateTime = new Date(`${endDate}T${endTime}:00`)
     
     // Debug date parsing
-    console.log('📅 Date Validation Debug:', {
-      input: `${endDate}T${endTime}:00`,
-      parsedDate: endDateTime.toString(),
-      parsedISO: endDateTime.toISOString(),
-      parsedTimestamp: endDateTime.getTime()
-    })
 
     if (isNaN(endDateTime.getTime())) {
       setError("Invalid date or time format")
@@ -130,15 +124,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     const now = new Date()
     const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
     
-    console.log('⏰ Time Comparison Debug:', {
-      now: now.toString(),
-      nowTimestamp: now.getTime(),
-      oneHourFromNow: oneHourFromNow.toString(),
-      endDateTime: endDateTime.toString(),
-      timeDifferenceMs: endDateTime.getTime() - now.getTime(),
-      timeDifferenceHours: (endDateTime.getTime() - now.getTime()) / (1000 * 60 * 60),
-      isValid: endDateTime > oneHourFromNow
-    })
 
     if (endDateTime <= oneHourFromNow) {
       setError(`End time must be at least 1 hour from now. Selected: ${endDateTime.toLocaleString()}`)
@@ -195,13 +180,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   setIsValidating(true)
 
   try {
-    console.log('🔄 Starting AI validation with:', {
-      question: question.trim(),
-      endTime: endTimeUnix,
-      initialYes,
-      initialNo,
-      timestamp: new Date().toISOString()
-    })
 
     const requestBody = {
       question: question.trim(),
@@ -210,7 +188,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       initialNo
     }
 
-    console.log('📤 Sending request to validation API...')
     
     const response = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
       method: 'POST',
@@ -222,11 +199,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       signal: AbortSignal.timeout(30000) // 30 second timeout
     })
 
-    console.log('📨 Response received:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
-    })
 
     if (!response.ok) {
       let errorDetail = `HTTP ${response.status}`
@@ -243,20 +215,16 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     }
 
     const validation = await response.json()
-    console.log('✅ Validation API response:', validation)
 
     // Validate response structure
     if (typeof validation.valid !== 'boolean') {
-      console.warn('⚠️ Invalid validation response structure:', validation)
       throw new Error('Invalid response from validation service')
     }
 
     setValidationResult(validation)
     
     if (!validation.valid) {
-      console.log('❌ Question rejected by AI validation:', validation.reason)
     } else {
-      console.log('✅ Question approved by AI validation')
     }
 
     return validation.valid
@@ -280,19 +248,16 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     }
 
     // Fallback to basic validation
-    console.log('🔄 Falling back to basic validation...')
     const basicValidation = performBasicValidation(question, endTimeUnix, initialYes, initialNo)
     setValidationResult(basicValidation)
 
     if (!basicValidation.valid) {
-      console.log('❌ Basic validation also failed:', basicValidation.reason)
       // Don't override the original error if basic validation also fails
       if (!err.message.includes('HTTP 5')) {
         setError(`AI validation failed and basic validation rejected: ${basicValidation.reason}`)
       }
       return false
     } else {
-      console.log('✅ Basic validation passed, proceeding with caution')
       // If AI failed but basic passed, we can proceed with warning
       setError("AI validation unavailable, but question passes basic checks. You may proceed.")
       return true
@@ -305,7 +270,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
 // Enhanced basic validation fallback
 const performBasicValidation = (question: string, endTime: number, initialYes: string, initialNo: string): ValidationResult => {
-  console.log('🔄 Running basic validation...')
   
   const trimmedQuestion = question.trim()
   
@@ -497,11 +461,9 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
       } else {
         // Check PDX balance before creating market
         const totalRequired = (parseFloat(initialYes) + parseFloat(initialNo)).toFixed(4)
-        console.log('🔍 Checking PDX balance before market creation...')
         
         if (pdxHook.checkPDXBalance) {
           const balanceCheck = await pdxHook.checkPDXBalance(totalRequired)
-          console.log('Balance check result:', balanceCheck)
           
           if (!balanceCheck.hasBalance) {
             setError(`Insufficient PDX balance. You have ${balanceCheck.currentBalance} PDX but need ${balanceCheck.required} PDX to create this market.`)

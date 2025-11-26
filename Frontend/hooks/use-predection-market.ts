@@ -115,7 +115,6 @@ export enum OrderType {
 // AI Validation Helper - with fallback
 async function validateMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
-    console.log('🔍 Attempting AI validation...')
     const res = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -135,10 +134,8 @@ async function validateMarketWithPerplexity(params: MarketCreationParams): Promi
     }
 
     const data = await res.json()
-    console.log('✅ AI validation passed')
     return data
   } catch (error: any) {
-    console.warn('⚠️ AI validation failed, using local validation:', error?.message)
     // ✅ Fallback to local validation
     return {
       valid: true,
@@ -169,7 +166,6 @@ export function usePredictionMarketBNB() {
         try {
           const ethersProvider = new BrowserProvider(publicClient.transport as any)
           setProvider(ethersProvider)
-          console.log('✅ Provider initialized from Wagmi')
         } catch (error) {
           console.error('❌ Error initializing provider:', error)
         }
@@ -188,7 +184,6 @@ export function usePredictionMarketBNB() {
           // Convert Wagmi's walletClient to ethers signer
           const ethersSigner = new ethers.BrowserProvider(walletClient.transport as any).getSigner(account)
           setSigner(await ethersSigner)
-          console.log('✅ Signer initialized from Wagmi')
         } catch (error) {
           console.error('❌ Error initializing signer:', error)
           setSigner(null)
@@ -203,10 +198,8 @@ export function usePredictionMarketBNB() {
   // Initialize contracts
   useEffect(() => {
     const initializeContracts = async () => {
-      console.log('🔍 Wagmi - Provider:', !!provider, 'Account:', !!account)
 
       if (!provider) {
-        console.warn('⚠️ No provider available')
         setMarketContract(null)
         setHelperContract(null)
         setIsContractReady(false)
@@ -215,10 +208,8 @@ export function usePredictionMarketBNB() {
 
       try {
         const network = await provider.getNetwork()
-        console.log('🌐 Network check:', { chainId: network.chainId.toString(), expected: '97' })
 
         if (Number(network.chainId) !== 97) {
-          console.warn("⚠️ Not on BSC Testnet. Current chain:", network.chainId.toString())
           setMarketContract(null)
           setHelperContract(null)
           setIsContractReady(false)
@@ -241,18 +232,13 @@ export function usePredictionMarketBNB() {
 
         try {
           // Test contracts
-          console.log('📝 Testing Prediction Market contract...')
           const nextId = await (predictionMarketContract as any).nextMarketId()
-          console.log('✅ Prediction Market contract connected. Next market ID:', nextId.toString())
 
-          console.log('📝 Testing Helper contract...')
           const feeBps = await (helperContractInstance as any).feeBps?.() || 0
-          console.log('✅ Helper contract connected. Fee BPS:', feeBps.toString())
 
           setMarketContract(predictionMarketContract)
           setHelperContract(helperContractInstance)
           setIsContractReady(true)
-          console.log('✅ All contracts initialized successfully')
         } catch (testError) {
           console.error('❌ Contract initialization test failed:', testError)
           setMarketContract(null)
@@ -289,11 +275,9 @@ export function usePredictionMarketBNB() {
       try {
         validation = await validateMarketWithPerplexity(params)
         if (!validation.valid) {
-          console.warn("⚠️ AI validation failed, using local validation")
           validation = { valid: true, category: params.category || 'General' }
         }
       } catch (error) {
-        console.warn("⚠️ AI validation request failed, using local validation")
         validation = { valid: true, category: params.category || 'General' }
       }
 
@@ -307,7 +291,6 @@ export function usePredictionMarketBNB() {
       const initialNoWei = ethers.parseEther(params.initialNo)
       const totalValue = initialYesWei + initialNoWei
 
-      console.log('📝 Creating BNB market...', { question: params.question })
 
       const tx = await (marketWithSigner as any).createMarket(
         params.question,
@@ -333,7 +316,6 @@ export function usePredictionMarketBNB() {
         marketId = Number(nextId) - 1
       }
 
-      console.log(`✅ BNB Market created with ID: ${marketId}`)
 
       // ✅ Store market creation date in Supabase to avoid block scanning later
       try {
@@ -353,9 +335,7 @@ export function usePredictionMarketBNB() {
             endTime: params.endTime,
           }),
         })
-        console.log(`✅ Stored market creation date for BNB-${marketId}`)
       } catch (storeError) {
-        console.warn('⚠️ Failed to store market creation date (non-critical):', storeError)
       }
 
       return marketId
@@ -450,7 +430,6 @@ export function usePredictionMarketBNB() {
     try {
       const investment = await (helperContract as any).getMarketInvestment(BigInt(marketId), userAddress)
       const investmentBNB = ethers.formatEther(investment)
-      console.log(`📊 Market ${marketId} investment for ${userAddress}: ${investmentBNB} BNB`)
       return investmentBNB
 
     } catch (error) {
@@ -465,7 +444,6 @@ export function usePredictionMarketBNB() {
     try {
       const totalInvestment = await (helperContract as any).getUserTotalInvestment(userAddress)
       const totalInvestmentBNB = ethers.formatEther(totalInvestment)
-      console.log(`💰 Total BNB investment for ${userAddress}: ${totalInvestmentBNB} BNB`)
       return totalInvestmentBNB
 
     } catch (error) {
@@ -480,7 +458,6 @@ export function usePredictionMarketBNB() {
     if (!helperContract) throw new Error('Helper contract not available')
 
     try {
-      console.log('🔍 Fetching user positions from helper contract...')
 
       const positions = await (helperContract as any).getUserPositions(userAddress)
       const formattedPositions: UserPosition[] = []
@@ -499,10 +476,8 @@ export function usePredictionMarketBNB() {
         }
 
         formattedPositions.push(position)
-        console.log(`✅ Position for market ${pos.marketId}:`, position)
       }
 
-      console.log(`📊 Total positions found: ${formattedPositions.length}`)
       return formattedPositions
 
     } catch (error) {
@@ -528,11 +503,6 @@ export function usePredictionMarketBNB() {
       const bnbAmountNumber = parseFloat(bnbAmount)
       const realMultiplier = bnbAmountNumber > 0 ? totalOutTokens / bnbAmountNumber : 0
 
-      console.log('✅ YES Multiplier:', {
-        bnbAmount,
-        totalOutTokens,
-        realMultiplier
-      })
 
       return {
         multiplier: realMultiplier,
@@ -560,11 +530,6 @@ export function usePredictionMarketBNB() {
       const bnbAmountNumber = parseFloat(bnbAmount)
       const realMultiplier = bnbAmountNumber > 0 ? totalOutTokens / bnbAmountNumber : 0
 
-      console.log('✅ NO Multiplier:', {
-        bnbAmount,
-        totalOutTokens,
-        realMultiplier
-      })
 
       return {
         multiplier: realMultiplier,
@@ -1084,7 +1049,6 @@ export function usePredictionMarketBNB() {
     if (!marketContract) return []
 
     try {
-      console.log(`Fetching BNB market history for ${marketId}...`)
 
       const points: PricePoint[] = []
 
@@ -1099,13 +1063,10 @@ export function usePredictionMarketBNB() {
               timestamp: createdAt,
               price: 50 // Markets start at 50%
             })
-            console.log(`✅ Using stored creation date: ${result.data.created_at}`)
           } else {
-            console.log('ℹ️ No stored creation date found, will start from first trade')
           }
         }
       } catch (fetchError) {
-        console.warn('⚠️ Could not fetch creation date from Supabase:', fetchError)
       }
 
       const provider = marketContract.runner?.provider
@@ -1120,9 +1081,7 @@ export function usePredictionMarketBNB() {
       let buyEvents: any[] = []
       try {
         buyEvents = await marketContract.queryFilter(buyFilter, startBlock, currentBlock)
-        console.log(`Found ${buyEvents.length} BNB buy events`)
       } catch (e) {
-        console.warn('Failed to fetch buy events:', e)
       }
 
       // Get Sell events
@@ -1130,9 +1089,7 @@ export function usePredictionMarketBNB() {
       let sellEvents: any[] = []
       try {
         sellEvents = await marketContract.queryFilter(sellFilter, startBlock, currentBlock)
-        console.log(`Found ${sellEvents.length} BNB sell events`)
       } catch (e) {
-        console.warn('Failed to fetch sell events:', e)
       }
 
       // Process Buy events
@@ -1155,7 +1112,6 @@ export function usePredictionMarketBNB() {
             price: Math.max(0, Math.min(100, yesPrice))
           })
         } catch (e) {
-          console.warn('Failed to process buy event:', e)
         }
       }
 
@@ -1179,7 +1135,6 @@ export function usePredictionMarketBNB() {
             price: Math.max(0, Math.min(100, yesPrice))
           })
         } catch (e) {
-          console.warn('Failed to process sell event:', e)
         }
       }
 

@@ -200,7 +200,6 @@ export default function ProfilePage() {
       const marketData = await pdxMarketContract.markets(marketId)
 
       if (!marketData || !marketData[0] || marketData[0] === "0x0000000000000000000000000000000000000000") {
-        console.warn(`PDX Market ${marketId} is empty or not found`)
         return null
       }
 
@@ -288,7 +287,6 @@ export default function ProfilePage() {
             })
           }
         } catch (error) {
-          console.warn(`Error processing BNB position for market ${pos.marketId}:`, error)
         }
       }
 
@@ -319,7 +317,6 @@ export default function ProfilePage() {
             })
           }
         } catch (error) {
-          console.warn(`Error processing PDX position for market ${pos.marketId}:`, error)
         }
       }
 
@@ -484,7 +481,6 @@ export default function ProfilePage() {
           }
         }
       } catch (error) {
-        console.warn('Error fetching BNB created markets:', error)
       }
 
       // Fetch PDX markets
@@ -499,10 +495,8 @@ export default function ProfilePage() {
           }
         }
       } catch (error) {
-        console.warn('Error fetching PDX created markets:', error)
       }
 
-      console.log(`Found ${createdMarkets.length} markets created by ${address}`)
       return createdMarkets
 
     } catch (error) {
@@ -521,7 +515,6 @@ export default function ProfilePage() {
     setError(null)
 
     try {
-      console.log(`🚀 Fetching data for wallet: ${account}`)
 
       const stats = await calculateUserStats(account)
       setUserStats(stats)
@@ -532,7 +525,6 @@ export default function ProfilePage() {
       const markets = await getUserCreatedMarkets(account)
       setCreatedMarkets(markets)
 
-      console.log("🎉 User data loaded successfully")
 
     } catch (err: any) {
       console.error("❌ Error fetching user data:", err)
@@ -589,8 +581,6 @@ export default function ProfilePage() {
     try {
       // You'll need to import your BNB/PDX hooks here
       // For now, showing the structure
-      console.log(`Selling ${sellAmount} ${sellTokenType} tokens from market ${selectedPosition.marketId}`)
-      console.log(`Minimum to receive: ${minReceive} ${selectedPosition.paymentToken}`)
 
       // TODO: Call actual contract function based on paymentToken
       // if (selectedPosition.paymentToken === "BNB") {
@@ -636,7 +626,6 @@ export default function ProfilePage() {
     setError(null)
 
     try {
-      console.log(`Setting stop loss for market ${selectedPosition.marketId} at price ${stopLossPrice}`)
 
       // TODO: Call actual contract function
       // Determine which token has more value
@@ -688,7 +677,6 @@ export default function ProfilePage() {
     setError(null)
 
     try {
-      console.log(`Setting take profit for market ${selectedPosition.marketId} at price ${takeProfitPrice}`)
 
       // TODO: Call actual contract function
       // Determine which token has more value

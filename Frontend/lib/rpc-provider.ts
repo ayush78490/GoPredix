@@ -40,7 +40,6 @@ class FallbackRpcProvider extends JsonRpcProvider {
 
                 // Reset failure count on success
                 if (this.failureCount > 0) {
-                    console.log(`✅ RPC recovered after ${this.failureCount} failures`)
                     this.failureCount = 0
                 }
 
@@ -55,7 +54,6 @@ class FallbackRpcProvider extends JsonRpcProvider {
                     error?.code === -32005 ||
                     error?.error?.code === -32005
 
-                console.warn(
                     `⚠️ RPC ${method} failed on ${this.urls[this.currentUrlIndex]} (attempt ${attempt + 1}/${this.urls.length})`,
                     isRateLimit ? 'RATE LIMIT' : error?.message
                 )
@@ -86,7 +84,6 @@ class FallbackRpcProvider extends JsonRpcProvider {
         this.currentUrlIndex = (this.currentUrlIndex + 1) % this.urls.length
 
         const newUrl = this.urls[this.currentUrlIndex]
-        console.log(`🔄 Switching RPC provider: ${this.urls[oldIndex]} → ${newUrl}`)
 
         // Update the provider's connection
         try {
@@ -116,7 +113,6 @@ class FallbackRpcProvider extends JsonRpcProvider {
     switchToProvider(index: number): void {
         if (index >= 0 && index < this.urls.length) {
             this.currentUrlIndex = index
-            console.log(`🔄 Manually switched to RPC: ${this.urls[index]}`)
         }
     }
 }
@@ -126,7 +122,6 @@ class FallbackRpcProvider extends JsonRpcProvider {
  */
 export function createBNBTestnetProvider(): FallbackRpcProvider {
     const provider = new FallbackRpcProvider(BNB_TESTNET_RPC_URLS, 97)
-    console.log('✅ Created fallback RPC provider with', BNB_TESTNET_RPC_URLS.length, 'endpoints')
     return provider
 }
 

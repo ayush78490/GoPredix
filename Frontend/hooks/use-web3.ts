@@ -19,7 +19,6 @@ const getEthereumProvider = () => {
 const createRpcProvider = () => {
   try {
     const rpcProvider = new ethers.JsonRpcProvider(CHAIN_CONFIG.rpcUrl)
-    console.log("✅ RPC Provider created:", CHAIN_CONFIG.rpcUrl)
     return rpcProvider
   } catch (error) {
     console.error("❌ Failed to create RPC provider:", error)
@@ -79,13 +78,11 @@ export function useWeb3() {
 
   // ✅ CRITICAL FIX: Initialize RPC provider FIRST - runs on mount
   useEffect(() => {
-    console.log("📡 Initializing RPC provider on mount...")
     try {
       const rpcProvider = createRpcProvider()
       if (rpcProvider) {
         setProvider(rpcProvider)
         setChainId(CHAIN_CONFIG.chainId)
-        console.log("✅ RPC Provider initialized successfully")
       } else {
         console.error("❌ Failed to create RPC provider")
       }
@@ -106,11 +103,9 @@ export function useWeb3() {
       setError(null)
       setUserDisconnected(false)
 
-      console.log("🔌 Connecting wallet...")
 
       let accounts: string[] = []
 
-      console.log("📝 Requesting account access...")
       accounts = (await ethereumProvider.request({
         method: "eth_requestAccounts",
       })) as string[]
@@ -119,14 +114,11 @@ export function useWeb3() {
         throw new Error("No accounts found")
       }
 
-      console.log("✅ Creating BrowserProvider...")
       const web3Provider = new ethers.BrowserProvider(ethereumProvider)
       const web3Signer = await web3Provider.getSigner()
       const address = await web3Signer.getAddress()
       const network = await web3Provider.getNetwork()
 
-      console.log("✅ Connected to address:", address)
-      console.log("🌐 Network:", Number(network.chainId))
 
       setProvider(web3Provider)
       setSigner(web3Signer)
@@ -137,7 +129,6 @@ export function useWeb3() {
 
       // Check if we're on the correct network
       if (Number(network.chainId) !== CHAIN_CONFIG.chainId) {
-        console.log("⚠️ Wrong network, attempting to switch...")
         await switchNetwork()
       }
     } catch (err: any) {
@@ -160,16 +151,13 @@ export function useWeb3() {
     if (!ethereumProvider) return
 
     try {
-      console.log("🔄 Switching to", CHAIN_CONFIG.chainName)
       await ethereumProvider.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: `0x${CHAIN_CONFIG.chainId.toString(16)}` }],
       })
-      console.log("✅ Network switched successfully")
     } catch (switchError: any) {
       if (switchError.code === 4902) {
         try {
-          console.log("➕ Adding network to MetaMask...")
           await ethereumProvider.request({
             method: "wallet_addEthereumChain",
             params: [
@@ -182,7 +170,6 @@ export function useWeb3() {
               },
             ],
           })
-          console.log("✅ Network added successfully")
         } catch (addError) {
           console.error("❌ Error adding network:", addError)
         }
@@ -191,7 +178,6 @@ export function useWeb3() {
   }
 
   const disconnectWallet = useCallback(() => {
-    console.log("🔌 Disconnecting wallet...")
     setSigner(null)
     setAccount(null)
     setError(null)
@@ -210,34 +196,27 @@ export function useWeb3() {
   useEffect(() => {
     const initializeWallet = async () => {
       if (hasUserDisconnected()) {
-        console.log("ℹ️ Skipping auto-connect - user manually disconnected")
         setIsInitialized(true)
         return
       }
 
       const ethereumProvider = getEthereumProvider()
       if (!ethereumProvider) {
-        console.log("ℹ️ MetaMask not detected - using RPC only")
         setIsInitialized(true)
         return
       }
 
       try {
-        console.log("🔍 Checking for existing wallet connection...")
         const accounts = (await ethereumProvider.request({
           method: "eth_accounts",
         })) as string[]
 
         if (accounts && accounts.length > 0) {
-          console.log("✅ Found existing connection, initializing...")
           const web3Provider = new ethers.BrowserProvider(ethereumProvider)
           const web3Signer = await web3Provider.getSigner()
           const address = await web3Signer.getAddress()
           const network = await web3Provider.getNetwork()
 
-          console.log("✅ Wallet initialized")
-          console.log("📍 Address:", address)
-          console.log("🌐 Chain ID:", Number(network.chainId))
 
           setProvider(web3Provider)
           setSigner(web3Signer)
@@ -245,7 +224,6 @@ export function useWeb3() {
           setChainId(Number(network.chainId))
           setLastConnectedAccount(address)
         } else {
-          console.log("ℹ️ No existing wallet connection found")
         }
       } catch (error) {
         console.error("❌ Error initializing wallet:", error)
@@ -277,7 +255,6 @@ export function useWeb3() {
         if (JSON.stringify(accounts) !== JSON.stringify(lastAccounts)) {
           lastAccounts = accounts
           if (accounts.length === 0) {
-            console.log("👋 Account disconnected")
             setSigner(null)
             setAccount(null)
             // Keep RPC provider
@@ -286,7 +263,6 @@ export function useWeb3() {
               setProvider(rpcProvider)
             }
           } else if (accounts[0] !== account) {
-            console.log("🔄 Account changed to:", accounts[0])
             setAccount(accounts[0])
             setLastConnectedAccount(accounts[0])
             const web3Provider = new ethers.BrowserProvider(ethereumProvider)
@@ -303,7 +279,6 @@ export function useWeb3() {
         if (currentChainId !== lastChainId) {
           lastChainId = currentChainId
           const newChainId = parseInt(currentChainId, 16)
-          console.log("🔄 Chain changed to:", newChainId)
           setChainId(newChainId)
 
           const web3Provider = new ethers.BrowserProvider(ethereumProvider)
@@ -312,7 +287,6 @@ export function useWeb3() {
           setSigner(web3Signer)
         }
       } catch (error) {
-        console.warn("⚠️ Error polling provider:", error)
       }
 
       if (mounted) {
@@ -353,21 +327,13 @@ export function usePredictionMarket(
   // Check if contract is ready
   useEffect(() => {
     const checkContract = async () => {
-      console.log(
-        "🔍 Contract check - Provider:",
-        !!provider,
-        "Account:",
-        !!account
-      )
 
       if (!provider) {
-        console.log("❌ No provider for contract check")
         setIsContractReady(false)
         return
       }
 
       try {
-        console.log("🔍 Verifying contract at:", PREDICTION_MARKET_ADDRESS)
         const contract = new ethers.Contract(
           PREDICTION_MARKET_ADDRESS,
           PREDICTION_MARKET_ABI,
@@ -376,7 +342,6 @@ export function usePredictionMarket(
 
         // Test contract by calling a view function
         const nextId = await contract.nextMarketId()
-        console.log("✅ Contract verified! Next market ID:", Number(nextId))
         setIsContractReady(true)
       } catch (error) {
         console.error("❌ Contract verification failed:", error)
@@ -390,12 +355,10 @@ export function usePredictionMarket(
   const getContract = useCallback(
     (withSigner = true) => {
       if (!provider) {
-        console.warn("⚠️ Provider not available for getContract")
         return null
       }
       // For write operations, ensure signer exists
       if (withSigner && !signer) {
-        console.warn("⚠️ Signer not available for write operation")
         return null
       }
       const signerOrProvider = withSigner && signer ? signer : provider
@@ -433,7 +396,6 @@ export function usePredictionMarket(
     const contract = getContract(true)
     if (!contract) throw new Error("Contract not initialized")
 
-    console.log("📝 Creating market:", question)
 
     const yesAmount = ethers.parseEther(initialYes)
     const noAmount = ethers.parseEther(initialNo)
@@ -449,7 +411,6 @@ export function usePredictionMarket(
       }
     )
 
-    console.log("⏳ Waiting for transaction:", tx.hash)
     const receipt = await tx.wait()
 
     // Parse the MarketCreated event to get the market ID
@@ -464,7 +425,6 @@ export function usePredictionMarket(
     if (event) {
       const parsed = contract.interface.parseLog(event)
       const marketId = Number(parsed?.args[0])
-      console.log("✅ Market created with ID:", marketId)
       return marketId
     }
 
@@ -578,7 +538,6 @@ export function usePredictionMarket(
     const contract = getContract(false)
     if (!contract) throw new Error("Contract not initialized")
 
-    console.log(`📊 Fetching market ${marketId}...`)
     const market = await contract.getMarket(marketId)
     const [yesPrice, noPrice] = await contract.getPrice(marketId)
 
@@ -609,13 +568,10 @@ export function usePredictionMarket(
     }
 
     try {
-      console.log("📋 Fetching all markets...")
       const nextId = await contract.nextMarketId()
       const marketCount = Number(nextId)
-      console.log(`Found ${marketCount} markets`)
 
       if (marketCount === 0) {
-        console.log("ℹ️ No markets created yet")
         return []
       }
 
@@ -624,15 +580,10 @@ export function usePredictionMarket(
         try {
           const market = await getMarket(i)
           markets.push(market)
-          console.log(
-            `✅ Loaded market ${i}: ${market.question.substring(0, 50)}...`
-          )
         } catch (error) {
-          console.warn(`⚠️ Failed to fetch market ${i}:`, error)
         }
       }
 
-      console.log(`✅ Successfully loaded ${markets.length} markets`)
       return markets
     } catch (error) {
       console.error("❌ Error fetching markets:", error)

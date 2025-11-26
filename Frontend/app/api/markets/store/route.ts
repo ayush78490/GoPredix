@@ -73,7 +73,6 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        console.log(`✅ Stored market creation data: ${paymentToken}-${marketId}`)
 
         return NextResponse.json({
             success: true,

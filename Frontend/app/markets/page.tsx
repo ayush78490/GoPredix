@@ -206,7 +206,6 @@ export default function MarketsPage() {
 
   const handleMarketClick = (market: any) => {
     if (!isConnected || !isCorrectNetwork) {
-      console.log("Wallet not connected or wrong network - preventing navigation")
       if (!isConnected) {
         alert("Please connect your wallet first")
       } else if (!isCorrectNetwork) {

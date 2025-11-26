@@ -394,7 +394,6 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
     }
     try {
       // PDX hook might not have getOrderInfo, so we'll return a placeholder
-      console.warn('PDX getOrderInfo not yet implemented')
       return null
     } catch (err: any) {
       console.error('Error getting PDX order info:', err)

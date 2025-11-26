@@ -85,13 +85,6 @@ export default function TradeModal({
       const slippageMultiplier = 1 - (slippagePercent / 100)
       const minOut = expectedNum * slippageMultiplier
 
-      console.log("Slippage Calculation:", {
-        expectedOutput,
-        slippagePercent: `${slippagePercent}%`,
-        multiplier: slippageMultiplier,
-        minimumOutput: minOut.toFixed(6),
-        difference: `${slippagePercent}%`
-      })
 
       return minOut.toFixed(18)
     } catch (error) {
@@ -116,13 +109,6 @@ export default function TradeModal({
       const actualSlippage = ((expected - minimum) / expected) * 100
       const isValid = Math.abs(actualSlippage - slippagePercent) < 0.01
 
-      console.log("Validation:", {
-        expected,
-        minimum,
-        intendedSlippage: `${slippagePercent}%`,
-        actualSlippage: `${actualSlippage.toFixed(2)}%`,
-        valid: isValid
-      })
 
       return isValid
     } catch (error) {
@@ -136,7 +122,6 @@ export default function TradeModal({
 
     try {
       const marketId = validateMarketId(market.numericId)
-      console.log(`Loading ${paymentToken} market prices for ID ${marketId}...`)
 
       let priceData
       if (paymentToken === "BNB") {
@@ -149,7 +134,6 @@ export default function TradeModal({
         setNoPrice(priceData.noPrice)
       }
 
-      console.log("Prices loaded:", priceData)
     } catch (err: any) {
       console.error("Price fetch error:", err)
       if (err.message.includes("Market ID")) {
@@ -180,7 +164,6 @@ export default function TradeModal({
     setError(null)
 
     try {
-      console.log(`Calculating ${paymentToken} outcome...`)
 
       const marketId = validateMarketId(market.numericId)
       let result
@@ -207,15 +190,9 @@ export default function TradeModal({
         const isValid = validateSlippageCalculation(result.totalOut, minOut, slippage)
 
         if (!isValid) {
-          console.warn("Slippage calculation validation failed")
           setError("Slippage calculation error. Please adjust slippage and try again.")
         }
 
-        console.log("Calculation complete:", {
-          ...result,
-          calculatedMinOut: parseFloat(minOut).toFixed(6),
-          slippageValid: isValid
-        })
       } else {
         throw new Error("No payout available - market may lack liquidity or be closed")
       }
@@ -306,17 +283,6 @@ export default function TradeModal({
     const valueWei: bigint = ethers.parseEther(amount)
     await ensureSufficientBNBBalance(valueWei)
 
-    console.log(`Executing BNB trade:`, {
-      marketId,
-      outcome,
-      amount,
-      userExpectedOut,
-      slippageTolerance: `${slippage}%`,
-      minOut,
-      minOutFormatted: parseFloat(minOut).toFixed(6),
-      formula: `minOut = ${userExpectedOut} * (1 - ${slippage / 100}) = ${minOut}`,
-      validationPassed: isValid
-    })
 
     if (outcome === "YES") {
       return await bnbHook.buyYesWithBNB(marketId, minOut, amount)
@@ -335,7 +301,6 @@ export default function TradeModal({
     const pdxAmountWei = ethers.parseEther(amount)
     await ensureSufficientPDXBalance(pdxAmountWei)
 
-    console.log("Refreshing prices before transaction...")
     let freshResult
     try {
       if (outcome === "YES") {
@@ -353,23 +318,9 @@ export default function TradeModal({
     }
 
     const freshExpectedOut = freshResult.totalOut
-    console.log("Fresh calculation:", {
-      oldExpectedOut: expectedOut,
-      freshExpectedOut,
-      difference: expectedOut ? ((parseFloat(freshExpectedOut) - parseFloat(expectedOut)) / parseFloat(expectedOut) * 100).toFixed(2) + "%" : "N/A"
-    })
 
     const minOut = calculateMinimumOutput(freshExpectedOut, slippage)
 
-    console.log(`Executing PDX trade with FRESH prices:`, {
-      marketId,
-      outcome,
-      amount,
-      freshExpectedOut,
-      slippageTolerance: `${slippage}%`,
-      minOut,
-      minOutFormatted: parseFloat(minOut).toFixed(6)
-    })
 
     if (outcome === "YES") {
       return await pdxHook.buyYesWithPDX(marketId, minOut, amount)
@@ -379,7 +330,6 @@ export default function TradeModal({
   }
 
   const executeTrade = async () => {
-    console.log(`Executing ${paymentToken} trade...`)
 
     if (!account || !walletClient) throw new Error("Wallet not connected")
     validateMarketId(market?.numericId)
@@ -515,7 +465,6 @@ export default function TradeModal({
       const receipt = await executeTrade()
 
       setTxHash(receipt?.transactionHash || "success")
-      console.log("Trade successful:", receipt)
 
       setAmount("")
       setExpectedOut(null)

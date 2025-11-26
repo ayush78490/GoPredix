@@ -112,7 +112,6 @@
         
 //         // Check for correct network (BSC Testnet = 97, or your network)
 //         if (network.chainId !== BigInt(97)) {
-//           console.warn("⚠️ Not on BSC Testnet. Current chain:", network.chainId)
 //           setContract(null)
 //           setPdxToken(null)
 //           setIsContractReady(false)
@@ -136,10 +135,8 @@
 //         try {
 //           // Test contracts
 //           const nextId = await (marketContract as any).nextMarketId()
-//           console.log('✅ PDX Market contract connected. Next market ID:', nextId.toString())
           
 //           const tokenName = await (tokenContract as any).name()
-//           console.log('✅ PDX Token connected:', tokenName)
           
 //           setContract(marketContract)
 //           setPdxToken(tokenContract)
@@ -174,8 +171,6 @@
 //         const allowance = await (pdxToken as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
 //         setPdxAllowance(ethers.formatEther(allowance))
 
-//         console.log(`💰 PDX Balance: ${ethers.formatEther(balance)}`)
-//         console.log(`✅ PDX Allowance: ${ethers.formatEther(allowance)}`)
 //       } catch (error) {
 //         console.error('❌ Error fetching PDX balance/allowance:', error)
 //       }
@@ -198,7 +193,6 @@
 //       const tokenWithSigner = pdxToken.connect(signer) as any
 //       const amountWei = ethers.parseEther(amount)
 
-//       console.log(`📝 Approving ${amount} PDX...`)
 //       const tx = await tokenWithSigner.approve(PDX_PREDICTION_MARKET_ADDRESS, amountWei)
 //       await tx.wait()
 
@@ -206,7 +200,6 @@
 //       const newAllowance = await (pdxToken as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
 //       setPdxAllowance(ethers.formatEther(newAllowance))
 
-//       console.log('✅ PDX approval successful')
 //     } catch (error: any) {
 //       console.error('❌ Error approving PDX:', error)
 //       throw new Error(error.reason || error.message || 'Failed to approve PDX')
@@ -263,11 +256,9 @@
 //       // Check if approval is needed
 //       const currentAllowance = await (pdxToken as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
 //       if (currentAllowance < pdxAmountWei) {
-//         console.log('⚠️ Insufficient PDX allowance, requesting approval...')
 //         await approvePDX(params.pdxAmount)
 //       }
 
-//       console.log('📝 Creating PDX market...')
 //       const tx = await contractWithSigner.createMarket(
 //         params.question,
 //         params.category,
@@ -293,7 +284,6 @@
 //         marketId = Number(nextId) - 1
 //       }
 
-//       console.log('✅ PDX Market created:', marketId)
 //       return marketId
 
 //     } catch (error: any) {
@@ -413,7 +403,6 @@
 //     const currentAllowance = await (pdxToken as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
     
 //     if (currentAllowance < amountWei) {
-//       console.log('⚠️ Insufficient PDX allowance, requesting approval...')
 //       await approvePDX(pdxAmount)
 //     }
 
@@ -443,7 +432,6 @@
 //     const currentAllowance = await (pdxToken as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
     
 //     if (currentAllowance < amountWei) {
-//       console.log('⚠️ Insufficient PDX allowance, requesting approval...')
 //       await approvePDX(pdxAmount)
 //     }
 

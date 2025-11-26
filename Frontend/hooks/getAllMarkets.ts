@@ -67,7 +67,6 @@ export function useAllMarkets() {
         }
         return null
       } catch (error) {
-        console.warn(`⚠️ Error fetching BNB market ${marketId}:`, error)
         return null
       }
     },
@@ -103,7 +102,6 @@ export function useAllMarkets() {
         }
         return null
       } catch (error) {
-        console.warn(`⚠️ Error fetching PDX market ${marketId}:`, error)
         return null
       }
     },
@@ -113,10 +111,8 @@ export function useAllMarkets() {
   // Fetch all BNB markets by iterating through IDs
   const getAllBNBMarkets = useCallback(async (): Promise<UnifiedMarket[]> => {
     try {
-      console.log("🔶 Fetching all BNB markets...")
       
       if (!bnbHook.marketContract) {
-        console.warn("⚠️ BNB market contract not ready yet")
         return []
       }
 
@@ -124,10 +120,8 @@ export function useAllMarkets() {
         const nextMarketId = await bnbHook.marketContract.nextMarketId()
         const totalMarkets = Number(nextMarketId)
         
-        console.log(`📊 Found ${totalMarkets} BNB markets on chain`)
         
         if (totalMarkets === 0) {
-          console.log("ℹ️ No BNB markets found")
           return []
         }
 
@@ -139,7 +133,6 @@ export function useAllMarkets() {
         const results = await Promise.all(marketPromises)
         const validMarkets = results.filter((m): m is UnifiedMarket => m !== null)
         
-        console.log(`✅ Successfully loaded ${validMarkets.length} valid BNB markets`)
         return validMarkets
       } catch (err) {
         console.error("❌ Error iterating BNB markets:", err)
@@ -154,20 +147,16 @@ export function useAllMarkets() {
   // Fetch all PDX markets by iterating through IDs
   const getAllPDXMarkets = useCallback(async (): Promise<UnifiedMarket[]> => {
     try {
-      console.log("💜 Fetching all PDX markets...")
       
       if (!pdxHook.isContractReady) {
-        console.warn("⚠️ PDX adapter contract not ready yet")
         return []
       }
 
       try {
         const marketIds = await pdxHook.getPDXMarketIds()
         
-        console.log(`📊 Found ${marketIds.length} PDX markets on chain`)
         
         if (marketIds.length === 0) {
-          console.log("ℹ️ No PDX markets found")
           return []
         }
 
@@ -176,7 +165,6 @@ export function useAllMarkets() {
         const results = await Promise.all(marketPromises)
         const validMarkets = results.filter((m): m is UnifiedMarket => m !== null)
         
-        console.log(`✅ Successfully loaded ${validMarkets.length} valid PDX markets`)
         return validMarkets
       } catch (err) {
         console.error("❌ Error iterating PDX markets:", err)
@@ -191,7 +179,6 @@ export function useAllMarkets() {
   // Fetch all markets (both BNB and PDX)
   const getAllMarkets = useCallback(async (): Promise<UnifiedMarket[]> => {
     try {
-      console.log("📋 Fetching all markets from both BNB and PDX...")
       
       const [bnbMarkets, pdxMarkets] = await Promise.all([
         getAllBNBMarkets(),
@@ -202,7 +189,6 @@ export function useAllMarkets() {
         (b.endTime || 0) - (a.endTime || 0)
       )
 
-      console.log(`📊 Total markets: ${allMarkets.length} (BNB: ${bnbMarkets.length}, PDX: ${pdxMarkets.length})`)
       return allMarkets
     } catch (error) {
       console.error("❌ Error fetching all markets:", error)
@@ -224,13 +210,11 @@ export function useAllMarkets() {
         localStorage.setItem('cachedMarkets', JSON.stringify(marketsData))
         localStorage.setItem('marketsCacheTime', Date.now().toString())
       } catch (e) {
-        console.warn('⚠️ Could not save markets to localStorage:', e)
       }
       
       if (marketsData.length === 0) {
         setError("No markets found on the blockchain")
       } else {
-        console.log("✅ Markets loaded successfully")
       }
     } catch (err: any) {
       console.error('Error loading markets:', err)
@@ -249,7 +233,6 @@ export function useAllMarkets() {
   useEffect(() => {
     const anyReady = bnbHook.isContractReady || pdxHook.isContractReady
     if (anyReady && !hasLoaded) {
-      console.log("✅ Contracts ready, loading markets (first time)...")
       loadMarketsRef.current().then(() => {
         setHasLoaded(true)  // Mark as loaded after success
       }).catch(() => {
@@ -265,7 +248,6 @@ export function useAllMarkets() {
     const anyReady = bnbHook.isContractReady || pdxHook.isContractReady
     if (!anyReady) {
       setHasLoaded(false)
-      console.log("🔄 Contracts disconnected, will reload on reconnect")
     }
   }, [bnbHook.isContractReady, pdxHook.isContractReady])
 
@@ -276,10 +258,8 @@ export function useAllMarkets() {
       if (cached) {
         const cachedMarkets = JSON.parse(cached)
         setMarkets(cachedMarkets)
-        console.log(`✅ Restored ${cachedMarkets.length} markets from cache`)
       }
     } catch (e) {
-      console.warn('⚠️ Could not restore markets from cache:', e)
     }
   }, [])
 
