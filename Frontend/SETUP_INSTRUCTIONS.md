@@ -6,17 +6,6 @@ Follow these steps to complete the setup:
 
 ### 1. Run Database Migration
 
-**Action Required**: Execute the SQL migration in your Supabase dashboard.
-
-1. Open your Supabase project dashboard
-2. Navigate to **SQL Editor**
-3. Open the file: `supabase-markets-migration.sql`
-4. Copy all contents and paste into SQL Editor
-5. Click **Run** to execute
-6. Verify the `markets` table was created:
-   - Go to **Table Editor**
-   - You should see a new `markets` table
-
 ### 2. Verify Environment Variables
 
 Ensure these environment variables are set in your `.env` file:
@@ -34,14 +23,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 3. Create a new test market
 4. Check browser console for: `✅ Stored market creation date for BNB-{id}`
 
-#### Verify Database Storage
-1. Go to Supabase → Table Editor → `markets` table
-2. You should see your newly created market with:
-   - `market_id`
-   - `payment_token` (BNB or PDX)
-   - `created_at` timestamp
-   - `block_number`
-   - `transaction_hash`
+
 
 #### Test Graph Loading
 1. Navigate to the market detail page
@@ -116,9 +98,5 @@ You'll know everything is working when:
 
 If you want to add creation dates for existing markets, you can manually query the blockchain once and insert the data:
 
-```sql
-INSERT INTO markets (market_id, payment_token, created_at, block_number, transaction_hash)
-VALUES (0, 'BNB', '2025-11-20T10:00:00Z', 12345678, '0x...');
-```
 
 This is optional and only needed if you want complete historical data for old markets.
