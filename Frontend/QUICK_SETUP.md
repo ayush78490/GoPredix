@@ -45,11 +45,6 @@
 
 ---
 
-## 🔧 Twitter Developer Portal Settings
-
-**Your app should have BOTH callback URLs:**
-- ✅ `http://localhost:3000/api/auth/callback/twitter`
-- ✅ `https://www.gopredix.xyz/api/auth/callback/twitter`
 
 **Website URL:**
 - `https://www.gopredix.xyz`
@@ -67,7 +62,7 @@
 3. Should work ✅
 
 **Production:**
-1. Go to `https://www.gopredix.xyz/profile`
+1. Go to `https://your domain /profile`
 2. Click "Connect Twitter"
 3. Should work ✅
 
