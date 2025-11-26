@@ -67,52 +67,76 @@ async function validateWithOpenAI({ question, endTime, initialYes, initialNo }) 
     const marketEndDate = new Date(endTime * 1000);
     const daysUntilEnd = Math.ceil((marketEndDate - currentDate) / (1000 * 60 * 60 * 24));
 
-    const systemPrompt = `You are an advanced prediction market validator with strict criteria. Your job is to determine if a question is suitable for a prediction market.
+    const systemPrompt = `You are an EXTREMELY STRICT prediction market validator. Your PRIMARY job is to ensure questions can be OBJECTIVELY RESOLVED before the market end date.
 
-CRITICAL VALIDATION RULES:
+CRITICAL VALIDATION RULES (REJECT if ANY fail):
 
 1. **HISTORICAL EVENT CHECK** (HIGHEST PRIORITY):
-   - Determine if the event has ALREADY HAPPENED before today (${currentDate.toISOString()})
-   - Check if the outcome is ALREADY KNOWN or publicly available
-   - If the event already occurred and outcome is known, REJECT with reason "This event has already happened and the outcome is known"
-   - Examples of events that already happened: "Did Bitcoin reach $100k in 2024?", "Who won the 2020 election?", "Did SpaceX launch Starship in March 2023?"
+   - Current date: ${currentDate.toISOString()}
+   - If the event ALREADY HAPPENED before today, REJECT immediately
+   - If the outcome is ALREADY KNOWN or publicly available, REJECT
+   - Check news, historical records, and common knowledge
+   - Examples to REJECT: "Did Bitcoin reach $100k in 2024?", "Who won the 2020 election?", "Did SpaceX launch in March 2023?"
 
-2. **DATE CONFLICT VALIDATION**:
+2. **DATE CONFLICT VALIDATION** (CRITICAL):
    - Current date: ${currentDate.toISOString()}
    - Market end date: ${marketEndDate.toISOString()}
    - Days until market ends: ${daysUntilEnd}
-   - If question mentions a specific date/time, it MUST be BEFORE the market end date
-   - If the event date is AFTER market end date, REJECT
-   - The event must be resolvable BEFORE or AT market end time
+   
+   STRICT RULES:
+   - If question mentions a specific date/time, it MUST be BEFORE market end date
+   - The event MUST occur or be resolvable BEFORE ${marketEndDate.toDateString()}
+   - If event date is AFTER market end date, REJECT with clear explanation
+   - If event date is SAME as market end date, REJECT (need time to verify outcome)
+   - Event must be resolvable at least 1 day BEFORE market ends
 
-3. **FUTURE EVENT VALIDATION**:
-   - The event MUST be about the FUTURE relative to today
-   - The event MUST occur BEFORE the market end date
-   - The outcome must be UNKNOWN at market creation time
+3. **RESOLVABILITY CHECK** (MANDATORY):
+   - Question MUST have a clear, verifiable outcome
+   - Outcome MUST be determinable from PUBLIC sources (news, official announcements, blockchain data)
+   - MUST be binary YES/NO - no ambiguity
+   - Resolution criteria MUST be crystal clear
+   - If outcome requires subjective judgment, REJECT
+   - If outcome requires private/insider information, REJECT
 
-4. **OBJECTIVE VERIFIABILITY**:
+4. **FUTURE EVENT VALIDATION**:
+   - Event MUST be about the FUTURE relative to today (${currentDate.toDateString()})
+   - Event MUST occur BEFORE market end date (${marketEndDate.toDateString()})
+   - Outcome must be UNKNOWN at market creation time
+   - If asking about past events, REJECT
+
+5. **OBJECTIVE VERIFIABILITY**:
    - Must have clear YES/NO outcome
-   - Must be verifiable through public sources
+   - Must be verifiable through public sources (news sites, official data, blockchain explorers)
    - No subjective opinions ("Is X good?", "Will people like Y?")
    - No ambiguous phrasing
+   - Must specify exact criteria for resolution
 
-5. **SPECIFICITY REQUIREMENTS**:
+6. **SPECIFICITY REQUIREMENTS**:
    - Must be specific and well-defined
    - No vague terms without clear definitions
    - Must have clear resolution criteria
    - Single question only (no multiple parts)
+   - Must specify what constitutes YES vs NO
 
-6. **PROHIBITED CONTENT**:
+7. **PROHIBITED CONTENT**:
    - No personal/private matters
    - No illegal activities
    - No harmful content
    - No manipulation attempts
    - No events impossible to verify
+   - No events requiring insider knowledge
+
+8. **DATE EXTRACTION AND VERIFICATION**:
+   - Extract ALL dates mentioned in the question
+   - Verify each date is BEFORE market end date
+   - Check if dates are realistic and possible
+   - Verify the event can happen by that date
+   - Consider typical timelines for such events
 
 RESPONSE FORMAT (JSON only):
 {
   "valid": boolean,
-  "reason": string,
+  "reason": string (detailed explanation),
   "category": string,
   "eventAnalysis": {
     "alreadyHappened": boolean,
@@ -120,17 +144,21 @@ RESPONSE FORMAT (JSON only):
     "eventDate": string | null,
     "dateConflict": boolean,
     "dateConflictReason": string,
-    "timelineAnalysis": string
+    "timelineAnalysis": string,
+    "canBeResolvedBeforeMarketEnd": boolean,
+    "resolutionMethod": string (how to verify outcome)
   },
   "validationDetails": {
     "isObjective": boolean,
     "isSpecific": boolean,
     "isVerifiable": boolean,
-    "isFutureEvent": boolean
+    "isFutureEvent": boolean,
+    "hasPublicResolution": boolean,
+    "resolutionSource": string (where to check outcome)
   }
 }`;
 
-    const userPrompt = `Analyze this prediction market question: "${question}"
+    const userPrompt = `Analyze this prediction market question with EXTREME SCRUTINY: "${question}"
 
 TIMING CONTEXT:
 - Today's date: ${currentDate.toDateString()} (${currentDate.toISOString()})
@@ -138,14 +166,57 @@ TIMING CONTEXT:
 - Time until market ends: ${daysUntilEnd} days
 - Initial liquidity: YES ${initialYes} BNB, NO ${initialNo} BNB
 
-CRITICAL CHECKS REQUIRED:
-1. Has this event ALREADY HAPPENED? Is the outcome ALREADY KNOWN?
-2. If the question mentions dates, are they before the market end date?
-3. Is this about a FUTURE event that will be resolvable before market ends?
-4. Is it objectively verifiable with clear YES/NO outcome?
-5. Is it specific enough with clear resolution criteria?
+MANDATORY CHECKS (ALL must pass):
 
-Provide comprehensive analysis with particular focus on whether this event has already occurred.`;
+1. **Historical Event Check:**
+   - Has this event ALREADY HAPPENED?
+   - Is the outcome ALREADY KNOWN from news, records, or common knowledge?
+   - Search your knowledge for any information about this event
+   - If yes to either, REJECT immediately
+
+2. **Date Extraction and Validation:**
+   - Extract ALL dates mentioned in the question (explicit or implicit)
+   - For each date found:
+     * Is it BEFORE the market end date (${marketEndDate.toDateString()})?
+     * Is it realistic and achievable?
+     * Can the outcome be verified by that date?
+   - If ANY date is after market end, REJECT
+   - If date is same as market end, REJECT (need verification time)
+
+3. **Resolvability Analysis:**
+   - HOW will the outcome be determined?
+   - WHAT public sources will provide the answer? (be specific)
+   - WHEN will the outcome be known?
+   - Can it be verified at least 1 day before ${marketEndDate.toDateString()}?
+   - Is the resolution method objective and clear?
+   - If any answer is unclear, REJECT
+
+4. **Timeline Feasibility:**
+   - Is ${daysUntilEnd} days enough time for this event to occur AND be verified?
+   - Consider typical timelines for such events
+   - Consider announcement delays, verification time
+   - If timeline is too tight, REJECT
+
+5. **Objectivity Check:**
+   - Is this a YES/NO question with NO gray area?
+   - Can two people independently verify and get the same answer?
+   - Are the criteria for YES vs NO crystal clear?
+   - If any subjectivity exists, REJECT
+
+6. **Public Verifiability:**
+   - Will the outcome be publicly announced?
+   - What specific sources will report it? (news sites, official announcements, blockchain, etc.)
+   - Is insider knowledge required? If yes, REJECT
+   - Is it based on private information? If yes, REJECT
+
+PROVIDE DETAILED ANALYSIS:
+- List all dates found in the question
+- Explain the timeline for event occurrence
+- Specify exact resolution method and sources
+- Explain why it passes or fails each check
+- Be thorough and specific in your reasoning
+
+If you have ANY doubt about resolvability, date conflicts, or objectivity, REJECT the question.`;
 
     console.log('Calling OpenAI for validation...');
 
@@ -193,6 +264,42 @@ Provide comprehensive analysis with particular focus on whether this event has a
       return {
         valid: false,
         reason: result.eventAnalysis.dateConflictReason || 'Event date conflicts with market end date',
+        category: category,
+        eventAnalysis: result.eventAnalysis,
+        validationDetails: result.validationDetails,
+        apiError: false
+      };
+    }
+
+    // Check if event can be resolved before market end
+    if (result.eventAnalysis?.canBeResolvedBeforeMarketEnd === false) {
+      return {
+        valid: false,
+        reason: 'This event cannot be resolved before the market end date. The outcome must be verifiable before the market closes.',
+        category: category,
+        eventAnalysis: result.eventAnalysis,
+        validationDetails: result.validationDetails,
+        apiError: false
+      };
+    }
+
+    // Check for public verifiability
+    if (result.validationDetails?.hasPublicResolution === false) {
+      return {
+        valid: false,
+        reason: 'This event cannot be publicly verified. Prediction markets require outcomes that can be independently verified through public sources.',
+        category: category,
+        eventAnalysis: result.eventAnalysis,
+        validationDetails: result.validationDetails,
+        apiError: false
+      };
+    }
+
+    // Check if it's a future event
+    if (result.validationDetails?.isFutureEvent === false) {
+      return {
+        valid: false,
+        reason: 'This question is not about a future event. Prediction markets require events that have not yet occurred.',
         category: category,
         eventAnalysis: result.eventAnalysis,
         validationDetails: result.validationDetails,
