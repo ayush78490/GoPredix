@@ -128,8 +128,8 @@ export default function FaucetPage() {
     const tokenImage = "" // Optional: add your token logo URL here
 
     try {
-      // @ts-ignore if TypeScript complains about window.ethereum
-      const wasAdded = await window.ethereum.request({
+      // @ts-ignore - wallet_watchAsset has different type signature
+      const wasAdded = await (window as any).ethereum.request({
         method: "wallet_watchAsset",
         params: {
           type: "ERC20",
@@ -140,7 +140,7 @@ export default function FaucetPage() {
             image: tokenImage,
           },
         },
-      })
+      } as any)
       if (wasAdded) {
         alert("PDX token added to your wallet!")
       } else {
