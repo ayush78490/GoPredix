@@ -8,15 +8,7 @@ If users are seeing the Twitter OAuth error, follow these steps to fix it:
 
 Create or update your `.env.local` file with the following:
 
-```bash
-# NextAuth Configuration (REQUIRED)
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-secret-key-here-generate-with-openssl
 
-# Twitter OAuth 2.0 Credentials
-TWITTER_CLIENT_ID=your_twitter_client_id_here
-TWITTER_CLIENT_SECRET=your_twitter_client_secret_here
-```
 
 ### Generate NEXTAUTH_SECRET
 
@@ -177,12 +169,7 @@ When deploying to production (e.g., Vercel):
 
 Set these in your hosting platform:
 
-```bash
-NEXTAUTH_URL=https://yourdomain.com
-NEXTAUTH_SECRET=your-production-secret-here
-TWITTER_CLIENT_ID=your_twitter_client_id
-TWITTER_CLIENT_SECRET=your_twitter_client_secret
-```
+
 
 ### Twitter Developer Portal
 
