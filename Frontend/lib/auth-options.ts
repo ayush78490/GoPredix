@@ -7,12 +7,26 @@ export const authOptions: NextAuthOptions = {
             clientId: process.env.TWITTER_CLIENT_ID!,
             clientSecret: process.env.TWITTER_CLIENT_SECRET!,
             version: '2.0', // Use OAuth 2.0
+            authorization: {
+                url: 'https://twitter.com/i/oauth2/authorize',
+                params: {
+                    scope: 'tweet.read users.read offline.access',
+                }
+            },
+            // Explicitly set the token endpoint
+            token: 'https://api.twitter.com/2/oauth2/token',
+            // User info endpoint
+            userinfo: 'https://api.twitter.com/2/users/me?user.fields=profile_image_url',
         }),
     ],
     callbacks: {
         async signIn({ user, account, profile }) {
             // Store Twitter data in session
             if (account?.provider === 'twitter' && profile) {
+                console.log('✅ Twitter sign-in successful:', {
+                    userId: user.id,
+                    username: (profile as any).data?.username || (profile as any).username
+                })
                 return true
             }
             return true
@@ -34,14 +48,18 @@ export const authOptions: NextAuthOptions = {
                     name: twitterProfile.data?.name || twitterProfile.name || '',
                     profile_image_url: twitterProfile.data?.profile_image_url || twitterProfile.profile_image_url || '',
                 }
+                console.log('✅ Twitter data stored in JWT:', token.twitter)
             }
             return token
         },
     },
     pages: {
         signIn: '/profile', // Redirect to profile page after sign in
+        error: '/auth/error', // Custom error page
     },
     secret: process.env.NEXTAUTH_SECRET,
+    // Add debug mode for development
+    debug: process.env.NODE_ENV === 'development',
 }
 
 // Extend NextAuth types

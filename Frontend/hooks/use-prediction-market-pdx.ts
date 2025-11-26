@@ -685,6 +685,29 @@ export function usePredictionMarketPDX() {
 
       console.log(`✅ Market created successfully with ID: ${marketId}`)
 
+      // ✅ Store market creation date in Supabase to avoid block scanning later
+      try {
+        const createdAt = new Date().toISOString()
+        await fetch('/api/markets/store', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            marketId,
+            paymentToken: 'PDX',
+            createdAt,
+            blockNumber: receipt.blockNumber,
+            transactionHash: receipt.hash,
+            creatorAddress: account,
+            question: params.question,
+            category: validation.category || params.category || 'General',
+            endTime: params.endTime,
+          }),
+        })
+        console.log(`✅ Stored market creation date for PDX-${marketId}`)
+      } catch (storeError) {
+        console.warn('⚠️ Failed to store market creation date (non-critical):', storeError)
+      }
+
       // Verify the market was created
       try {
         const createdMarket = await getPDXMarket(marketId)
@@ -979,90 +1002,101 @@ export function usePredictionMarketPDX() {
     try {
       console.log(`Fetching PDX market history for ${marketId}...`)
 
-      // Helper to fetch events in chunks
-      const fetchEventsInChunks = async (filter: any, startBlock: number, endBlock: number) => {
-        const CHUNK_SIZE = 49000 // Slightly under 50k to be safe
-        let allEvents: any[] = []
-        for (let i = startBlock; i < endBlock; i += CHUNK_SIZE) {
-          const to = Math.min(i + CHUNK_SIZE, endBlock)
-          try {
-            const chunk = await marketContract.queryFilter(filter, i, to)
-            allEvents.push(...chunk)
-          } catch (e) {
-            console.warn(`Failed to fetch chunk ${i}-${to}`, e)
+      const points: PricePoint[] = []
+
+      // ✅ Try to get creation date from Supabase (avoids expensive block scanning)
+      try {
+        const response = await fetch(`/api/markets/get-creation-date?marketId=${marketId}&paymentToken=PDX`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.data?.created_at) {
+            const createdAt = new Date(result.data.created_at).getTime()
+            points.push({
+              timestamp: createdAt,
+              price: 50 // Markets start at 50%
+            })
+            console.log(`✅ Using stored creation date: ${result.data.created_at}`)
+          } else {
+            console.log('ℹ️ No stored creation date found, will start from first trade')
           }
         }
-        return allEvents
+      } catch (fetchError) {
+        console.warn('⚠️ Could not fetch creation date from Supabase:', fetchError)
       }
 
       const provider = marketContract.runner?.provider
       if (!provider) throw new Error("No provider")
 
       const currentBlock = await provider.getBlockNumber()
-      const startBlock = Math.max(0, currentBlock - 2000000) // Scan last ~2.5 months
-
-      // Get MarketCreated event
-      const createdFilter = marketContract.filters.MarketCreated(BigInt(marketId))
-      const createdEvents = await fetchEventsInChunks(createdFilter, startBlock, currentBlock)
-
-      const points: PricePoint[] = []
-
-      if (createdEvents.length > 0) {
-        const block = await createdEvents[0].getBlock()
-        points.push({
-          timestamp: block.timestamp * 1000,
-          price: 50 // Assume 50% start
-        })
-      }
+      // ✅ Reduced scan range to 500K blocks (from 2M) to minimize RPC calls
+      const startBlock = Math.max(0, currentBlock - 500000)
 
       // Get Buy events
       const buyFilter = marketContract.filters.BuyWithPDX(BigInt(marketId))
-      const buyEvents = await fetchEventsInChunks(buyFilter, startBlock, currentBlock)
-      console.log(`Found ${buyEvents.length} PDX buy events`)
+      let buyEvents: any[] = []
+      try {
+        buyEvents = await marketContract.queryFilter(buyFilter, startBlock, currentBlock)
+        console.log(`Found ${buyEvents.length} PDX buy events`)
+      } catch (e) {
+        console.warn('Failed to fetch buy events:', e)
+      }
 
       // Get Sell events
       const sellFilter = marketContract.filters.SellForPDX(BigInt(marketId))
-      const sellEvents = await fetchEventsInChunks(sellFilter, startBlock, currentBlock)
-      console.log(`Found ${sellEvents.length} PDX sell events`)
+      let sellEvents: any[] = []
+      try {
+        sellEvents = await marketContract.queryFilter(sellFilter, startBlock, currentBlock)
+        console.log(`Found ${sellEvents.length} PDX sell events`)
+      } catch (e) {
+        console.warn('Failed to fetch sell events:', e)
+      }
 
       // Process Buy events
       for (const event of buyEvents) {
-        const block = await event.getBlock()
-        const { buyYes, pdxIn, tokenOut } = (event as any).args
+        try {
+          const block = await event.getBlock()
+          const { buyYes, pdxIn, tokenOut } = (event as any).args
 
-        const pricePerToken = Number(ethers.formatEther(pdxIn)) / Number(ethers.formatEther(tokenOut))
+          const pricePerToken = Number(ethers.formatEther(pdxIn)) / Number(ethers.formatEther(tokenOut))
 
-        let yesPrice = 0
-        if (buyYes) {
-          yesPrice = pricePerToken * 100
-        } else {
-          yesPrice = 100 - (pricePerToken * 100)
+          let yesPrice = 0
+          if (buyYes) {
+            yesPrice = pricePerToken * 100
+          } else {
+            yesPrice = 100 - (pricePerToken * 100)
+          }
+
+          points.push({
+            timestamp: block.timestamp * 1000,
+            price: Math.max(0, Math.min(100, yesPrice))
+          })
+        } catch (e) {
+          console.warn('Failed to process buy event:', e)
         }
-
-        points.push({
-          timestamp: block.timestamp * 1000,
-          price: Math.max(0, Math.min(100, yesPrice))
-        })
       }
 
       // Process Sell events
       for (const event of sellEvents) {
-        const block = await event.getBlock()
-        const { sellYes, tokenIn, pdxOut } = (event as any).args
+        try {
+          const block = await event.getBlock()
+          const { sellYes, tokenIn, pdxOut } = (event as any).args
 
-        const pricePerToken = Number(ethers.formatEther(pdxOut)) / Number(ethers.formatEther(tokenIn))
+          const pricePerToken = Number(ethers.formatEther(pdxOut)) / Number(ethers.formatEther(tokenIn))
 
-        let yesPrice = 0
-        if (sellYes) {
-          yesPrice = pricePerToken * 100
-        } else {
-          yesPrice = 100 - (pricePerToken * 100)
+          let yesPrice = 0
+          if (sellYes) {
+            yesPrice = pricePerToken * 100
+          } else {
+            yesPrice = 100 - (pricePerToken * 100)
+          }
+
+          points.push({
+            timestamp: block.timestamp * 1000,
+            price: Math.max(0, Math.min(100, yesPrice))
+          })
+        } catch (e) {
+          console.warn('Failed to process sell event:', e)
         }
-
-        points.push({
-          timestamp: block.timestamp * 1000,
-          price: Math.max(0, Math.min(100, yesPrice))
-        })
       }
 
       points.sort((a, b) => a.timestamp - b.timestamp)

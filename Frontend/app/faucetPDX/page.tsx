@@ -12,33 +12,24 @@ import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { ethers } from "ethers"
 import Image from "next/image"
+import { useAccount, useWalletClient, useSwitchChain, usePublicClient } from 'wagmi'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
 
 // Import the ABI
 import FAUCET_ABI from "@/contracts/faucetabi.json"
 
 const FAUCET_CONTRACT_ADDRESS = "0xD3561841A6dd046943739B704bcc737aAeE4cd77"
 // Your PDX token address
-const PDX_TOKEN_ADDRESS = "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8" 
-
-type EthereumProvider = {
-  request: (args: { method: string; params?: any[] }) => Promise<any>
-  on: (event: string, callback: (...args: any[]) => void) => void
-  removeListener: (event: string, callback: (...args: any[]) => void) => void
-  isMetaMask?: boolean
-}
-
-const getEthereumProvider = (): EthereumProvider | undefined => {
-  if (typeof window !== "undefined" && (window as any).ethereum) {
-    return (window as any).ethereum
-  }
-  return undefined
-}
+const PDX_TOKEN_ADDRESS = "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8"
 
 export default function FaucetPage() {
-  const [address, setAddress] = useState("")
+  const { address, isConnected, chain } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
+  const { switchChain } = useSwitchChain()
+
   const [copied, setCopied] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [isConnecting, setIsConnecting] = useState(false)
   const [transactionHash, setTransactionHash] = useState("")
   const [error, setError] = useState("")
   const [userClaimInfo, setUserClaimInfo] = useState({
@@ -53,46 +44,31 @@ export default function FaucetPage() {
     { label: "Available Balance", value: "Loading..." },
     { label: "Total Distributed", value: "Loading..." }
   ])
-  const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [tokenAdded, setTokenAdded] = useState(false)
   const [hasSufficientBNB, setHasSufficientBNB] = useState(true)
 
-  // Check if wallet is connected on component mount
-  useEffect(() => {
-    checkWalletConnection()
-  }, [])
+  const isCorrectNetwork = chain?.id === 97
 
-  const checkWalletConnection = async () => {
-    const ethereum = getEthereumProvider()
-    if (ethereum) {
-      try {
-        const accounts = await ethereum.request({ method: "eth_accounts" }) as string[]
-        if (accounts && accounts.length > 0) {
-          const userAddr = accounts[0]
-          setAddress(userAddr)
-          setIsWalletConnected(true)
-          // Check user's BNB balance
-          await checkUserBNBBalance(userAddr)
-          await loadUserClaimInfo(userAddr)
-          await loadFaucetStats()
-        }
-      } catch (err) {
-        console.error("Error checking wallet connection:", err)
-      }
+  // Load data when wallet connects
+  useEffect(() => {
+    if (address && isConnected && isCorrectNetwork) {
+      checkUserBNBBalance(address)
+      loadUserClaimInfo(address)
+      loadFaucetStats()
     }
-  }
+  }, [address, isConnected, isCorrectNetwork])
 
   const getProvider = () => {
-    const ethereum = getEthereumProvider()
-    if (ethereum) {
-      return new ethers.BrowserProvider(ethereum)
+    if (publicClient) {
+      return new ethers.JsonRpcProvider('https://data-seed-prebsc-1-s1.bnbchain.org:8545')
     }
-    throw new Error("No Ethereum provider found. Please install MetaMask.")
+    throw new Error("No provider available")
   }
 
   const getSigner = async () => {
-    const provider = getProvider()
-    return await provider.getSigner()
+    if (!walletClient) throw new Error("Wallet not connected")
+    const provider = new ethers.BrowserProvider(walletClient as any)
+    return await provider.getSigner(address!)
   }
 
   const getFaucetContract = async () => {
@@ -111,73 +87,14 @@ export default function FaucetPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const connectWallet = async () => {
-    setIsConnecting(true)
-    setError("")
-    try {
-      const ethereum = getEthereumProvider()
-      if (ethereum) {
-        const accounts = await ethereum.request({ method: "eth_requestAccounts" }) as string[]
-        const userAddress = accounts[0]
-        setAddress(userAddress)
-
-        const chainId = await ethereum.request({ method: 'eth_chainId' })
-        if (chainId !== '0x61') {
-          try {
-            await ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: '0x61' }],
-            })
-          } catch (switchError: any) {
-            if (switchError.code === 4902) {
-              try {
-                await ethereum.request({
-                  method: 'wallet_addEthereumChain',
-                  params: [
-                    {
-                      chainId: '0x61',
-                      chainName: 'BNB Smart Chain Testnet',
-                      nativeCurrency: {
-                        name: 'BNB',
-                        symbol: 'BNB',
-                        decimals: 18,
-                      },
-                      rpcUrls: ['https://data-seed-prebsc-1-s1.bnbchain.org:8545/'],
-                      blockExplorerUrls: ['https://testnet.bscscan.com'],
-                    },
-                  ],
-                })
-              } catch (addError) {
-                throw new Error("Failed to add BNB Testnet. Please add it manually in your wallet.")
-              }
-            } else {
-              throw new Error("Please switch to BNB Testnet in your wallet settings")
-            }
-          }
-          const newChainId = await ethereum.request({ method: 'eth_chainId' })
-          if (newChainId !== '0x61') {
-            throw new Error("Please switch to BNB Testnet (not BNB Mainnet)")
-          }
-        }
-        setIsWalletConnected(true)
-
-        // Check user has enough tBNB
-        await checkUserBNBBalance(userAddress)
-
-        await loadUserClaimInfo(userAddress)
-        await loadFaucetStats()
-        await addTokenToWallet()
-
-        return userAddress
-      } else {
-        throw new Error("Please install MetaMask or another Ethereum wallet")
+  const handleSwitchNetwork = async () => {
+    if (!isCorrectNetwork && switchChain) {
+      try {
+        await switchChain({ chainId: 97 })
+      } catch (error) {
+        console.error("Failed to switch network:", error)
+        setError("Please switch to BNB Testnet in your wallet")
       }
-    } catch (err: any) {
-      console.error("Wallet connection error:", err)
-      setError(err.message || "Failed to connect wallet")
-      return null
-    } finally {
-      setIsConnecting(false)
     }
   }
 
@@ -366,7 +283,7 @@ export default function FaucetPage() {
     }
   ]
 
-  const canClaim = address && userClaimInfo.canClaimNow && !isLoading && hasSufficientBNB
+  const canClaim = address && isConnected && isCorrectNetwork && userClaimInfo.canClaimNow && !isLoading && hasSufficientBNB
 
   return (
     <main className="min-h-screen bg-background relative overflow-hidden">
@@ -394,12 +311,12 @@ export default function FaucetPage() {
             <div className="flex justify-center items-center mb-4">
               <div className="p-3 rounded-full">
                 <Image
-                src="/logo.png"
-                alt="Droplets"
-                width={12}
-                height={12}
-                className="w-16 h-16 drop-shadow-[0_0_10px_rgba(0,150,255,0.7)]"
-              />
+                  src="/logo.png"
+                  alt="Droplets"
+                  width={12}
+                  height={12}
+                  className="w-16 h-16 drop-shadow-[0_0_10px_rgba(0,150,255,0.7)]"
+                />
 
               </div>
             </div>
@@ -424,13 +341,13 @@ export default function FaucetPage() {
                 </Button> */}
 
                 <a
-                      href="https://hackathon-faucet.vercel.app/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-yellow-300 hover:underline flex items-center gap-1"
-                    >
-                      Get Testnet BNB <ExternalLink className="w-3 h-3" />
-                    </a>
+                  href="https://hackathon-faucet.vercel.app/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-yellow-300 hover:underline flex items-center gap-1"
+                >
+                  Get Testnet BNB <ExternalLink className="w-3 h-3" />
+                </a>
               </AlertDescription>
             </Alert>
           </div>
@@ -458,32 +375,32 @@ export default function FaucetPage() {
                       <Input
                         id="address"
                         placeholder="0x..."
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
+                        value={address || ""}
                         className="bg-black/20 border-border flex-1"
-                        disabled={isLoading || isConnecting}
+                        disabled
                         readOnly
                       />
-                      <Button
-                        onClick={connectWallet}
-                        disabled={isLoading || isConnecting}
-                        variant="outline"
-                        className="whitespace-nowrap"
-                      >
-                        {isConnecting ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
-                            Connecting...
-                          </>
-                        ) : isWalletConnected ? (
-                          "Connected"
-                        ) : (
-                          "Connect Wallet"
+                      <ConnectButton.Custom>
+                        {({ openConnectModal }) => (
+                          <Button
+                            onClick={!isConnected ? openConnectModal : handleSwitchNetwork}
+                            disabled={isLoading}
+                            variant="outline"
+                            className="whitespace-nowrap"
+                          >
+                            {!isConnected ? (
+                              "Connect Wallet"
+                            ) : !isCorrectNetwork ? (
+                              "Switch to BNB Testnet"
+                            ) : (
+                              "Connected"
+                            )}
+                          </Button>
                         )}
-                      </Button>
+                      </ConnectButton.Custom>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Make sure you're connected to BNB Testnet
+                      {!isConnected ? "Connect your wallet to get started" : !isCorrectNetwork ? "Please switch to BNB Testnet" : "Connected to BNB Testnet"}
                     </p>
                   </div>
 
@@ -506,9 +423,8 @@ export default function FaucetPage() {
                         </div>
                         <div className="col-span-2">
                           <div className="text-muted-foreground">Status</div>
-                          <div className={`font-medium ${
-                            userClaimInfo.canClaimNow ? "text-green-400" : "text-yellow-400"
-                          }`}>
+                          <div className={`font-medium ${userClaimInfo.canClaimNow ? "text-green-400" : "text-yellow-400"
+                            }`}>
                             {formatTimeRemaining(userClaimInfo.timeUntilNext)}
                           </div>
                         </div>
