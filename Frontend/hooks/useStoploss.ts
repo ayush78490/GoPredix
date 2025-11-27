@@ -36,19 +36,19 @@ interface UseStopLossTakeProfitReturn {
   error: string | null
   userOrders: OrderInfo[]
   activeOrders: OrderInfo[]
-  
+
   // Actions
   createStopLossOrder: (params: CreateOrderParams) => Promise<{ success: boolean; orderId?: string; txHash?: string; error?: string }>
   createTakeProfitOrder: (params: CreateOrderParams) => Promise<{ success: boolean; orderId?: string; txHash?: string; error?: string }>
   executeOrder: (orderId: string) => Promise<{ success: boolean; txHash?: string; error?: string }>
   cancelOrder: (orderId: string) => Promise<{ success: boolean; txHash?: string; error?: string }>
-  
+
   // Queries
   getOrderInfo: (orderId: string) => Promise<OrderInfo | null>
   checkOrderTrigger: (orderId: string) => Promise<OrderTriggerStatus | null>
   getUserOrders: (userAddress: string) => Promise<OrderInfo[]>
   getActiveOrders: (userAddress: string) => Promise<OrderInfo[]>
-  
+
   // Utilities
   refreshOrders: () => Promise<void>
   clearError: () => void
@@ -199,7 +199,7 @@ export const useStopLossTakeProfitBNB = (userAddress?: string): UseStopLossTakeP
   const getUserOrders = useCallback(async (userAddress: string): Promise<OrderInfo[]> => {
     try {
       const orderIds = await bnbHook.getUserOrders(userAddress)
-      
+
       const orders: OrderInfo[] = []
       for (const orderId of orderIds) {
         const orderInfo = await getOrderInfo(orderId.toString())
@@ -259,19 +259,19 @@ export const useStopLossTakeProfitBNB = (userAddress?: string): UseStopLossTakeP
     error,
     userOrders,
     activeOrders,
-    
+
     // Actions
     createStopLossOrder,
     createTakeProfitOrder,
     executeOrder,
     cancelOrder,
-    
+
     // Queries
     getOrderInfo,
     checkOrderTrigger,
     getUserOrders,
     getActiveOrders,
-    
+
     // Utilities
     refreshOrders,
     clearError
@@ -305,8 +305,9 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
     try {
       const receipt = await pdxHook.createStopLossOrder(
         params.marketId,
-        params.triggerPrice,
-        params.tokenAmount
+        params.isYes,
+        params.tokenAmount,
+        params.triggerPrice
       )
       setLoading(false)
       return { success: true, txHash: receipt?.transactionHash || 'success' }
@@ -330,8 +331,9 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
     try {
       const receipt = await pdxHook.createTakeProfitOrder(
         params.marketId,
-        params.triggerPrice,
-        params.tokenAmount
+        params.isYes,
+        params.tokenAmount,
+        params.triggerPrice
       )
       setLoading(false)
       return { success: true, txHash: receipt?.transactionHash || 'success' }
@@ -393,8 +395,22 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
       return null;
     }
     try {
-      // PDX hook might not have getOrderInfo, so we'll return a placeholder
-      return null
+      const orderId_num = parseInt(orderId)
+      const info = await pdxHook.getOrderInfo(orderId_num)
+
+      const orderType = info.stopLossPrice && parseFloat(info.stopLossPrice.toString()) > 0 ? 'StopLoss' : 'TakeProfit'
+
+      return {
+        orderId,
+        user: info.user,
+        marketId: info.marketId.toString(),
+        isYes: info.isYes,
+        tokenAmount: info.tokenAmount,
+        stopLossPrice: info.stopLossPrice.toString(),
+        takeProfitPrice: info.takeProfitPrice.toString(),
+        isActive: info.isActive,
+        orderType
+      }
     } catch (err: any) {
       console.error('Error getting PDX order info:', err)
       return null
@@ -408,11 +424,11 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
     }
     try {
       const orderId_num = parseInt(orderId)
-      const triggered = await pdxHook.checkOrderTrigger(orderId_num)
+      const result = await pdxHook.checkOrderTrigger(orderId_num)
       return {
-        shouldExecute: triggered,
-        currentPrice: '0',
-        triggerPrice: '0'
+        shouldExecute: result.triggered,
+        currentPrice: result.currentPrice.toString(),
+        triggerPrice: result.triggerPrice.toString()
       }
     } catch (err: any) {
       console.error('Error checking PDX order trigger:', err)
@@ -484,19 +500,19 @@ export const useStopLossTakeProfitPDX = (userAddress?: string): UseStopLossTakeP
     error,
     userOrders,
     activeOrders,
-    
+
     // Actions
     createStopLossOrder,
     createTakeProfitOrder,
     executeOrder,
     cancelOrder,
-    
+
     // Queries
     getOrderInfo,
     checkOrderTrigger,
     getUserOrders,
     getActiveOrders,
-    
+
     // Utilities
     refreshOrders,
     clearError
@@ -523,10 +539,10 @@ export const formatPrice = (price: string): string => {
 export const formatMultiplier = (multiplier: string): string => {
   const multNum = Number(multiplier)
   if (multNum >= 1000000) return '100x+'
-  
+
   const integerPart = Math.floor(multNum / 10000)
   const fractionalPart = Math.floor((multNum % 10000) / 1000)
-  
+
   if (fractionalPart === 0) {
     return `${integerPart}x`
   } else {

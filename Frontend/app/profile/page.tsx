@@ -11,7 +11,9 @@ import { Trophy, Medal, ArrowLeft, Wallet, Loader2, TrendingUp, Users, BarChart3
 import { useRouter } from "next/navigation"
 import { ethers } from "ethers"
 import LightRays from "@/components/LightRays"
-import { useAccount, useChainId } from "wagmi"
+import { useAccount, useWalletClient, useChainId } from "wagmi"
+import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
+import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 import TwitterShareModal from "@/components/twitter-share-modal"
 import ConnectTwitterButton from "@/components/connect-twitter-button"
 
@@ -111,11 +113,21 @@ export default function ProfilePage() {
   const [sellTokenType, setSellTokenType] = useState<"YES" | "NO">("YES")
   const [sellAmount, setSellAmount] = useState("")
   const [minReceive, setMinReceive] = useState("")
+  const [estimatedReceive, setEstimatedReceive] = useState<string | null>(null)
+  const [isEstimating, setIsEstimating] = useState(false)
   const [stopLossPrice, setStopLossPrice] = useState("")
   const [takeProfitPrice, setTakeProfitPrice] = useState("")
   const [createdMarkets, setCreatedMarkets] = useState<Market[]>([])
   const [showTwitterModal, setShowTwitterModal] = useState(false)
   const [selectedMarketForTweet, setSelectedMarketForTweet] = useState<Market | null>(null)
+
+  // Transaction State
+  const [txStep, setTxStep] = useState<'idle' | 'approving' | 'selling' | 'success' | 'error'>('idle')
+  const [txMessage, setTxMessage] = useState('')
+
+  // Hooks
+  const bnbHook = usePredictionMarketBNB()
+  const pdxHook = usePredictionMarketPDX()
 
   const isCorrectNetwork = chainId === 97
   const canFetchData = isConnected && isCorrectNetwork && account
@@ -560,12 +572,57 @@ export default function ProfilePage() {
 
   // ==================== SELL TOKEN HANDLERS ====================
 
+  // Auto-calculate minReceive when sellAmount changes
+  useEffect(() => {
+    const calculateEstimate = async () => {
+      if (!selectedPosition || !sellAmount || parseFloat(sellAmount) <= 0) {
+        setEstimatedReceive(null)
+        setMinReceive("")
+        return
+      }
+
+      setIsEstimating(true)
+      try {
+        const isYes = sellTokenType === "YES"
+        let estimate = "0"
+
+        if (selectedPosition.paymentToken === "BNB") {
+          // Use BNB hook estimation
+          const result = await bnbHook.getSwapMultiplier(selectedPosition.marketId, sellAmount, isYes)
+          estimate = result.amountOut
+        } else {
+          // Use PDX hook estimation
+          const result = await pdxHook.getSellEstimatePDX(selectedPosition.marketId, sellAmount, isYes)
+          estimate = result.pdxOut
+        }
+
+        setEstimatedReceive(estimate)
+
+        // Auto-set minReceive with 5% slippage
+        const minOut = (parseFloat(estimate) * 0.95).toFixed(6)
+        setMinReceive(minOut)
+
+      } catch (error) {
+        console.error("Error estimating sell output:", error)
+        setEstimatedReceive(null)
+      } finally {
+        setIsEstimating(false)
+      }
+    }
+
+    const timeoutId = setTimeout(() => {
+      calculateEstimate()
+    }, 500) // Debounce
+
+    return () => clearTimeout(timeoutId)
+  }, [sellAmount, selectedPosition, sellTokenType, bnbHook, pdxHook])
+
   const handleSellTokens = (position: MarketPosition, tokenType: "YES" | "NO") => {
     setSelectedPosition(position)
     setSellTokenType(tokenType)
     const maxAmount = tokenType === "YES" ? position.yesTokens : position.noTokens
     setSellAmount(maxAmount.toString())
-    setMinReceive("")
+    // minReceive will be calculated by useEffect
     setShowSellModal(true)
   }
 
@@ -582,30 +639,57 @@ export default function ProfilePage() {
       // You'll need to import your BNB/PDX hooks here
       // For now, showing the structure
 
-      // TODO: Call actual contract function based on paymentToken
-      // if (selectedPosition.paymentToken === "BNB") {
-      //   if (sellTokenType === "YES") {
-      //     await bnbHook.sellYesForBNB(selectedPosition.marketId, sellAmount, minReceive)
-      //   } else {
-      //     await bnbHook.sellNoForBNB(selectedPosition.marketId, sellAmount, minReceive)
-      //   }
-      // } else {
-      //   if (sellTokenType === "YES") {
-      //     await pdxHook.sellYesForPDX(selectedPosition.marketId, sellAmount, minReceive)
-      //   } else {
-      //     await pdxHook.sellNoForPDX(selectedPosition.marketId, sellAmount, minReceive)
-      //   }
-      // }
+      if (selectedPosition.paymentToken === "BNB") {
+        setTxStep('selling')
+        setTxMessage('Confirming sell transaction...')
+        if (sellTokenType === "YES") {
+          await bnbHook.sellYesForBNB(selectedPosition.marketId, sellAmount, minReceive)
+        } else {
+          await bnbHook.sellNoForBNB(selectedPosition.marketId, sellAmount, minReceive)
+        }
+      } else {
+        // PDX involves approval + sell
+        setTxStep('approving')
+        setTxMessage('Please approve the token spend transaction (1/2)...')
+
+        if (sellTokenType === "YES") {
+          await pdxHook.sellYesForPDX(selectedPosition.marketId, sellAmount, minReceive)
+        } else {
+          await pdxHook.sellNoForPDX(selectedPosition.marketId, sellAmount, minReceive)
+        }
+      }
+
+      setTxStep('success')
+      setTxMessage('Tokens sold successfully!')
+
+      // Wait a bit before closing
+      await new Promise(resolve => setTimeout(resolve, 2000))
 
       setShowSellModal(false)
       await refreshData()
 
     } catch (err: any) {
-      console.error("Error selling tokens:", err)
-      setError(err.message || "Failed to sell tokens")
+      handleSellError(err)
     } finally {
       setActionLoading(null)
+      if (txStep !== 'success') {
+        setTxStep('idle')
+      }
     }
+  }
+
+  const handleSellError = (err: any) => {
+    console.error("Sell error:", err)
+    let msg = err.message || "Failed to sell tokens"
+
+    if (msg.includes("CALL_EXCEPTION") || msg.includes("missing revert data")) {
+      msg = "Transaction failed. Try increasing slippage (reduce Minimum Receive amount) or selling a smaller amount."
+    } else if (msg.includes("insufficient funds")) {
+      msg = "Insufficient funds for gas fees."
+    }
+
+    setError(msg)
+    setTxStep('error')
   }
 
   // ==================== STOP LOSS HANDLERS ====================
@@ -1065,6 +1149,7 @@ export default function ProfilePage() {
 
                                 {position.yesTokens > 0 && (
                                   <Button
+                                    type="button"
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleSellTokens(position, "YES")}
@@ -1076,6 +1161,7 @@ export default function ProfilePage() {
 
                                 {position.noTokens > 0 && (
                                   <Button
+                                    type="button"
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleSellTokens(position, "NO")}
@@ -1201,31 +1287,80 @@ export default function ProfilePage() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Set slippage tolerance to protect against price changes
                   </p>
+                  {isEstimating ? (
+                    <p className="text-xs text-blue-400 mt-1 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Calculating estimate...
+                    </p>
+                  ) : estimatedReceive && (
+                    <p className="text-xs text-green-400 mt-1">
+                      Estimated: {parseFloat(estimatedReceive).toFixed(4)} {selectedPosition.paymentToken} (5% slippage applied)
+                    </p>
+                  )}
                 </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    onClick={executeSellTokens}
-                    disabled={!sellAmount || !minReceive || !!actionLoading}
-                    className="flex-1"
-                  >
-                    {actionLoading === `sell-${selectedPosition.marketId}-${sellTokenType}` ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Selling...
-                      </>
-                    ) : (
-                      `Sell ${sellTokenType} Tokens`
+                {txStep === 'idle' ? (
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={executeSellTokens}
+                      disabled={!sellAmount || !minReceive || !!actionLoading}
+                      className="flex-1"
+                    >
+                      Sell {sellTokenType} Tokens
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowSellModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Transaction Progress UI */}
+                    <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+                      {/* Step 1: Approval */}
+                      <div className="flex items-center gap-3">
+                        {txStep === 'approving' && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                        {(txStep === 'selling' || txStep === 'success') && <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center text-[10px] text-white">✓</div>}
+                        {txStep === 'error' && <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-[10px] text-white">✕</div>}
+                        <span className={txStep === 'approving' ? 'font-medium text-blue-500' : 'text-muted-foreground'}>
+                          1. Approve Tokens
+                        </span>
+                      </div>
+
+                      {/* Step 2: Sell */}
+                      <div className="flex items-center gap-3">
+                        {txStep === 'selling' && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                        {txStep === 'success' && <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center text-[10px] text-white">✓</div>}
+                        <span className={txStep === 'selling' ? 'font-medium text-blue-500' : 'text-muted-foreground'}>
+                          2. Confirm Sell Transaction
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Status Message */}
+                    <div className={`text-sm text-center p-2 rounded ${txStep === 'error' ? 'bg-red-500/10 text-red-500' :
+                      txStep === 'success' ? 'bg-green-500/10 text-green-500' :
+                        'bg-blue-500/10 text-blue-500'
+                      }`}>
+                      {txMessage}
+                    </div>
+
+                    {/* Close Button (only on success/error) */}
+                    {(txStep === 'success' || txStep === 'error') && (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          setShowSellModal(false)
+                          setTxStep('idle')
+                        }}
+                      >
+                        Close
+                      </Button>
                     )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowSellModal(false)}
-                    disabled={!!actionLoading}
-                  >
-                    Cancel
-                  </Button>
-                </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

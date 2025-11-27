@@ -78,6 +78,16 @@ export interface TradingInfo {
   totalLiquidity: string
 }
 
+export interface OrderInfo {
+  user: string
+  marketId: number
+  isYes: boolean
+  tokenAmount: string
+  stopLossPrice: number
+  takeProfitPrice: number
+  isActive: boolean
+}
+
 // PDX Market Creation Validation
 async function validatePDXMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
@@ -838,6 +848,40 @@ export function usePredictionMarketPDX() {
     const tokenAmountWei = ethers.parseEther(tokenAmount)
     const minPDXOutWei = ethers.parseEther(minPDXOut)
 
+    // Get market to retrieve YES token address and validate state
+    const market = await getPDXMarket(marketId)
+
+    // Check market status
+    if (market.status !== 0) { // 0 = Open
+      throw new Error('Market is not open for trading. Cannot sell tokens.')
+    }
+
+    // Create YES token contract and check balance
+    const provider = getProvider()
+    if (!provider) throw new Error('Provider not available')
+
+    const yesTokenContract = new ethers.Contract(market.yesToken, ERC20_ABI, signer)
+
+    // Check if user has enough tokens
+    const balance = await (yesTokenContract as any).balanceOf(account)
+    if (balance < tokenAmountWei) {
+      throw new Error(`Insufficient YES token balance. You have ${ethers.formatEther(balance)} but trying to sell ${tokenAmount}`)
+    }
+
+    // Approve market to spend tokens
+    console.log('Approving YES tokens...')
+    const approveTx = await (yesTokenContract as any).approve(PDX_PREDICTION_MARKET_ADDRESS, tokenAmountWei)
+    await approveTx.wait()
+    console.log('Approval confirmed')
+
+    // Verify approval
+    const allowance = await (yesTokenContract as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
+    if (allowance < tokenAmountWei) {
+      throw new Error('Token approval failed. Please try again.')
+    }
+
+    // Now sell the tokens
+    console.log('Selling YES tokens...')
     const tx = await (marketWithSigner as any).sellYesForPDX(
       BigInt(marketId),
       tokenAmountWei,
@@ -845,7 +889,7 @@ export function usePredictionMarketPDX() {
     )
 
     return await tx.wait()
-  }, [walletClient, isConnected, marketContract, account, getSigner])
+  }, [walletClient, isConnected, marketContract, account, getSigner, getPDXMarket, getProvider])
 
   const sellNoForPDX = useCallback(async (
     marketId: number,
@@ -862,6 +906,40 @@ export function usePredictionMarketPDX() {
     const tokenAmountWei = ethers.parseEther(tokenAmount)
     const minPDXOutWei = ethers.parseEther(minPDXOut)
 
+    // Get market to retrieve NO token address and validate state
+    const market = await getPDXMarket(marketId)
+
+    // Check market status
+    if (market.status !== 0) { // 0 = Open
+      throw new Error('Market is not open for trading. Cannot sell tokens.')
+    }
+
+    // Create NO token contract and check balance
+    const provider = getProvider()
+    if (!provider) throw new Error('Provider not available')
+
+    const noTokenContract = new ethers.Contract(market.noToken, ERC20_ABI, signer)
+
+    // Check if user has enough tokens
+    const balance = await (noTokenContract as any).balanceOf(account)
+    if (balance < tokenAmountWei) {
+      throw new Error(`Insufficient NO token balance. You have ${ethers.formatEther(balance)} but trying to sell ${tokenAmount}`)
+    }
+
+    // Approve market to spend tokens
+    console.log('Approving NO tokens...')
+    const approveTx = await (noTokenContract as any).approve(PDX_PREDICTION_MARKET_ADDRESS, tokenAmountWei)
+    await approveTx.wait()
+    console.log('Approval confirmed')
+
+    // Verify approval
+    const allowance = await (noTokenContract as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
+    if (allowance < tokenAmountWei) {
+      throw new Error('Token approval failed. Please try again.')
+    }
+
+    // Now sell the tokens
+    console.log('Selling NO tokens...')
     const tx = await (marketWithSigner as any).sellNoForPDX(
       BigInt(marketId),
       tokenAmountWei,
@@ -869,7 +947,7 @@ export function usePredictionMarketPDX() {
     )
 
     return await tx.wait()
-  }, [walletClient, isConnected, marketContract, account, getSigner])
+  }, [walletClient, isConnected, marketContract, account, getSigner, getPDXMarket, getProvider])
 
   // ==================== RESOLUTION ====================
 
@@ -1048,6 +1126,131 @@ export function usePredictionMarketPDX() {
     }
   }, [marketContract])
 
+  // ==================== STOP-LOSS & TAKE-PROFIT ORDERS ====================
+
+  const createStopLossOrder = useCallback(async (
+    marketId: number,
+    isYes: boolean,
+    tokenAmount: string,
+    stopLossPrice: number
+  ) => {
+    if (!walletClient || !isConnected || !marketContract || !account) throw new Error('Wallet not connected')
+
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+    const tokenAmountWei = ethers.parseEther(tokenAmount)
+
+    const tx = await (marketWithSigner as any).createStopLossOrder(
+      BigInt(marketId),
+      isYes,
+      tokenAmountWei,
+      BigInt(stopLossPrice)
+    )
+
+    return await tx.wait()
+  }, [walletClient, isConnected, marketContract, account, getSigner])
+
+  const createTakeProfitOrder = useCallback(async (
+    marketId: number,
+    isYes: boolean,
+    tokenAmount: string,
+    takeProfitPrice: number
+  ) => {
+    if (!walletClient || !isConnected || !marketContract || !account) throw new Error('Wallet not connected')
+
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+    const tokenAmountWei = ethers.parseEther(tokenAmount)
+
+    const tx = await (marketWithSigner as any).createTakeProfitOrder(
+      BigInt(marketId),
+      isYes,
+      tokenAmountWei,
+      BigInt(takeProfitPrice)
+    )
+
+    return await tx.wait()
+  }, [walletClient, isConnected, marketContract, account, getSigner])
+
+  const executeOrder = useCallback(async (orderId: number) => {
+    if (!walletClient || !isConnected || !marketContract || !account) throw new Error('Wallet not connected')
+
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+
+    const tx = await (marketWithSigner as any).executeOrder(BigInt(orderId))
+    return await tx.wait()
+  }, [walletClient, isConnected, marketContract, account, getSigner])
+
+  const cancelOrder = useCallback(async (orderId: number) => {
+    if (!walletClient || !isConnected || !marketContract || !account) throw new Error('Wallet not connected')
+
+    const signer = await getSigner()
+    if (!signer) throw new Error('Failed to get signer')
+
+    const marketWithSigner = (marketContract as ethers.Contract).connect(signer) as ethers.Contract
+
+    const tx = await (marketWithSigner as any).cancelOrder(BigInt(orderId))
+    return await tx.wait()
+  }, [walletClient, isConnected, marketContract, account, getSigner])
+
+  const getUserOrders = useCallback(async (userAddress: string): Promise<number[]> => {
+    if (!marketContract) throw new Error('Market contract not available')
+
+    try {
+      const orderIds = await (marketContract as any).getUserOrders(userAddress)
+      return orderIds.map((id: bigint) => Number(id))
+    } catch (error) {
+      console.error('❌ Error fetching user orders:', error)
+      return []
+    }
+  }, [marketContract])
+
+  const getOrderInfo = useCallback(async (orderId: number): Promise<OrderInfo> => {
+    if (!marketContract) throw new Error('Market contract not available')
+
+    try {
+      const orderInfo = await (marketContract as any).getOrderInfo(BigInt(orderId))
+      return {
+        user: orderInfo.user,
+        marketId: Number(orderInfo.marketId),
+        isYes: orderInfo.isYes,
+        tokenAmount: ethers.formatEther(orderInfo.tokenAmount),
+        stopLossPrice: Number(orderInfo.stopLossPrice),
+        takeProfitPrice: Number(orderInfo.takeProfitPrice),
+        isActive: orderInfo.isActive
+      }
+    } catch (error) {
+      console.error('❌ Error fetching order info:', error)
+      throw error
+    }
+  }, [marketContract])
+
+  const checkOrderTrigger = useCallback(async (orderId: number): Promise<{ triggered: boolean; currentPrice: number; triggerPrice: number }> => {
+    if (!marketContract) throw new Error('Market contract not available')
+
+    try {
+      const result = await (marketContract as any).checkOrderTrigger(BigInt(orderId))
+      return {
+        triggered: result[0],
+        currentPrice: Number(result[1]),
+        triggerPrice: Number(result[2])
+      }
+    } catch (error) {
+      console.error('❌ Error checking order trigger:', error)
+      throw error
+    }
+  }, [marketContract])
+
+  // Re-implementing correctly below
+
+
   return {
     // Market management
     createMarketWithPDX,
@@ -1078,6 +1281,15 @@ export function usePredictionMarketPDX() {
     getUserInvestment,
     checkPDXBalance,
     getMarketPriceHistory,
+
+    // Stop-loss & Take-profit orders
+    createStopLossOrder,
+    createTakeProfitOrder,
+    executeOrder,
+    cancelOrder,
+    getUserOrders,
+    getOrderInfo,
+    checkOrderTrigger,
 
     // State
     isLoading,

@@ -4,19 +4,19 @@ export const PREDICTION_MARKET_ADDRESS = "0x52Ca4B7673646B8b922ea00ccef6DD0375B1
 export const PREDICTION_MARKET_ABI = [
   // Market Creation
   "function createMarket(string calldata question, uint256 endTime, uint256 initialYes, uint256 initialNo) external payable returns (uint256)",
-  
+
   // Complete Sets
   "function mintCompleteSets(uint256 id, uint256 amount) external payable",
   "function burnCompleteSets(uint256 id, uint256 amount) external",
-  
+
   // Trading
   "function swapYesForNo(uint256 id, uint256 yesIn, uint256 minNoOut) external",
   "function swapNoForYes(uint256 id, uint256 noIn, uint256 minYesOut) external",
-  
+
   // Liquidity
   "function addLiquidity(uint256 id, uint256 yesAmount, uint256 noAmount, uint256 minLPTokens) external returns (uint256)",
   "function removeLiquidity(uint256 id, uint256 lpTokens, uint256 minYes, uint256 minNo) external returns (uint256, uint256)",
-  
+
   // Resolution
   "function closeMarket(uint256 id) external",
   "function proposeOutcome(uint256 id, uint8 outcome) external payable",
@@ -24,7 +24,7 @@ export const PREDICTION_MARKET_ABI = [
   "function oracleVote(uint256 id, uint8 outcome) external",
   "function finalizeProposal(uint256 id) external",
   "function redeem(uint256 id) external",
-  
+
   // Views
   "function getMarket(uint256 id) external view returns (address creator, string memory question, uint256 endTime, uint8 status, uint8 outcome, address yesToken, address noToken, uint256 yesPool, uint256 noPool, uint256 lpTotalSupply, uint256 totalBacking)",
   "function getPrice(uint256 id) external view returns (uint256 yesPrice, uint256 noPrice)",
@@ -32,13 +32,13 @@ export const PREDICTION_MARKET_ABI = [
   "function getLPBalance(uint256 id, address user) external view returns (uint256)",
   "function getProposalInfo(uint256 id) external view returns (address proposer, uint8 proposedOutcome, uint256 proposalTime, uint256 proposalBond, address disputer, uint256 disputeBond)",
   "function getOracleVotes(uint256 id) external view returns (uint256 yesVotes, uint256 noVotes, uint256 invalidVotes)",
-  
+
   // State Variables
   "function nextMarketId() external view returns (uint256)",
   "function feeBps() external view returns (uint32)",
   "function lpFeeBps() external view returns (uint32)",
   "function owner() external view returns (address)",
-  
+
   // Events
   "event MarketCreated(uint256 indexed id, string question, address yesToken, address noToken, uint256 endTime)",
   "event Swap(uint256 indexed id, address indexed user, bool yesIn, uint256 amountIn, uint256 amountOut, uint256 fee)",
@@ -81,7 +81,15 @@ export enum Outcome {
 export const CHAIN_CONFIG = {
   chainId: 97, // BSC Testnet
   chainName: "BSC Testnet",
-  rpcUrl: "https://data-seed-prebsc-1-s1.binance.org:8545/",
+  rpcUrls: [
+    "https://data-seed-prebsc-1-s1.binance.org:8545/",
+    "https://data-seed-prebsc-2-s1.binance.org:8545/",
+    "https://data-seed-prebsc-1-s2.binance.org:8545/",
+    "https://data-seed-prebsc-2-s2.binance.org:8545/",
+    "https://bsc-testnet.public.blastapi.io",
+    "https://bsc-testnet-rpc.publicnode.com"
+  ],
+  rpcUrl: "https://data-seed-prebsc-1-s1.binance.org:8545/", // Default/primary RPC
   blockExplorer: "https://testnet.bscscan.com",
   nativeCurrency: {
     name: "BNB",
