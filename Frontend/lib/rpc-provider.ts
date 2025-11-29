@@ -54,6 +54,7 @@ class FallbackRpcProvider extends JsonRpcProvider {
                     error?.code === -32005 ||
                     error?.error?.code === -32005
 
+                console.log(
                     `⚠️ RPC ${method} failed on ${this.urls[this.currentUrlIndex]} (attempt ${attempt + 1}/${this.urls.length})`,
                     isRateLimit ? 'RATE LIMIT' : error?.message
                 )

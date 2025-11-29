@@ -120,6 +120,7 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
       | "resolveMarket"
       | "sellNoForBNB"
       | "sellYesForBNB"
+      | "transferMarketOwnership"
       | "userInvestments"
       | "userOrders"
       | "withdrawPlatformFees"
@@ -254,6 +255,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
     values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "transferMarketOwnership",
+    values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "userInvestments",
     values: [BigNumberish, AddressLike]
   ): string;
@@ -366,6 +371,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "sellYesForBNB",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "transferMarketOwnership",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -1012,6 +1021,12 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "nonpayable"
   >;
 
+  transferMarketOwnership: TypedContractMethod<
+    [id: BigNumberish, newOwner: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   userInvestments: TypedContractMethod<
     [arg0: BigNumberish, arg1: AddressLike],
     [[bigint, bigint] & { totalInvested: bigint; lastUpdated: bigint }],
@@ -1295,6 +1310,13 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     nameOrSignature: "sellYesForBNB"
   ): TypedContractMethod<
     [id: BigNumberish, tokenAmount: BigNumberish, minBNBOut: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "transferMarketOwnership"
+  ): TypedContractMethod<
+    [id: BigNumberish, newOwner: AddressLike],
     [void],
     "nonpayable"
   >;

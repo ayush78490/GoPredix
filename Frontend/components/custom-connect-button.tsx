@@ -2,6 +2,7 @@
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
+import { AddTokenButton } from './add-token-button';
 
 interface CustomConnectButtonProps {
   className?: string;
@@ -84,7 +85,8 @@ export function CustomConnectButton({
               }
 
               return (
-                <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <AddTokenButton />
                   <button
                     onClick={openChainModal}
                     className={`${baseClasses} ${sizeClasses[size]} text-white bg-[#271f40] border border-cyan-400/50 hover:bg-[#322a50] flex items-center gap-2 ${className}`}

@@ -10,7 +10,8 @@ import { useAllMarkets } from "@/hooks/getAllMarkets"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { useRouter } from "next/navigation"
-import { useAccount, useChainId, useConfig } from "wagmi"
+import { useAccount, useChainId, useConfig, useSwitchChain } from "wagmi"
+import { LogoLoading } from "@/components/ui/logo-loading"
 
 const CATEGORIES = [
   "All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy", "General"
@@ -143,6 +144,7 @@ export default function MarketsPage() {
   const { address: account, isConnected } = useAccount()
   const chainId = useChainId()
   const config = useConfig()
+  const { switchChain } = useSwitchChain()
 
   // Check if connected to BSC Testnet (chainId 97)
   const isCorrectNetwork = chainId === 97
@@ -305,6 +307,14 @@ export default function MarketsPage() {
               <p className="text-yellow-400/80 text-sm mt-1">
                 Please switch to BSC Testnet to trade or create markets.
               </p>
+              <Button
+                onClick={() => switchChain({ chainId: 97 })}
+                variant="outline"
+                size="sm"
+                className="mt-3 border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/20 bg-transparent"
+              >
+                Switch to BSC Testnet
+              </Button>
             </div>
           )}
 
@@ -363,9 +373,8 @@ export default function MarketsPage() {
           </div>
 
           {isLoading && (
-            <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-3 text-muted-foreground">Loading markets from GoPredix...</span>
+            <div className="flex justify-center items-center py-20 backdrop-blur-sm bg-card/80 rounded-lg">
+              <LogoLoading size={64} />
             </div>
           )}
 

@@ -16,6 +16,7 @@ import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 import TwitterShareModal from "@/components/twitter-share-modal"
 import ConnectTwitterButton from "@/components/connect-twitter-button"
+import { LogoLoading } from "@/components/ui/logo-loading"
 
 // Import ABIs
 import BNB_MARKET_ARTIFACT from "@/contracts/abi.json"
@@ -936,11 +937,8 @@ export default function ProfilePage() {
 
               {/* Stats Grid */}
               {isLoading ? (
-                <div className="flex justify-center items-center py-12 backdrop-blur-sm bg-card/80 rounded-lg">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">
-                    Loading your profile data...
-                  </span>
+                <div className="flex justify-center items-center py-20 backdrop-blur-sm bg-card/80 rounded-lg">
+                  <LogoLoading size={64} />
                 </div>
               ) : userStats ? (
                 <>

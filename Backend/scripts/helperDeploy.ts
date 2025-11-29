@@ -4,7 +4,7 @@ async function main() {
   console.log("🚀 Deploying PredictionMarketHelper...");
 
   // Your already deployed PredictionMarket address
-  const PREDICTION_MARKET_ADDRESS = "0x651790f7A07d818D5a2152572C46e2e3C6E226E5";
+  const PREDICTION_MARKET_ADDRESS = "0xd8E0D86F14b76b79Cc160534Eb9ECeDDf28632f1";
 
   // Get the contract factory
   const PredictionMarketHelper = await hre.ethers.getContractFactory("PredictionMarketHelper");
@@ -23,7 +23,7 @@ async function main() {
   console.log("\n🔍 Verifying connection...");
   const connectedMarket = await helper.predictionMarket();
   console.log("Connected to market:", connectedMarket);
-  
+
   if (connectedMarket.toLowerCase() === PREDICTION_MARKET_ADDRESS.toLowerCase()) {
     console.log("✅ Connection verified!");
   } else {

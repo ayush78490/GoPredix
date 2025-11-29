@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react"
 import { X, Loader2, AlertTriangle } from "lucide-react"
+import { LogoLoading } from "@/components/ui/logo-loading"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -602,7 +603,7 @@ export default function TradeModal({
           {!isContractReady && (
             <div className="mb-4 p-3 bg-blue-100 dark:bg-blue-950 border border-blue-300 dark:border-blue-700 rounded-md text-blue-800 dark:text-blue-400 text-center">
               <div className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <LogoLoading size={16} />
                 {!canTransact ? "Checking wallet connection..." : `Initializing ${paymentToken} contracts...`}
               </div>
             </div>
@@ -684,8 +685,8 @@ export default function TradeModal({
             {hasAmount && outcome && (
               <div className="space-y-3">
                 {isEstimating ? (
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
-                    <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800 text-center flex items-center justify-center gap-2">
+                    <LogoLoading size={16} />
                     Calculating payout...
                   </div>
                 ) : expectedPayout && payoutMultiplier ? (
@@ -798,19 +799,19 @@ export default function TradeModal({
             >
               {isProcessing ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  <LogoLoading size={20} />
                   Processing Transaction...
                 </>
               ) : !canTransact ? (
                 !isConnected ? "Connect Wallet First" : "Switch to BSC Testnet"
               ) : !isContractReady ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  <LogoLoading size={20} />
                   Initializing...
                 </>
               ) : isEstimating ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  <LogoLoading size={20} />
                   Calculating...
                 </>
               ) : !hasAmount || !outcome ? (

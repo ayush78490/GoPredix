@@ -11,6 +11,9 @@ const HELPER_ABI = (HELPER_JSON as any).abi || HELPER_JSON
 const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x12FD6C9B618949d940806B0E59e3c65507eC37E8'
 const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0xC940106a30742F21daE111d41e8F41d482feda15'
 
+console.log('🔍 BNB Hook using Prediction Market:', PREDICTION_MARKET_ADDRESS)
+console.log('🔍 BNB Hook using Helper:', HELPER_CONTRACT_ADDRESS)
+
 // Market Status enum
 export enum MarketStatus {
   Open = 0,

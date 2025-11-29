@@ -120,6 +120,7 @@ export interface PDXPredictionMarketInterface extends Interface {
       | "sellYesForPDX"
       | "setFees"
       | "setResolutionServer"
+      | "transferMarketOwnership"
       | "transferOwnership"
       | "userInvestments"
       | "userOrders"
@@ -130,6 +131,7 @@ export interface PDXPredictionMarketInterface extends Interface {
     nameOrSignatureOrTopic:
       | "BuyWithPDX"
       | "MarketCreated"
+      | "MarketOwnershipTransferred"
       | "MarketResolved"
       | "OrderCancelled"
       | "OrderCreated"
@@ -253,6 +255,10 @@ export interface PDXPredictionMarketInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "transferMarketOwnership",
+    values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "transferOwnership",
     values: [AddressLike]
   ): string;
@@ -372,6 +378,10 @@ export interface PDXPredictionMarketInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "transferMarketOwnership",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "transferOwnership",
     data: BytesLike
   ): Result;
@@ -438,6 +448,31 @@ export namespace MarketCreatedEvent {
     yesToken: string;
     noToken: string;
     endTime: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace MarketOwnershipTransferredEvent {
+  export type InputTuple = [
+    marketId: BigNumberish,
+    previousOwner: AddressLike,
+    newOwner: AddressLike,
+    timestamp: BigNumberish
+  ];
+  export type OutputTuple = [
+    marketId: bigint,
+    previousOwner: string,
+    newOwner: string,
+    timestamp: bigint
+  ];
+  export interface OutputObject {
+    marketId: bigint;
+    previousOwner: string;
+    newOwner: string;
+    timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -967,6 +1002,12 @@ export interface PDXPredictionMarket extends BaseContract {
     "nonpayable"
   >;
 
+  transferMarketOwnership: TypedContractMethod<
+    [id: BigNumberish, newOwner: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   transferOwnership: TypedContractMethod<
     [_newOwner: AddressLike],
     [void],
@@ -1260,6 +1301,13 @@ export interface PDXPredictionMarket extends BaseContract {
     nameOrSignature: "setResolutionServer"
   ): TypedContractMethod<[_server: AddressLike], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "transferMarketOwnership"
+  ): TypedContractMethod<
+    [id: BigNumberish, newOwner: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[_newOwner: AddressLike], [void], "nonpayable">;
   getFunction(
@@ -1293,6 +1341,13 @@ export interface PDXPredictionMarket extends BaseContract {
     MarketCreatedEvent.InputTuple,
     MarketCreatedEvent.OutputTuple,
     MarketCreatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "MarketOwnershipTransferred"
+  ): TypedContractEvent<
+    MarketOwnershipTransferredEvent.InputTuple,
+    MarketOwnershipTransferredEvent.OutputTuple,
+    MarketOwnershipTransferredEvent.OutputObject
   >;
   getEvent(
     key: "MarketResolved"
@@ -1379,6 +1434,17 @@ export interface PDXPredictionMarket extends BaseContract {
       MarketCreatedEvent.InputTuple,
       MarketCreatedEvent.OutputTuple,
       MarketCreatedEvent.OutputObject
+    >;
+
+    "MarketOwnershipTransferred(uint256,address,address,uint256)": TypedContractEvent<
+      MarketOwnershipTransferredEvent.InputTuple,
+      MarketOwnershipTransferredEvent.OutputTuple,
+      MarketOwnershipTransferredEvent.OutputObject
+    >;
+    MarketOwnershipTransferred: TypedContractEvent<
+      MarketOwnershipTransferredEvent.InputTuple,
+      MarketOwnershipTransferredEvent.OutputTuple,
+      MarketOwnershipTransferredEvent.OutputObject
     >;
 
     "MarketResolved(uint256,uint8,string,uint256,address)": TypedContractEvent<

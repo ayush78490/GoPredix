@@ -14,6 +14,7 @@ import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
 import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { useAccount, useChainId } from "wagmi"
+import { LogoLoading } from "@/components/ui/logo-loading"
 
 const safeStringify = (obj: any): string => {
   return JSON.stringify(obj, (_, value) => {
@@ -543,7 +544,7 @@ export default function MarketPage() {
               >
                 {isNavigatingBack ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <LogoLoading size={16} />
                     Loading...
                   </>
                 ) : (
@@ -571,7 +572,7 @@ export default function MarketPage() {
               <div className="lg:col-span-1 lg:order-2 order-2">
                 <Card className="p-6 space-y-6 backdrop-blur-sm bg-card/80 h-96">
                   <div className="flex flex-col items-center justify-center h-full gap-4">
-                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                    <LogoLoading size={48} />
                     <p className="text-muted-foreground text-center">
                       {market ? 'Loading trading data...' : 'Loading market...'}
                     </p>
@@ -590,7 +591,7 @@ export default function MarketPage() {
                 {/* Chart Skeleton - Mobile First (inside col), Desktop Second */}
                 <div className="order-1 lg:order-2 w-full bg-card rounded-lg p-4 backdrop-blur-sm h-80">
                   <div className="h-full flex flex-col items-center justify-center gap-4">
-                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                    <LogoLoading size={48} />
                     <p className="text-muted-foreground">Loading market chart...</p>
                   </div>
                 </div>
@@ -698,7 +699,7 @@ export default function MarketPage() {
             >
               {isNavigatingBack ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <LogoLoading size={16} />
                   Loading...
                 </>
               ) : (

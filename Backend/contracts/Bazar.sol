@@ -642,6 +642,18 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
         require(success);
     }
 
+    function transferMarketOwnership(uint256 id, address newOwner) external marketExists(id) {
+        require(newOwner != address(0), "zero address");
+        Market storage m = markets[id];
+        require(msg.sender == m.creator, "not market creator");
+        require(m.status == MarketStatus.Open, "market not open");
+        
+        address previousOwner = m.creator;
+        m.creator = newOwner;
+        
+        // emit MarketOwnershipTransferred(id, previousOwner, newOwner, block.timestamp);
+    }
+
     function _sqrt(uint256 x) internal pure returns (uint256 y) {
         if (x == 0) return 0;
         uint256 z = (x + 1) / 2;

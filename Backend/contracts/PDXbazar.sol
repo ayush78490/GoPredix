@@ -203,6 +203,7 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
     event OrderCreated(uint256 indexed orderId, address indexed user, uint256 indexed marketId, OrderType orderType, bool isYes, uint256 tokenAmount, uint256 triggerPrice);
     event OrderExecuted(uint256 indexed orderId, address indexed user, uint256 indexed marketId, uint256 amountReceived);
     event OrderCancelled(uint256 indexed orderId, address indexed user, uint256 indexed marketId);
+    event MarketOwnershipTransferred(uint256 indexed marketId, address indexed previousOwner, address indexed newOwner, uint256 timestamp);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
@@ -635,6 +636,18 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
     function transferOwnership(address _newOwner) external onlyOwner {
         require(_newOwner != address(0), "zero address");
         owner = _newOwner;
+    }
+
+    function transferMarketOwnership(uint256 id, address newOwner) external marketExists(id) {
+        require(newOwner != address(0), "zero address");
+        Market storage m = markets[id];
+        require(msg.sender == m.creator, "not market creator");
+        require(m.status == MarketStatus.Open, "market not open");
+        
+        address previousOwner = m.creator;
+        m.creator = newOwner;
+        
+        emit MarketOwnershipTransferred(id, previousOwner, newOwner, block.timestamp);
     }
 
     // ==================== INTERNAL ====================

@@ -30,6 +30,12 @@ export type { PredictionMarketWithMultipliers } from "./contracts/Bazar.sol/Pred
 export { PredictionMarketWithMultipliers__factory } from "./factories/contracts/Bazar.sol/PredictionMarketWithMultipliers__factory";
 export type { TradingBot } from "./contracts/Bazar.sol/TradingBot";
 export { TradingBot__factory } from "./factories/contracts/Bazar.sol/TradingBot__factory";
+export type { BNBMarketMarketplace } from "./contracts/BNBMarketMarketplace.sol/BNBMarketMarketplace";
+export { BNBMarketMarketplace__factory } from "./factories/contracts/BNBMarketMarketplace.sol/BNBMarketMarketplace__factory";
+export type { IPDX } from "./contracts/BNBMarketMarketplace.sol/IPDX";
+export { IPDX__factory } from "./factories/contracts/BNBMarketMarketplace.sol/IPDX__factory";
+export type { CustodialMarketplace } from "./contracts/CustodialMarketplace.sol/CustodialMarketplace";
+export { CustodialMarketplace__factory } from "./factories/contracts/CustodialMarketplace.sol/CustodialMarketplace__factory";
 export type { GPXToken } from "./contracts/gpx.sol/GPXToken";
 export { GPXToken__factory } from "./factories/contracts/gpx.sol/GPXToken__factory";
 export type { IOutcomeToken } from "./contracts/helperContract.sol/IOutcomeToken";
@@ -38,8 +44,10 @@ export type { IPredictionMarketCore } from "./contracts/helperContract.sol/IPred
 export { IPredictionMarketCore__factory } from "./factories/contracts/helperContract.sol/IPredictionMarketCore__factory";
 export type { PredictionMarketHelper } from "./contracts/helperContract.sol/PredictionMarketHelper";
 export { PredictionMarketHelper__factory } from "./factories/contracts/helperContract.sol/PredictionMarketHelper__factory";
-export type { IPDX } from "./contracts/PDXbazar.sol/IPDX";
-export { IPDX__factory } from "./factories/contracts/PDXbazar.sol/IPDX__factory";
+export type { IPDXPredictionMarketOwnership } from "./contracts/MarketMarketplace.sol/IPDXPredictionMarketOwnership";
+export { IPDXPredictionMarketOwnership__factory } from "./factories/contracts/MarketMarketplace.sol/IPDXPredictionMarketOwnership__factory";
+export type { MarketMarketplace } from "./contracts/MarketMarketplace.sol/MarketMarketplace";
+export { MarketMarketplace__factory } from "./factories/contracts/MarketMarketplace.sol/MarketMarketplace__factory";
 export type { IPDXPredictionMarket } from "./contracts/PDXbazar.sol/IPDXPredictionMarket";
 export { IPDXPredictionMarket__factory } from "./factories/contracts/PDXbazar.sol/IPDXPredictionMarket__factory";
 export type { PDXPredictionMarket } from "./contracts/PDXbazar.sol/PDXPredictionMarket";

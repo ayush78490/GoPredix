@@ -62,6 +62,30 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.TradingBot__factory>;
     getContractFactory(
+      name: "BNBMarketMarketplace",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.BNBMarketMarketplace__factory>;
+    getContractFactory(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPDX__factory>;
+    getContractFactory(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPredictionMarket__factory>;
+    getContractFactory(
+      name: "CustodialMarketplace",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.CustodialMarketplace__factory>;
+    getContractFactory(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPDX__factory>;
+    getContractFactory(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPredictionMarket__factory>;
+    getContractFactory(
       name: "GPXToken",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.GPXToken__factory>;
@@ -77,6 +101,18 @@ declare module "hardhat/types/runtime" {
       name: "PredictionMarketHelper",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.PredictionMarketHelper__factory>;
+    getContractFactory(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPDX__factory>;
+    getContractFactory(
+      name: "IPDXPredictionMarketOwnership",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPDXPredictionMarketOwnership__factory>;
+    getContractFactory(
+      name: "MarketMarketplace",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MarketMarketplace__factory>;
     getContractFactory(
       name: "IPDX",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -179,6 +215,36 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.TradingBot>;
     getContractAt(
+      name: "BNBMarketMarketplace",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.BNBMarketMarketplace>;
+    getContractAt(
+      name: "IPDX",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPDX>;
+    getContractAt(
+      name: "IPredictionMarket",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPredictionMarket>;
+    getContractAt(
+      name: "CustodialMarketplace",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.CustodialMarketplace>;
+    getContractAt(
+      name: "IPDX",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPDX>;
+    getContractAt(
+      name: "IPredictionMarket",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPredictionMarket>;
+    getContractAt(
       name: "GPXToken",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -198,6 +264,21 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.PredictionMarketHelper>;
+    getContractAt(
+      name: "IPDX",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPDX>;
+    getContractAt(
+      name: "IPDXPredictionMarketOwnership",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPDXPredictionMarketOwnership>;
+    getContractAt(
+      name: "MarketMarketplace",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MarketMarketplace>;
     getContractAt(
       name: "IPDX",
       address: string | ethers.Addressable,
@@ -298,6 +379,30 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.TradingBot>;
     deployContract(
+      name: "BNBMarketMarketplace",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.BNBMarketMarketplace>;
+    deployContract(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
+      name: "CustodialMarketplace",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.CustodialMarketplace>;
+    deployContract(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
       name: "GPXToken",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.GPXToken>;
@@ -313,6 +418,18 @@ declare module "hardhat/types/runtime" {
       name: "PredictionMarketHelper",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PredictionMarketHelper>;
+    deployContract(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPDXPredictionMarketOwnership",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDXPredictionMarketOwnership>;
+    deployContract(
+      name: "MarketMarketplace",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MarketMarketplace>;
     deployContract(
       name: "IPDX",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -415,6 +532,36 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.TradingBot>;
     deployContract(
+      name: "BNBMarketMarketplace",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.BNBMarketMarketplace>;
+    deployContract(
+      name: "IPDX",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPredictionMarket",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
+      name: "CustodialMarketplace",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.CustodialMarketplace>;
+    deployContract(
+      name: "IPDX",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPredictionMarket",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
       name: "GPXToken",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -434,6 +581,21 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PredictionMarketHelper>;
+    deployContract(
+      name: "IPDX",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPDXPredictionMarketOwnership",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDXPredictionMarketOwnership>;
+    deployContract(
+      name: "MarketMarketplace",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MarketMarketplace>;
     deployContract(
       name: "IPDX",
       args: any[],

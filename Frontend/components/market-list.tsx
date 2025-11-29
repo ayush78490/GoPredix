@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAllMarkets } from '@/hooks/getAllMarkets'
+import { LogoLoading } from "@/components/ui/logo-loading"
 
 // Helper function to generate slug from question
 export const generateSlug = (question: string, id: number | string): string => {
@@ -14,7 +15,7 @@ export const generateSlug = (question: string, id: number | string): string => {
     .replace(/-+/g, '-') // Replace multiple hyphens with single
     .substring(0, 60) // Limit length
     .replace(/-$/, '') // Remove trailing hyphen
-  
+
   return `${baseSlug}-${id}` || `market-${id}`
 }
 
@@ -73,7 +74,7 @@ const convertToFrontendMarket = (m: any, id: number | string, paymentToken: "BNB
   const yesPool = parseFloat(m?.yesPool ?? "0") || 0
   const noPool = parseFloat(m?.noPool ?? "0") || 0
   const totalPool = yesPool + noPool
-  
+
   const yesOdds = totalPool > 0 ? (yesPool / totalPool) * 100 : 50
   const noOdds = totalPool > 0 ? (noPool / totalPool) * 100 : 50
 
@@ -120,20 +121,20 @@ interface MarketListProps {
 }
 
 export function MarketList({ tokenFilter = "ALL" }: MarketListProps) {
-  const { 
-    markets, 
-    isLoading, 
+  const {
+    markets,
+    isLoading,
     error,
     getBNBMarkets,
-    getPDXMarkets 
+    getPDXMarkets
   } = useAllMarkets()
-  
+
   const [displayMarkets, setDisplayMarkets] = useState<FrontendMarket[]>([])
 
   useEffect(() => {
     // Filter markets based on token filter
     let filtered = markets
-    
+
     if (tokenFilter === "BNB") {
       filtered = getBNBMarkets()
     } else if (tokenFilter === "PDX") {
@@ -149,8 +150,7 @@ export function MarketList({ tokenFilter = "ALL" }: MarketListProps) {
     return (
       <div className="text-center py-12">
         <div className="inline-block">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <p className="mt-2 text-muted-foreground">Loading markets...</p>
+          <LogoLoading size={48} />
         </div>
       </div>
     )
@@ -185,8 +185,8 @@ export function MarketList({ tokenFilter = "ALL" }: MarketListProps) {
       {/* Markets Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {displayMarkets.map((market) => (
-          <Link 
-            key={market.id} 
+          <Link
+            key={market.id}
             href={`/market/${market.slug}`}
             className="block group"
           >
@@ -196,7 +196,7 @@ export function MarketList({ tokenFilter = "ALL" }: MarketListProps) {
                 <span className="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-primary/10 text-primary">
                   {market.category}
                 </span>
-                
+
                 {/* Token Badge */}
                 <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full ${getTokenBadgeStyle(market.paymentToken)}`}>
                   <span>{getTokenIcon(market.paymentToken)}</span>
@@ -204,54 +204,47 @@ export function MarketList({ tokenFilter = "ALL" }: MarketListProps) {
                 </span>
 
                 {/* Status Badge */}
-                <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                  market.isActive 
-                    ? 'bg-green-500/20 border border-green-600/50 text-green-400' 
+                <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${market.isActive
+                    ? 'bg-green-500/20 border border-green-600/50 text-green-400'
                     : 'bg-gray-500/20 border border-gray-600/50 text-gray-400'
-                }`}>
+                  }`}>
                   {market.isActive ? 'Open' : 'Closed'}
                 </span>
               </div>
-              
+
               {/* Title */}
               <h3 className="font-bold text-lg mb-4 line-clamp-2 group-hover:text-primary transition-colors">
                 {market.title}
               </h3>
-              
+
               {/* Odds Section */}
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className={`rounded-lg p-3 border ${
-                  market.isActive
+                <div className={`rounded-lg p-3 border ${market.isActive
                     ? "bg-green-950/20 border-green-800/30"
                     : "bg-gray-100 border-gray-300"
-                }`}>
-                  <div className="text-xs text-muted-foreground mb-1">YES</div>
-                  <div className={`text-lg font-bold ${
-                    market.isActive ? "text-green-500" : "text-gray-500"
                   }`}>
+                  <div className="text-xs text-muted-foreground mb-1">YES</div>
+                  <div className={`text-lg font-bold ${market.isActive ? "text-green-500" : "text-gray-500"
+                    }`}>
                     {market.yesOdds.toFixed(1)}%
                   </div>
-                  <div className={`text-xs mt-1 ${
-                    market.isActive ? "text-green-400" : "text-gray-500"
-                  }`}>
+                  <div className={`text-xs mt-1 ${market.isActive ? "text-green-400" : "text-gray-500"
+                    }`}>
                     {market.yesOdds > 0 ? `${(100 / market.yesOdds).toFixed(2)}x` : "0x"} return
                   </div>
                 </div>
 
-                <div className={`rounded-lg p-3 border ${
-                  market.isActive
+                <div className={`rounded-lg p-3 border ${market.isActive
                     ? "bg-red-950/20 border-red-800/30"
                     : "bg-gray-100 border-gray-300"
-                }`}>
-                  <div className="text-xs text-muted-foreground mb-1">NO</div>
-                  <div className={`text-lg font-bold ${
-                    market.isActive ? "text-red-500" : "text-gray-500"
                   }`}>
+                  <div className="text-xs text-muted-foreground mb-1">NO</div>
+                  <div className={`text-lg font-bold ${market.isActive ? "text-red-500" : "text-gray-500"
+                    }`}>
                     {market.noOdds.toFixed(1)}%
                   </div>
-                  <div className={`text-xs mt-1 ${
-                    market.isActive ? "text-red-400" : "text-gray-500"
-                  }`}>
+                  <div className={`text-xs mt-1 ${market.isActive ? "text-red-400" : "text-gray-500"
+                    }`}>
                     {market.noOdds > 0 ? `${(100 / market.noOdds).toFixed(2)}x` : "0x"} return
                   </div>
                 </div>

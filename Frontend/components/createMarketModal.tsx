@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { X, Loader2, Plus, Shield, AlertTriangle } from "lucide-react"
+import { LogoLoading } from "@/components/ui/logo-loading"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -58,7 +59,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   const { address: account, isConnected } = useAccount()
   const chainId = useChainId()
   const { data: walletClient } = useWalletClient()
-  
+
   const isCorrectNetwork = chainId === BSC_TESTNET_CHAIN_ID
   const canTransact = isConnected && isCorrectNetwork && !!walletClient
 
@@ -69,7 +70,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   // Use appropriate hook based on payment token
   const currentHook = paymentToken === "BNB" ? bnbHook : pdxHook
   const { isLoading, isContractReady } = currentHook
-  
+
   // Contract is ready only if wallet can transact
   const isFullyReady = isContractReady && canTransact
 
@@ -80,278 +81,278 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
   // Validate question with AI
   const validateQuestion = async () => {
-  // Clear previous states
-  setError(null)
-  setValidationResult(null)
+    // Clear previous states
+    setError(null)
+    setValidationResult(null)
 
-  // Basic input validation
-  if (!question || question.trim().length === 0) {
-    setError("Question is required")
-    return false
-  }
-
-  if (question.trim().length < 10) {
-    setError("Question must be at least 10 characters")
-    return false
-  }
-
-  if (question.length > 280) {
-    setError("Question must be less than 280 characters")
-    return false
-  }
-
-  if (!endDate || !endTime) {
-    setError("Please set an end date and time first")
-    return false
-  }
-
-  // Date validation with detailed debugging
-  let endDateTime
-  let endTimeUnix
-  try {
-    endDateTime = new Date(`${endDate}T${endTime}:00`)
-    
-    // Debug date parsing
-
-    if (isNaN(endDateTime.getTime())) {
-      setError("Invalid date or time format")
+    // Basic input validation
+    if (!question || question.trim().length === 0) {
+      setError("Question is required")
       return false
     }
 
-    endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
-
-    // Validate end time is at least 1 hour from now
-    const now = new Date()
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
-    
-
-    if (endDateTime <= oneHourFromNow) {
-      setError(`End time must be at least 1 hour from now. Selected: ${endDateTime.toLocaleString()}`)
+    if (question.trim().length < 10) {
+      setError("Question must be at least 10 characters")
       return false
     }
 
-    // Validate it's not too far in future (optional safety check)
-    const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
-    if (endDateTime > oneYearFromNow) {
-      setError("End time cannot be more than 1 year from now")
+    if (question.length > 280) {
+      setError("Question must be less than 280 characters")
       return false
     }
 
-  } catch (dateError) {
-    console.error('❌ Date parsing error:', dateError)
-    setError("Invalid date format. Please check your date and time.")
-    return false
-  }
-
-  // Liquidity validation
-  try {
-    const yesAmount = parseFloat(initialYes)
-    const noAmount = parseFloat(initialNo)
-    const totalLiquidity = yesAmount + noAmount
-
-    if (isNaN(yesAmount) || isNaN(noAmount)) {
-      setError("Invalid liquidity amounts")
+    if (!endDate || !endTime) {
+      setError("Please set an end date and time first")
       return false
     }
 
-    if (yesAmount <= 0 || noAmount <= 0) {
-      setError("Both YES and NO liquidity must be greater than 0")
-      return false
-    }
+    // Date validation with detailed debugging
+    let endDateTime
+    let endTimeUnix
+    try {
+      endDateTime = new Date(`${endDate}T${endTime}:00`)
 
-    if (totalLiquidity < 0.01) {
-      setError(`Total liquidity must be at least 0.01 ${paymentToken}`)
-      return false
-    }
+      // Debug date parsing
 
-    // Validate reasonable maximum (optional)
-    if (totalLiquidity > 1000) {
-      setError(`Total liquidity cannot exceed 1000 ${paymentToken}`)
-      return false
-    }
-
-  } catch (liquidityError) {
-    console.error('❌ Liquidity validation error:', liquidityError)
-    setError("Invalid liquidity values")
-    return false
-  }
-
-  // AI Validation
-  setIsValidating(true)
-
-  try {
-
-    const requestBody = {
-      question: question.trim(),
-      endTime: endTimeUnix,
-      initialYes,
-      initialNo
-    }
-
-    
-    const response = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-      // Add timeout
-      signal: AbortSignal.timeout(30000) // 30 second timeout
-    })
-
-
-    if (!response.ok) {
-      let errorDetail = `HTTP ${response.status}`
-      
-      try {
-        const errorData = await response.json()
-        errorDetail += ` - ${errorData.reason || errorData.error || JSON.stringify(errorData)}`
-      } catch (parseError) {
-        const errorText = await response.text()
-        errorDetail += ` - ${errorText || response.statusText}`
+      if (isNaN(endDateTime.getTime())) {
+        setError("Invalid date or time format")
+        return false
       }
-      
-      throw new Error(`Validation API error: ${errorDetail}`)
-    }
 
-    const validation = await response.json()
+      endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
 
-    // Validate response structure
-    if (typeof validation.valid !== 'boolean') {
-      throw new Error('Invalid response from validation service')
-    }
+      // Validate end time is at least 1 hour from now
+      const now = new Date()
+      const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
 
-    setValidationResult(validation)
-    
-    if (!validation.valid) {
-    } else {
-    }
 
-    return validation.valid
-
-  } catch (err: any) {
-    console.error('❌ AI validation error details:', {
-      name: err.name,
-      message: err.message,
-      stack: err.stack
-    })
-
-    // Handle different error types
-    if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-      setError("Validation request timed out. Please try again.")
-    } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-      setError("Network error. Please check your connection and try again.")
-    } else if (err.message.includes('HTTP 5')) {
-      setError("Validation service is temporarily unavailable. Please try again in a moment.")
-    } else {
-      setError(`Validation error: ${err.message}`)
-    }
-
-    // Fallback to basic validation
-    const basicValidation = performBasicValidation(question, endTimeUnix, initialYes, initialNo)
-    setValidationResult(basicValidation)
-
-    if (!basicValidation.valid) {
-      // Don't override the original error if basic validation also fails
-      if (!err.message.includes('HTTP 5')) {
-        setError(`AI validation failed and basic validation rejected: ${basicValidation.reason}`)
+      if (endDateTime <= oneHourFromNow) {
+        setError(`End time must be at least 1 hour from now. Selected: ${endDateTime.toLocaleString()}`)
+        return false
       }
+
+      // Validate it's not too far in future (optional safety check)
+      const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
+      if (endDateTime > oneYearFromNow) {
+        setError("End time cannot be more than 1 year from now")
+        return false
+      }
+
+    } catch (dateError) {
+      console.error('❌ Date parsing error:', dateError)
+      setError("Invalid date format. Please check your date and time.")
       return false
-    } else {
-      // If AI failed but basic passed, we can proceed with warning
-      setError("AI validation unavailable, but question passes basic checks. You may proceed.")
-      return true
     }
 
-  } finally {
-    setIsValidating(false)
-  }
-}
+    // Liquidity validation
+    try {
+      const yesAmount = parseFloat(initialYes)
+      const noAmount = parseFloat(initialNo)
+      const totalLiquidity = yesAmount + noAmount
 
-// Enhanced basic validation fallback
-const performBasicValidation = (question: string, endTime: number, initialYes: string, initialNo: string): ValidationResult => {
-  
-  const trimmedQuestion = question.trim()
-  
-  // Question structure validation
-  if (!trimmedQuestion.includes('?')) {
-    return {
-      valid: false,
-      reason: 'Question must end with a question mark',
-      category: 'OTHER'
+      if (isNaN(yesAmount) || isNaN(noAmount)) {
+        setError("Invalid liquidity amounts")
+        return false
+      }
+
+      if (yesAmount <= 0 || noAmount <= 0) {
+        setError("Both YES and NO liquidity must be greater than 0")
+        return false
+      }
+
+      if (totalLiquidity < 0.01) {
+        setError(`Total liquidity must be at least 0.01 ${paymentToken}`)
+        return false
+      }
+
+      // Validate reasonable maximum (optional)
+      if (totalLiquidity > 1000) {
+        setError(`Total liquidity cannot exceed 1000 ${paymentToken}`)
+        return false
+      }
+
+    } catch (liquidityError) {
+      console.error('❌ Liquidity validation error:', liquidityError)
+      setError("Invalid liquidity values")
+      return false
+    }
+
+    // AI Validation
+    setIsValidating(true)
+
+    try {
+
+      const requestBody = {
+        question: question.trim(),
+        endTime: endTimeUnix,
+        initialYes,
+        initialNo
+      }
+
+
+      const response = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        // Add timeout
+        signal: AbortSignal.timeout(30000) // 30 second timeout
+      })
+
+
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`
+
+        try {
+          const errorData = await response.json()
+          errorDetail += ` - ${errorData.reason || errorData.error || JSON.stringify(errorData)}`
+        } catch (parseError) {
+          const errorText = await response.text()
+          errorDetail += ` - ${errorText || response.statusText}`
+        }
+
+        throw new Error(`Validation API error: ${errorDetail}`)
+      }
+
+      const validation = await response.json()
+
+      // Validate response structure
+      if (typeof validation.valid !== 'boolean') {
+        throw new Error('Invalid response from validation service')
+      }
+
+      setValidationResult(validation)
+
+      if (!validation.valid) {
+      } else {
+      }
+
+      return validation.valid
+
+    } catch (err: any) {
+      console.error('❌ AI validation error details:', {
+        name: err.name,
+        message: err.message,
+        stack: err.stack
+      })
+
+      // Handle different error types
+      if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+        setError("Validation request timed out. Please try again.")
+      } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        setError("Network error. Please check your connection and try again.")
+      } else if (err.message.includes('HTTP 5')) {
+        setError("Validation service is temporarily unavailable. Please try again in a moment.")
+      } else {
+        setError(`Validation error: ${err.message}`)
+      }
+
+      // Fallback to basic validation
+      const basicValidation = performBasicValidation(question, endTimeUnix, initialYes, initialNo)
+      setValidationResult(basicValidation)
+
+      if (!basicValidation.valid) {
+        // Don't override the original error if basic validation also fails
+        if (!err.message.includes('HTTP 5')) {
+          setError(`AI validation failed and basic validation rejected: ${basicValidation.reason}`)
+        }
+        return false
+      } else {
+        // If AI failed but basic passed, we can proceed with warning
+        setError("AI validation unavailable, but question passes basic checks. You may proceed.")
+        return true
+      }
+
+    } finally {
+      setIsValidating(false)
     }
   }
 
-  if (trimmedQuestion.length < 10) {
-    return {
-      valid: false,
-      reason: 'Question must be at least 10 characters long',
-      category: 'OTHER'
-    }
-  }
+  // Enhanced basic validation fallback
+  const performBasicValidation = (question: string, endTime: number, initialYes: string, initialNo: string): ValidationResult => {
 
-  if (trimmedQuestion.length > 280) {
-    return {
-      valid: false,
-      reason: 'Question must be less than 280 characters',
-      category: 'OTHER'
-    }
-  }
+    const trimmedQuestion = question.trim()
 
-  // Check for multiple questions
-  if ((trimmedQuestion.match(/\?/g) || []).length > 1) {
-    return {
-      valid: false,
-      reason: 'Please ask only one question per market',
-      category: 'OTHER'
-    }
-  }
-
-  // Subjective/ambiguous language patterns
-  const invalidPatterns = [
-    { pattern: /\b(opinion|think|believe|feel|probably|maybe)\b/i, reason: 'Avoid subjective language like "think" or "believe"' },
-    { pattern: /\b(subjective|arbitrary|pointless)\b/i, reason: 'Question should be objective and verifiable' },
-    { pattern: /\?.*\?/, reason: 'Multiple questions detected' },
-    { pattern: /\b(and|or)\b.*\?.*\b(and|or)\b/i, reason: 'Avoid complex "and/or" questions' },
-    { pattern: /\b(should|ought to)\b/i, reason: 'Avoid normative language like "should"' },
-    { pattern: /\b(best|worst|better|worse)\b.*\?/i, reason: 'Avoid comparative language without clear criteria' }
-  ]
-
-  for (const { pattern, reason } of invalidPatterns) {
-    if (pattern.test(trimmedQuestion)) {
+    // Question structure validation
+    if (!trimmedQuestion.includes('?')) {
       return {
         valid: false,
-        reason,
+        reason: 'Question must end with a question mark',
         category: 'OTHER'
       }
     }
-  }
 
-  // Check for past tense (historical events)
-  const pastTensePatterns = [
-    /\b(did|was|were|had|happened|occurred)\b.*\?/i,
-    /\b(in|during)\s+(202[0-3]|2024\b)/, // Past years
-    /\b(last\s+(year|month|week))\b/i
-  ]
-
-  for (const pattern of pastTensePatterns) {
-    if (pattern.test(trimmedQuestion)) {
+    if (trimmedQuestion.length < 10) {
       return {
         valid: false,
-        reason: 'Questions about past events are not allowed',
+        reason: 'Question must be at least 10 characters long',
         category: 'OTHER'
       }
     }
-  }
 
-  const category = determineCategory(trimmedQuestion)
+    if (trimmedQuestion.length > 280) {
+      return {
+        valid: false,
+        reason: 'Question must be less than 280 characters',
+        category: 'OTHER'
+      }
+    }
 
-  return {
-    valid: true,
-    reason: 'Passes basic validation checks',
-    category: category
+    // Check for multiple questions
+    if ((trimmedQuestion.match(/\?/g) || []).length > 1) {
+      return {
+        valid: false,
+        reason: 'Please ask only one question per market',
+        category: 'OTHER'
+      }
+    }
+
+    // Subjective/ambiguous language patterns
+    const invalidPatterns = [
+      { pattern: /\b(opinion|think|believe|feel|probably|maybe)\b/i, reason: 'Avoid subjective language like "think" or "believe"' },
+      { pattern: /\b(subjective|arbitrary|pointless)\b/i, reason: 'Question should be objective and verifiable' },
+      { pattern: /\?.*\?/, reason: 'Multiple questions detected' },
+      { pattern: /\b(and|or)\b.*\?.*\b(and|or)\b/i, reason: 'Avoid complex "and/or" questions' },
+      { pattern: /\b(should|ought to)\b/i, reason: 'Avoid normative language like "should"' },
+      { pattern: /\b(best|worst|better|worse)\b.*\?/i, reason: 'Avoid comparative language without clear criteria' }
+    ]
+
+    for (const { pattern, reason } of invalidPatterns) {
+      if (pattern.test(trimmedQuestion)) {
+        return {
+          valid: false,
+          reason,
+          category: 'OTHER'
+        }
+      }
+    }
+
+    // Check for past tense (historical events)
+    const pastTensePatterns = [
+      /\b(did|was|were|had|happened|occurred)\b.*\?/i,
+      /\b(in|during)\s+(202[0-3]|2024\b)/, // Past years
+      /\b(last\s+(year|month|week))\b/i
+    ]
+
+    for (const pattern of pastTensePatterns) {
+      if (pattern.test(trimmedQuestion)) {
+        return {
+          valid: false,
+          reason: 'Questions about past events are not allowed',
+          category: 'OTHER'
+        }
+      }
+    }
+
+    const category = determineCategory(trimmedQuestion)
+
+    return {
+      valid: true,
+      reason: 'Passes basic validation checks',
+      category: category
+    }
   }
-}
 
   // Determine category based on question content
   const determineCategory = (question: string): string => {
@@ -461,10 +462,10 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
       } else {
         // Check PDX balance before creating market
         const totalRequired = (parseFloat(initialYes) + parseFloat(initialNo)).toFixed(4)
-        
+
         if (pdxHook.checkPDXBalance) {
           const balanceCheck = await pdxHook.checkPDXBalance(totalRequired)
-          
+
           if (!balanceCheck.hasBalance) {
             setError(`Insufficient PDX balance. You have ${balanceCheck.currentBalance} PDX but need ${balanceCheck.required} PDX to create this market.`)
             return
@@ -517,8 +518,8 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
       <Card className="w-full h-[90vh] overflow-scroll max-w-2xl p-6 relative my-8">
-        <button 
-          onClick={onClose} 
+        <button
+          onClick={onClose}
           className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
           disabled={isProcessing}
         >
@@ -536,11 +537,10 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => handleTokenSwitch("BNB")}
-                className={`p-4 rounded-lg border-2 transition-all ${
-                  paymentToken === "BNB"
+                className={`p-4 rounded-lg border-2 transition-all ${paymentToken === "BNB"
                     ? 'border-yellow-500 bg-yellow-500/10'
                     : 'border-muted hover:border-muted-foreground/50'
-                }`}
+                  }`}
                 disabled={isProcessing}
               >
                 <div className="font-semibold">🔶 BNB</div>
@@ -548,11 +548,10 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
               </button>
               <button
                 onClick={() => handleTokenSwitch("PDX")}
-                className={`p-4 rounded-lg border-2 transition-all ${
-                  paymentToken === "PDX"
+                className={`p-4 rounded-lg border-2 transition-all ${paymentToken === "PDX"
                     ? 'border-purple-500 bg-purple-500/10'
                     : 'border-muted hover:border-muted-foreground/50'
-                }`}
+                  }`}
                 disabled={isProcessing}
               >
                 <div className="font-semibold">💜 PDX</div>
@@ -585,7 +584,7 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
                 disabled={isValidating || !question || question.length < 10 || !endDate || !endTime}
               >
                 {isValidating ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <LogoLoading size={16} />
                 ) : (
                   <Shield className="w-4 h-4 mr-2" />
                 )}
@@ -607,11 +606,10 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
 
           {/* Validation Result */}
           {validationResult && (
-            <div className={`p-3 rounded-lg border ${
-              validationResult.valid 
-                ? 'bg-green-950/20 border-green-500 text-green-400' 
+            <div className={`p-3 rounded-lg border ${validationResult.valid
+                ? 'bg-green-950/20 border-green-500 text-green-400'
                 : 'bg-red-950/20 border-red-500 text-red-400'
-            }`}>
+              }`}>
               <div className="flex items-start gap-2">
                 {validationResult.valid ? (
                   <Shield className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -781,10 +779,10 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
 
           {/* Action Buttons using RainbowKit ConnectButton.Custom */}
           <div className="flex gap-3">
-            <Button 
-              onClick={onClose} 
-              variant="outline" 
-              className="flex-1" 
+            <Button
+              onClick={onClose}
+              variant="outline"
+              className="flex-1"
               disabled={isProcessing}
             >
               Cancel
@@ -831,26 +829,26 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
 
                 if (!isContractReady) {
                   return (
-                    <Button 
-                      disabled 
+                    <Button
+                      disabled
                       className="flex-1"
                       variant="outline"
                     >
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <LogoLoading size={16} />
                       {!canTransact ? "Checking Wallet..." : "Loading Contract..."}
                     </Button>
                   )
                 }
 
                 return (
-                  <Button 
-                    onClick={handleCreate} 
-                    className="flex-1 bg-white text-black hover:bg-white/90" 
+                  <Button
+                    onClick={handleCreate}
+                    className="flex-1 bg-white text-black hover:bg-white/90"
                     disabled={Boolean(isProcessing || isLoading || (validationResult && !validationResult.valid) || !canTransact)}
                   >
                     {isProcessing || isLoading ? (
                       <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        <LogoLoading size={16} />
                         Creating...
                       </>
                     ) : (
@@ -882,8 +880,8 @@ const performBasicValidation = (question: string, endTime: number, initialYes: s
                 </div>
               )}
               {canTransact && !isFullyReady && (
-                <div className="text-blue-400">
-                  <Loader2 className="inline w-3 h-3 mr-1 animate-spin" />
+                <div className="text-blue-400 flex items-center gap-1">
+                  <LogoLoading size={12} />
                   Initializing {paymentToken} contracts...
                 </div>
               )}

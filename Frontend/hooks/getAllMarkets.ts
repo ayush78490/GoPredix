@@ -52,8 +52,10 @@ export function useAllMarkets() {
   const fetchBNBMarket = useCallback(
     async (marketId: number): Promise<UnifiedMarket | null> => {
       try {
+        console.log(`🔍 Fetching BNB market ID ${marketId}...`)
         const market = await bnbHook.getMarket(marketId)
         if (market) {
+          console.log(`✅ BNB market ${marketId} fetched:`, market.question)
           return {
             ...market,
             id: `BNB-${marketId}`,
@@ -65,8 +67,10 @@ export function useAllMarkets() {
             paymentToken: "BNB" as const
           }
         }
+        console.log(`⚠️ BNB market ${marketId} returned null`)
         return null
       } catch (error) {
+        console.error(`❌ Error fetching BNB market ${marketId}:`, error)
         return null
       }
     },
@@ -111,16 +115,20 @@ export function useAllMarkets() {
   // Fetch all BNB markets by iterating through IDs
   const getAllBNBMarkets = useCallback(async (): Promise<UnifiedMarket[]> => {
     try {
-      
+      console.log('🔍 getAllBNBMarkets called, contract ready:', bnbHook.isContractReady, 'contract exists:', !!bnbHook.marketContract)
+
       if (!bnbHook.marketContract) {
+        console.log('⚠️ BNB market contract not available')
         return []
       }
 
       try {
+        console.log('🔍 BNB Hook contract address:', await bnbHook.marketContract.getAddress())
         const nextMarketId = await bnbHook.marketContract.nextMarketId()
         const totalMarkets = Number(nextMarketId)
-        
-        
+
+        console.log(`📊 BNB Contract has ${totalMarkets} markets (nextMarketId: ${nextMarketId})`)
+
         if (totalMarkets === 0) {
           return []
         }
@@ -132,7 +140,7 @@ export function useAllMarkets() {
 
         const results = await Promise.all(marketPromises)
         const validMarkets = results.filter((m): m is UnifiedMarket => m !== null)
-        
+
         return validMarkets
       } catch (err) {
         console.error("❌ Error iterating BNB markets:", err)
@@ -147,15 +155,15 @@ export function useAllMarkets() {
   // Fetch all PDX markets by iterating through IDs
   const getAllPDXMarkets = useCallback(async (): Promise<UnifiedMarket[]> => {
     try {
-      
+
       if (!pdxHook.isContractReady) {
         return []
       }
 
       try {
         const marketIds = await pdxHook.getPDXMarketIds()
-        
-        
+
+
         if (marketIds.length === 0) {
           return []
         }
@@ -164,7 +172,7 @@ export function useAllMarkets() {
         const marketPromises = marketIds.map(id => fetchPDXMarket(id))
         const results = await Promise.all(marketPromises)
         const validMarkets = results.filter((m): m is UnifiedMarket => m !== null)
-        
+
         return validMarkets
       } catch (err) {
         console.error("❌ Error iterating PDX markets:", err)
@@ -179,13 +187,13 @@ export function useAllMarkets() {
   // Fetch all markets (both BNB and PDX)
   const getAllMarkets = useCallback(async (): Promise<UnifiedMarket[]> => {
     try {
-      
+
       const [bnbMarkets, pdxMarkets] = await Promise.all([
         getAllBNBMarkets(),
         getAllPDXMarkets()
       ])
 
-      const allMarkets = [...bnbMarkets, ...pdxMarkets].sort((a, b) => 
+      const allMarkets = [...bnbMarkets, ...pdxMarkets].sort((a, b) =>
         (b.endTime || 0) - (a.endTime || 0)
       )
 
@@ -200,18 +208,18 @@ export function useAllMarkets() {
   const loadMarkets = useCallback(async () => {
     setIsLoading(true)
     setError(null)
-    
+
     try {
       const marketsData = await getAllMarkets()
       setMarkets(marketsData)
-      
+
       // PERSIST TO LOCALSTORAGE SO DATA SURVIVES PAGE REFRESH
       try {
-        localStorage.setItem('cachedMarkets', JSON.stringify(marketsData))
-        localStorage.setItem('marketsCacheTime', Date.now().toString())
+        localStorage.setItem('cachedMarkets_v3', JSON.stringify(marketsData))
+        localStorage.setItem('marketsCacheTime_v3', Date.now().toString())
       } catch (e) {
       }
-      
+
       if (marketsData.length === 0) {
         setError("No markets found on the blockchain")
       } else {
@@ -254,7 +262,7 @@ export function useAllMarkets() {
   // NEW: Restore cached markets on mount (BEFORE contracts load)
   useEffect(() => {
     try {
-      const cached = localStorage.getItem('cachedMarkets')
+      const cached = localStorage.getItem('cachedMarkets_v3')
       if (cached) {
         const cachedMarkets = JSON.parse(cached)
         setMarkets(cachedMarkets)
@@ -299,7 +307,7 @@ export function useAllMarkets() {
   // Search markets
   const searchMarkets = useCallback((query: string) => {
     const lowerQuery = query.toLowerCase()
-    return markets.filter(m => 
+    return markets.filter(m =>
       m.question.toLowerCase().includes(lowerQuery) ||
       m.category.toLowerCase().includes(lowerQuery)
     )
@@ -318,7 +326,7 @@ export function useAllMarkets() {
   // Get active markets (open and not ended)
   const getActiveMarkets = useCallback(() => {
     const now = Math.floor(Date.now() / 1000)
-    return markets.filter(m => 
+    return markets.filter(m =>
       m.status === MARKET_STATUS.OPEN && m.endTime > now
     )
   }, [markets])
@@ -326,7 +334,7 @@ export function useAllMarkets() {
   // Get ended but not resolved markets
   const getEndedUnresolvedMarkets = useCallback(() => {
     const now = Math.floor(Date.now() / 1000)
-    return markets.filter(m => 
+    return markets.filter(m =>
       m.status === MARKET_STATUS.OPEN && m.endTime <= now
     )
   }, [markets])
@@ -334,39 +342,39 @@ export function useAllMarkets() {
   return {
     // Market data
     markets,
-    
+
     // Loading states
     isLoading,
     error,
-    
+
     // Refresh functions
     refreshMarkets,
     loadMarkets,
-    
+
     // Fetch functions (for single markets)
     getAllMarkets,
     getAllBNBMarkets,
     getAllPDXMarkets,
-    
+
     // Filter functions - by token
     getBNBMarkets,
     getPDXMarkets,
-    
+
     // Filter functions - by status
     getOpenMarkets,
     getResolvedMarkets,
     getResolvingMarkets,
     getDisputedMarkets,
-    
+
     // Filter functions - by time
     getActiveMarkets,
     getEndedUnresolvedMarkets,
-    
+
     // Filter functions - by other criteria
     searchMarkets,
     getMarketsByCreator,
     getMarketsByCategory,
-    
+
     // Status
     isContractReady: bnbHook.isContractReady || pdxHook.isContractReady,
     isBNBReady: bnbHook.isContractReady,

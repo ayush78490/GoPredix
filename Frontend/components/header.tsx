@@ -4,6 +4,9 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, Bell, Wifi, WifiOff, AlertCircle, Menu, X } from "lucide-react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { motion } from "framer-motion"
+import { cn } from "@/lib/utils"
 import { useWeb3Context, MobileWalletSelector } from "@/lib/wallet-context"
 import { CustomConnectButton } from "./custom-connect-button"
 import { useAccount, useDisconnect } from "wagmi"
@@ -13,6 +16,7 @@ export default function Header() {
   const [isOpen, setIsOpen] = useState(false)
   const [showNetworkAlert, setShowNetworkAlert] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
 
   const {
     account,
@@ -92,7 +96,7 @@ export default function Header() {
             </div>
           )}
 
-          <div className="flex items-center justify-between bg-black/50 rounded-full px-4 md:px-6 py-3 md:py-4 shadow-sm border border-cyan-300 backdrop-blur-sm">
+          <div className="relative flex items-center justify-between bg-black/50 rounded-full px-4 md:px-6 py-3 md:py-4 shadow-sm border border-cyan-300 backdrop-blur-sm">
             {/* Left: Logo and nav */}
             <div className="flex items-center gap-3 md:gap-8">
               <Link href="/" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition">
@@ -119,18 +123,43 @@ export default function Header() {
               </Link>
             </div>
 
-            {/* Desktop: Portfolio + Wallet */}
-            <div className="hidden md:flex items-center gap-3">
-              <Link href="/profile">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-white bg-transparent hover:bg-white/10 rounded-full px-5 transition-colors"
-                >
-                  Portfolio
-                </Button>
-              </Link>
+            {/* Center: Navigation Buttons */}
+            <div className="hidden md:flex items-center gap-1 absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2">
+              {[
+                { href: "/markets", label: "Markets" },
+                { href: "/profile", label: "Portfolio" },
+                { href: "/marketplace", label: "Marketplace" },
+              ].map((link) => {
+                const isActive = pathname.startsWith(link.href)
 
+                return (
+                  <Link key={link.href} href={link.href} className="relative group">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "bg-transparent rounded-full px-5 transition-colors relative z-10 hover:bg-white/10",
+                        isActive ? "text-cyan-300" : "text-white hover:text-cyan-100"
+                      )}
+                    >
+                      {link.label}
+                    </Button>
+                    {isActive && (
+                      <motion.div
+                        layoutId="navbar-underline"
+                        className="absolute bottom-1 left-4 right-4 h-0.5 bg-cyan-300 rounded-full"
+                        initial={{ opacity: 0, scaleX: 0.5 }}
+                        animate={{ opacity: 1, scaleX: 1 }}
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+
+            {/* Right: Wallet */}
+            <div className="hidden md:flex items-center gap-3">
               {displayAccount ? (
                 <div className="flex items-center gap-2">
                   <Button
@@ -204,6 +233,14 @@ export default function Header() {
             )}
 
             <Link
+              href="/markets"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-white hover:text-cyan-300 transition-colors py-3 px-4 hover:bg-white/5 rounded-lg"
+            >
+              Markets
+            </Link>
+
+            <Link
               href="/profile"
               onClick={() => setMobileMenuOpen(false)}
               className="text-white hover:text-cyan-300 transition-colors py-3 px-4 hover:bg-white/5 rounded-lg"
@@ -212,11 +249,11 @@ export default function Header() {
             </Link>
 
             <Link
-              href="/markets"
+              href="/marketplace"
               onClick={() => setMobileMenuOpen(false)}
               className="text-white hover:text-cyan-300 transition-colors py-3 px-4 hover:bg-white/5 rounded-lg"
             >
-              Markets
+              Marketplace
             </Link>
 
             <Link
