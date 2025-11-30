@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserProfileByWallet } from '@/lib/supabase'
+
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
     try {
@@ -13,6 +15,16 @@ export async function GET(request: NextRequest) {
             )
         }
 
+        // Check if Supabase is configured
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+            return NextResponse.json(
+                { error: 'Database not configured' },
+                { status: 503 }
+            )
+        }
+
+        // Dynamically import to avoid build-time errors
+        const { getUserProfileByWallet } = await import('@/lib/supabase')
         const profile = await getUserProfileByWallet(walletAddress)
 
         if (!profile) {

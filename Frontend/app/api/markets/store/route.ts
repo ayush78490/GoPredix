@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
     try {
@@ -39,6 +39,17 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
                 { error: 'createdAt is required' },
                 { status: 400 }
+            )
+        }
+
+        // Check if Supabase is configured
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+        if (!supabaseUrl || !supabaseKey) {
+            return NextResponse.json(
+                { error: 'Database not configured' },
+                { status: 503 }
             )
         }
 

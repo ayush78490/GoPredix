@@ -14,15 +14,41 @@ import { useAccount } from "wagmi"
 import { toast } from "@/hooks/use-toast"
 import { LogoLoading } from "@/components/ui/logo-loading"
 
+
 export default function MarketplacePage() {
     const { markets, isLoading: isMarketsLoading } = useAllMarkets()
-    const { getAllListings, buyMarket, isReady } = useMarketMarketplace()
+    const { getAllListings, buyMarket, cancelListing, isReady } = useMarketMarketplace()
     const { address: account, isConnected } = useAccount()
 
     const [listings, setListings] = useState<MarketListing[]>([])
     const [isLoadingListings, setIsLoadingListings] = useState(true)
     const [isSellModalOpen, setIsSellModalOpen] = useState(false)
     const [buyingMarketId, setBuyingMarketId] = useState<number | null>(null)
+    const [cancellingMarketId, setCancellingMarketId] = useState<number | null>(null)
+
+    const handleCancel = async (marketId: number) => {
+        if (!isConnected) return
+
+        setCancellingMarketId(marketId)
+        try {
+            await cancelListing(marketId)
+            toast({
+                title: "Listing Cancelled",
+                description: "Your market listing has been cancelled.",
+            })
+            fetchListings()
+        } catch (error: any) {
+            console.error(error)
+            toast({
+                title: "Cancellation Failed",
+                description: error.message || "Failed to cancel listing",
+                variant: "destructive"
+            })
+        } finally {
+            setCancellingMarketId(null)
+        }
+    }
+
 
     // Helper functions for market conversion
     const extractCategory = (question: string): string => {
@@ -168,19 +194,19 @@ export default function MarketplacePage() {
                 return null
             }
 
-            console.log(`✓ Matched listing #${listing.listingId} to market ${market.id} (numericId: ${market.numericId}, active: ${listing.isActive})`)
+            console.log(`✓ Matched listing #${listing.listingId} to market ${market.id} (numericId: ${market.numericId}, active: ${listing.isActive}, transferred: ${listing.isTransferred})`)
             return {
                 market: convertToFrontendMarket(market),
                 listing
             }
         }).filter(item => item !== null) as { market: any, listing: MarketListing }[]
 
-        const activeMatched = matched.filter(m => m.listing.isActive)
-        console.log(`📊 Final result: ${matched.length} total listed markets (${activeMatched.length} active, ${matched.length - activeMatched.length} inactive)`)
-        return matched
+        const activeMatched = matched.filter(m => m.listing.isActive) // Show all active listings, even if pending transfer
+        console.log(`📊 Final result: ${matched.length} total listed markets (${activeMatched.length} active)`)
+        return activeMatched
     }, [listings, markets])
 
-    const handleBuy = async (marketId: number, price: string) => {
+    const handleBuy = async (marketId: number) => {
         if (!isConnected) {
             toast({
                 title: "Connect Wallet",
@@ -191,18 +217,16 @@ export default function MarketplacePage() {
         }
 
         setBuyingMarketId(marketId)
+        console.log(`Buying market ${marketId}`)
         try {
-            console.log(`Attempting to buy market ${marketId} for ${price} PDX`);
             // Find listing to check seller
-            const listing = listings.find(l => l.marketId === marketId);
+            const listing = listings.find(l => l.marketId === marketId)
             if (listing && isConnected && account && listing.seller.toLowerCase() === account.toLowerCase()) {
-                throw new Error("You cannot buy your own listing.");
+                throw new Error("You cannot buy your own listing.")
             }
 
-            await buyMarket(marketId, price) // Assuming price is not needed for buyMarket call based on ABI, but passing it just in case logic changes. The hook ignores it if not needed.
-            // Actually my hook implementation of buyMarket takes (marketId, price) but only uses marketId.
-            // Wait, I should check if I need to approve PDX.
-            // The user didn't ask for approval flow, but if it fails, I might need to add it.
+            // buyMarket now only takes marketId - contract reads price from listing
+            await buyMarket(marketId)
 
             toast({
                 title: "Success!",
@@ -273,8 +297,10 @@ export default function MarketplacePage() {
                                             key={listing.listingId}
                                             market={market}
                                             listing={listing}
-                                            onBuy={() => handleBuy(listing.marketId, listing.price)}
+                                            onBuy={() => handleBuy(listing.marketId)}
+                                            onCancel={() => handleCancel(listing.marketId)}
                                             isBuying={buyingMarketId === listing.marketId}
+                                            isCancelling={cancellingMarketId === listing.marketId}
                                         />
                                     ))}
                                 </div>

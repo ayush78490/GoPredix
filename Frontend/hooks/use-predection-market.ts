@@ -8,7 +8,7 @@ const PREDICTION_MARKET_ABI = (PREDICTION_MARKET_JSON as any).abi || PREDICTION_
 const HELPER_ABI = (HELPER_JSON as any).abi || HELPER_JSON
 
 // Contract addresses - BNB only
-const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x12FD6C9B618949d940806B0E59e3c65507eC37E8'
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x52Ca4B7673646B8b922ea00ccef6DD0375B14619'
 const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0xC940106a30742F21daE111d41e8F41d482feda15'
 
 console.log('🔍 BNB Hook using Prediction Market:', PREDICTION_MARKET_ADDRESS)
@@ -66,7 +66,6 @@ export interface BNBMarket {
 
 export interface MarketCreationParams {
   question: string
-  category: string
   endTime: number
   initialYes: string
   initialNo: string
@@ -142,7 +141,7 @@ async function validateMarketWithPerplexity(params: MarketCreationParams): Promi
     // ✅ Fallback to local validation
     return {
       valid: true,
-      category: params.category || 'General',
+      category: 'General',
       reason: 'Using local validation'
     }
   }
@@ -278,10 +277,10 @@ export function usePredictionMarketBNB() {
       try {
         validation = await validateMarketWithPerplexity(params)
         if (!validation.valid) {
-          validation = { valid: true, category: params.category || 'General' }
+          validation = { valid: true, category: 'General' }
         }
       } catch (error) {
-        validation = { valid: true, category: params.category || 'General' }
+        validation = { valid: true, category: 'General' }
       }
 
       const marketWithSigner = new ethers.Contract(
@@ -297,7 +296,6 @@ export function usePredictionMarketBNB() {
 
       const tx = await (marketWithSigner as any).createMarket(
         params.question,
-        validation.category || params.category || 'General',
         BigInt(params.endTime),
         initialYesWei,
         initialNoWei,
@@ -334,7 +332,7 @@ export function usePredictionMarketBNB() {
             transactionHash: receipt.hash,
             creatorAddress: account,
             question: params.question,
-            category: validation.category || params.category || 'General',
+            category: validation.category || 'General',
             endTime: params.endTime,
           }),
         })
@@ -390,7 +388,7 @@ export function usePredictionMarketBNB() {
         id: marketId,
         creator: marketData.creator,
         question: marketData.question,
-        category: marketData.category || "General",
+        category: "General",
         endTime: Number(marketData.endTime),
         outcome: Number(marketData.outcome),
         status: Number(marketData.status),
@@ -403,11 +401,11 @@ export function usePredictionMarketBNB() {
         platformFees: ethers.formatEther(marketData.platformFees),
         resolutionRequestedAt: Number(marketData.resolutionRequestedAt),
         resolutionRequester: marketData.resolutionRequester,
-        resolutionReason: marketData.resolutionReason,
+        resolutionReason: marketData.resolutionReason ? ethers.decodeBytes32String(marketData.resolutionReason) : "",
         resolutionConfidence: Number(marketData.resolutionConfidence),
         disputeDeadline: Number(marketData.disputeDeadline),
         disputer: marketData.disputer,
-        disputeReason: marketData.disputeReason,
+        disputeReason: "",
         yesPrice,
         noPrice,
         yesMultiplier,
@@ -786,7 +784,8 @@ export function usePredictionMarketBNB() {
     const tx = await (marketWithSigner as any).sellYesForBNB(
       BigInt(marketId),
       tokenAmountWei,
-      minBNBOutWei
+      minBNBOutWei,
+      { gasLimit: 500000n }
     )
 
     return await tx.wait()

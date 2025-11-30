@@ -4,8 +4,8 @@ import { ethers } from "hardhat";
 async function main() {
     console.log("Deploying CustodialMarketplace...");
 
-    const PDX_TOKEN_ADDRESS = "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8";
-    const PREDICTION_MARKET_ADDRESS = "0xd8E0D86F14b76b79Cc160534Eb9ECeDDf28632f1";
+    const PDX_TOKEN_ADDRESS = "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8"; // User's existing PDX token
+    const PREDICTION_MARKET_ADDRESS = "0x90FD905aB1F479399117F6EB6b3e3E58f94e26f1"; // Updated BNB market
     const MARKETPLACE_FEE_BPS = 250; // 2.5%
 
     const CustodialMarketplace = await ethers.getContractFactory("CustodialMarketplace");

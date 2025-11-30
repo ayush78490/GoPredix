@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { linkTwitterToWallet } from '@/lib/supabase'
+
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
     try {
@@ -20,6 +22,17 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             )
         }
+
+        // Check if Supabase is configured
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+            return NextResponse.json(
+                { error: 'Database not configured' },
+                { status: 503 }
+            )
+        }
+
+        // Dynamically import to avoid build-time errors
+        const { linkTwitterToWallet } = await import('@/lib/supabase')
 
         // Link Twitter account to wallet
         const profile = await linkTwitterToWallet(walletAddress, twitterData)

@@ -464,10 +464,9 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
         return (triggered, price, order.triggerPrice);
     }
 
-    function createMarket(string calldata question, string calldata category, uint256 endTime, uint256 initialYes, uint256 initialNo) external payable nonReentrant returns (uint256) {
+    function createMarket(string calldata question, uint256 endTime, uint256 initialYes, uint256 initialNo) external payable nonReentrant returns (uint256) {
         require(endTime > block.timestamp + 1 hours);
         require(bytes(question).length > 0 && bytes(question).length <= 280);
-        require(bytes(category).length > 0);
         require(initialYes > 0 && initialNo > 0 && (initialYes + initialNo) >= MIN_INITIAL_LIQUIDITY);
         require(msg.value >= (initialYes + initialNo));
 
@@ -475,7 +474,7 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
         OutcomeToken yesToken = new OutcomeToken(string.concat("YES: ", _truncate(question, 50)), string.concat("YES", _toString(id)), address(this));
         OutcomeToken noToken = new OutcomeToken(string.concat("NO: ", _truncate(question, 50)), string.concat("NO", _toString(id)), address(this));
 
-        markets[id] = Market(msg.sender, question, category, endTime, MarketStatus.Open, Outcome.Undecided, yesToken, noToken, initialYes, initialNo, 0, initialYes + initialNo, 0, 0, address(0), "", 0, 0, address(0), "");
+        markets[id] = Market(msg.sender, question, "", endTime, MarketStatus.Open, Outcome.Undecided, yesToken, noToken, initialYes, initialNo, 0, initialYes + initialNo, 0, 0, address(0), "", 0, 0, address(0), "");
 
         yesToken.mint(address(this), initialYes);
         noToken.mint(address(this), initialNo);
@@ -491,7 +490,7 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
             _transferBNB(msg.sender, msg.value - (initialYes + initialNo));
         }
 
-        emit MarketCreated(id, question, category, address(yesToken), address(noToken), endTime);
+        emit MarketCreated(id, question, "", address(yesToken), address(noToken), endTime);
         emit LiquidityAdded(id, msg.sender, initialYes, initialNo, liquidity - MINIMUM_LIQUIDITY);
 
         return id;

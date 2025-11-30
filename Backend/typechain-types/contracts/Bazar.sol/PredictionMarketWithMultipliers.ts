@@ -169,7 +169,7 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "createMarket",
-    values: [string, string, BigNumberish, BigNumberish, BigNumberish]
+    values: [string, BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "createStopLossOrder",
@@ -814,7 +814,6 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
   createMarket: TypedContractMethod<
     [
       question: string,
-      category: string,
       endTime: BigNumberish,
       initialYes: BigNumberish,
       initialNo: BigNumberish
@@ -1088,7 +1087,6 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
   ): TypedContractMethod<
     [
       question: string,
-      category: string,
       endTime: BigNumberish,
       initialYes: BigNumberish,
       initialNo: BigNumberish

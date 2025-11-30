@@ -99,33 +99,9 @@ export const CHAIN_CONFIG = {
 };
 
 export const NEXT_PUBLIC_PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS as string;
-export const CUSTODIAL_MARKETPLACE_ADDRESS = process.env.NEXT_PUBLIC_CUSTODIAL_MARKETPLACE_ADDRESS as string;
+export const CUSTODIAL_MARKETPLACE_ADDRESS = "0x2FC004d8d92Dee66FDF042BcE63C88E255b1237a"; // process.env.NEXT_PUBLIC_CUSTODIAL_MARKETPLACE_ADDRESS as string;
 
 // Additional exports for consistency
 export const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS as string;
 export const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS as string;
 export const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS as string;
-
-export const MARKET_MARKETPLACE_ABI = [
-  "function listMarket(uint256 marketId, uint256 price) external returns (uint256)",
-  "function confirmTransfer(uint256 marketId) external",
-  "function buyMarket(uint256 marketId) external",
-  "function cancelListing(uint256 marketId) external",
-  "function updatePrice(uint256 marketId, uint256 newPrice) external",
-  "function getListing(uint256 listingId) external view returns ((address seller, uint256 marketId, uint256 price, uint256 listedAt, bool isActive, bool isTransferred))",
-  "function getListingByMarket(uint256 marketId) external view returns (uint256)",
-  "function isMarketListed(uint256 marketId) external view returns (bool)",
-  "function nextListingId() external view returns (uint256)",
-  "function listings(uint256 listingId) external view returns (address seller, uint256 marketId, uint256 price, uint256 listedAt, bool isActive, bool isTransferred)",
-  "function marketToListing(uint256 marketId) external view returns (uint256)",
-  "function marketplaceFeeBps() external view returns (uint32)",
-  "event MarketListed(uint256 indexed listingId, uint256 indexed marketId, address indexed seller, uint256 price, uint256 timestamp)",
-  "event MarketOwnershipConfirmed(uint256 indexed listingId, uint256 indexed marketId, uint256 timestamp)",
-  "event MarketSold(uint256 indexed listingId, uint256 indexed marketId, address indexed seller, address buyer, uint256 price, uint256 timestamp)",
-  "event ListingCancelled(uint256 indexed listingId, uint256 indexed marketId, address indexed seller, uint256 timestamp)",
-  "event ListingPriceUpdated(uint256 indexed listingId, uint256 indexed marketId, uint256 oldPrice, uint256 newPrice, uint256 timestamp)"
-] as const;
-
-export const PREDICTION_MARKET_OWNERSHIP_ABI = [
-  "function transferMarketOwnership(uint256 id, address newOwner) external"
-] as const;

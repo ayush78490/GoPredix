@@ -101,81 +101,24 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       return false
     }
 
-    if (!endDate || !endTime) {
-      setError("Please set an end date and time first")
-      return false
-    }
-
-    // Date validation with detailed debugging
-    let endDateTime
+    // Date validation (only if dates are provided)
     let endTimeUnix
-    try {
-      endDateTime = new Date(`${endDate}T${endTime}:00`)
-
-      // Debug date parsing
-
-      if (isNaN(endDateTime.getTime())) {
-        setError("Invalid date or time format")
-        return false
+    if (endDate && endTime) {
+      try {
+        const endDateTime = new Date(`${endDate}T${endTime}:00`)
+        if (isNaN(endDateTime.getTime())) {
+          setError("Invalid date or time format")
+          return false
+        }
+        endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
+      } catch (dateError) {
+        console.error('❌ Date parsing error:', dateError)
       }
-
-      endTimeUnix = Math.floor(endDateTime.getTime() / 1000)
-
-      // Validate end time is at least 1 hour from now
-      const now = new Date()
-      const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
-
-
-      if (endDateTime <= oneHourFromNow) {
-        setError(`End time must be at least 1 hour from now. Selected: ${endDateTime.toLocaleString()}`)
-        return false
-      }
-
-      // Validate it's not too far in future (optional safety check)
-      const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
-      if (endDateTime > oneYearFromNow) {
-        setError("End time cannot be more than 1 year from now")
-        return false
-      }
-
-    } catch (dateError) {
-      console.error('❌ Date parsing error:', dateError)
-      setError("Invalid date format. Please check your date and time.")
-      return false
+    } else {
+      // Default to 7 days from now for validation purposes if not set
+      endTimeUnix = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60)
     }
 
-    // Liquidity validation
-    try {
-      const yesAmount = parseFloat(initialYes)
-      const noAmount = parseFloat(initialNo)
-      const totalLiquidity = yesAmount + noAmount
-
-      if (isNaN(yesAmount) || isNaN(noAmount)) {
-        setError("Invalid liquidity amounts")
-        return false
-      }
-
-      if (yesAmount <= 0 || noAmount <= 0) {
-        setError("Both YES and NO liquidity must be greater than 0")
-        return false
-      }
-
-      if (totalLiquidity < 0.01) {
-        setError(`Total liquidity must be at least 0.01 ${paymentToken}`)
-        return false
-      }
-
-      // Validate reasonable maximum (optional)
-      if (totalLiquidity > 1000) {
-        setError(`Total liquidity cannot exceed 1000 ${paymentToken}`)
-        return false
-      }
-
-    } catch (liquidityError) {
-      console.error('❌ Liquidity validation error:', liquidityError)
-      setError("Invalid liquidity values")
-      return false
-    }
 
     // AI Validation
     setIsValidating(true)
@@ -185,8 +128,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       const requestBody = {
         question: question.trim(),
         endTime: endTimeUnix,
-        initialYes,
-        initialNo
+        initialYes: initialYes || "0.1",
+        initialNo: initialNo || "0.1"
       }
 
 
@@ -249,7 +192,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       }
 
       // Fallback to basic validation
-      const basicValidation = performBasicValidation(question, endTimeUnix, initialYes, initialNo)
+      const basicValidation = performBasicValidation(question, endTimeUnix || 0, initialYes, initialNo)
       setValidationResult(basicValidation)
 
       if (!basicValidation.valid) {
@@ -454,7 +397,6 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       if (paymentToken === "BNB") {
         marketId = await bnbHook.createMarket({
           question,
-          category: validationResult?.category || "GENERAL",
           endTime: endTimeUnix,
           initialYes,
           initialNo,
@@ -538,8 +480,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <button
                 onClick={() => handleTokenSwitch("BNB")}
                 className={`p-4 rounded-lg border-2 transition-all ${paymentToken === "BNB"
-                    ? 'border-yellow-500 bg-yellow-500/10'
-                    : 'border-muted hover:border-muted-foreground/50'
+                  ? 'border-yellow-500 bg-yellow-500/10'
+                  : 'border-muted hover:border-muted-foreground/50'
                   }`}
                 disabled={isProcessing}
               >
@@ -549,8 +491,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <button
                 onClick={() => handleTokenSwitch("PDX")}
                 className={`p-4 rounded-lg border-2 transition-all ${paymentToken === "PDX"
-                    ? 'border-purple-500 bg-purple-500/10'
-                    : 'border-muted hover:border-muted-foreground/50'
+                  ? 'border-purple-500 bg-purple-500/10'
+                  : 'border-muted hover:border-muted-foreground/50'
                   }`}
                 disabled={isProcessing}
               >
@@ -581,7 +523,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 variant="outline"
                 size="sm"
                 onClick={validateQuestion}
-                disabled={isValidating || !question || question.length < 10 || !endDate || !endTime}
+                disabled={isValidating || !question || question.length < 10}
               >
                 {isValidating ? (
                   <LogoLoading size={16} />
@@ -607,8 +549,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           {/* Validation Result */}
           {validationResult && (
             <div className={`p-3 rounded-lg border ${validationResult.valid
-                ? 'bg-green-950/20 border-green-500 text-green-400'
-                : 'bg-red-950/20 border-red-500 text-red-400'
+              ? 'bg-green-950/20 border-green-500 text-green-400'
+              : 'bg-red-950/20 border-red-500 text-red-400'
               }`}>
               <div className="flex items-start gap-2">
                 {validationResult.valid ? (

@@ -19,8 +19,8 @@ interface SellMarketModalProps {
 
 export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMarketModalProps) {
     const { address } = useAccount()
-    const { markets } = useAllMarkets()
-    const { listMarket, transferOwnership, confirmTransfer, isMarketListed } = useMarketMarketplace()
+    const { markets, refreshMarkets } = useAllMarkets()
+    const { listMarket, transferOwnership, confirmTransfer, isMarketListed, isOwnershipTransferred } = useMarketMarketplace()
     const bnbHook = usePredictionMarketBNB()
 
     const [selectedMarketId, setSelectedMarketId] = useState<number | null>(null)
@@ -38,16 +38,18 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
         const filtered = markets.filter(m => {
             const isCreator = m.creator.toLowerCase() === address.toLowerCase()
             const isBNB = m.paymentToken === "BNB"
+            const isOpen = Number(m.status) === 0 // Ensure market is Open
 
             console.log(`Market ${m.id}:`, {
                 creator: m.creator,
                 paymentToken: m.paymentToken,
                 isCreator,
                 isBNB,
-                passes: isCreator && isBNB
+                isOpen,
+                passes: isCreator && isBNB && isOpen
             })
 
-            return isCreator && isBNB
+            return isCreator && isBNB && isOpen
         })
 
         console.log('🔍 Sell Modal - Filtered markets:', filtered.length)
@@ -58,6 +60,14 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
         console.log('🔍 selectedMarketId changed to:', selectedMarketId, 'step:', step)
     }, [selectedMarketId, step])
 
+    // Refresh markets when modal opens - REMOVED as per user request to avoid cache filling
+    // useEffect(() => {
+    //     if (isOpen) {
+    //         console.log('🔄 Refreshing markets for Sell Modal...')
+    //         refreshMarkets()
+    //     }
+    // }, [isOpen, refreshMarkets])
+
     const handleAction = async () => {
         if (selectedMarketId === null || !price) return
 
@@ -65,41 +75,53 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
 
         try {
             if (step === 1) {
-                console.log(`📡 Step 1: Initializing listing...`)
-                console.log(`📊 Selected Market ID: ${selectedMarketId} (type: ${typeof selectedMarketId})`)
-
-                // Find the selected market in the list
-                const selectedMarket = userMarkets.find(m => m.numericId === selectedMarketId)
-                if (!selectedMarket) {
-                    throw new Error(`Market ID ${selectedMarketId} not found in your markets list. Please refresh the page.`)
-                }
-
-                console.log(`📋 Market details:`, {
-                    id: selectedMarket.id,
-                    numericId: selectedMarket.numericId,
-                    question: selectedMarket.question,
-                    creator: selectedMarket.creator
-                })
+                console.log(`📡 Step 1: Creating marketplace listing...`)
 
                 // Pre-flight checks
                 const isListed = await isMarketListed(selectedMarketId)
-                if (isListed) throw new Error('This market is already listed')
+                if (isListed) {
+                    console.log('⚠️ Market already listed. Checking transfer status...')
+                    // Check if transfer is pending
+                    // We need to find the listing ID first
+                    // But we can just assume if it's listed but we are here, we might need to resume
+                    // Let's try to move to step 2 directly if the user confirms
+
+                    toast({
+                        title: "Market Already Listed",
+                        description: "Resuming transfer process...",
+                    })
+                    setStep(2)
+                    return // Exit step 1 logic
+                }
 
                 await listMarket(selectedMarketId, price)
 
                 toast({
                     title: "Step 1 Complete",
-                    description: "Listing initialized. Now please transfer ownership.",
+                    description: "Market listed. Now transfer ownership.",
                 })
                 setStep(2)
             }
             else if (step === 2) {
-                console.log(`📡 Step 2: Transferring ownership...`)
+                console.log(`📡 Step 2: Transferring ownership to marketplace...`)
+
+                // Check if already transferred
+                const isTransferred = await isOwnershipTransferred(selectedMarketId)
+                if (isTransferred) {
+                    console.log('✅ Already transferred. Moving to step 3.')
+                    toast({
+                        title: "Already Transferred",
+                        description: "Ownership already transferred. Proceeding to confirmation.",
+                    })
+                    setStep(3)
+                    return
+                }
+
                 await transferOwnership(selectedMarketId)
 
                 toast({
                     title: "Step 2 Complete",
-                    description: "Ownership transferred. Now please confirm to activate.",
+                    description: "Ownership transferred. Now confirm to activate.",
                 })
                 setStep(3)
             }
@@ -109,7 +131,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
 
                 toast({
                     title: "Market Listed Successfully! 🎉",
-                    description: `Your market is now listed for ${price} PDX`,
+                    description: `Your market is now active and for sale.`,
                 })
                 onSuccess()
                 onClose()
@@ -134,16 +156,16 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
 
     const getButtonText = () => {
         if (isProcessing) return <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
-        if (step === 1) return "Initialize Listing"
+        if (step === 1) return "List Market"
         if (step === 2) return "Transfer Ownership"
-        if (step === 3) return "Confirm & Activate"
+        if (step === 3) return "Confirm Transfer"
         return "List Market"
     }
 
     const getStepDescription = () => {
-        if (step === 1) return "Step 1/3: Create the listing record on the marketplace."
-        if (step === 2) return "Step 2/3: Transfer market ownership to the marketplace contract."
-        if (step === 3) return "Step 3/3: Confirm the transfer to activate your listing."
+        if (step === 1) return "Step 1/3: Create listing on marketplace."
+        if (step === 2) return "Step 2/3: Transfer ownership to marketplace."
+        if (step === 3) return "Step 3/3: Confirm transfer to activate."
         return ""
     }
 
@@ -159,8 +181,6 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 1 ? 'bg-blue-500 text-white' : 'bg-gray-700'}`}>1</div>
                                 <ArrowRight className="w-4 h-4 text-muted-foreground" />
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 2 ? 'bg-blue-500 text-white' : 'bg-gray-700'}`}>2</div>
-                                <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 3 ? 'bg-blue-500 text-white' : 'bg-gray-700'}`}>3</div>
                                 <span className="ml-2 text-blue-200">{getStepDescription()}</span>
                             </div>
                         </div>
@@ -170,7 +190,17 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                 <div className="space-y-4 py-4">
                     {step === 1 && (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Select Your BNB Market</label>
+                            <div className="flex justify-between items-center">
+                                <label className="text-sm font-medium">Select Your BNB Market</label>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => refreshMarkets()}
+                                    className="h-6 text-xs text-blue-400 hover:text-blue-300"
+                                >
+                                    Refresh List
+                                </Button>
+                            </div>
                             <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-2">
                                 {userMarkets.length === 0 ? (
                                     <div className="text-center py-8 px-4 bg-white/5 rounded-lg">

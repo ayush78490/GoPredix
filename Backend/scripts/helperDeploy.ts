@@ -4,7 +4,7 @@ async function main() {
   console.log("🚀 Deploying PredictionMarketHelper...");
 
   // Your already deployed PredictionMarket address
-  const PREDICTION_MARKET_ADDRESS = "0xd8E0D86F14b76b79Cc160534Eb9ECeDDf28632f1";
+  const PREDICTION_MARKET_ADDRESS = "0x12FD6C9B618949d940806B0E59e3c65507eC37E8"; // Updated BNB market
 
   // Get the contract factory
   const PredictionMarketHelper = await hre.ethers.getContractFactory("PredictionMarketHelper");
