@@ -91,7 +91,7 @@ export interface OrderInfo {
 // PDX Market Creation Validation
 async function validatePDXMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
-    const res = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
+    const res = await fetch('https://go-predix.tarunsingh78490.workers.dev/api/validateMarket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
@@ -634,9 +634,14 @@ export function usePredictionMarketPDX() {
       // Add gas buffer to estimate (30% extra)
       const gasLimit = (gasEstimate * BigInt(130)) / BigInt(100)
 
+      const finalCategory = validation.category || params.category || 'General'
+      console.log('🔧 PDX Hook - Creating market with category:', finalCategory)
+      console.log('   validation.category:', validation.category)
+      console.log('   params.category:', params.category)
+
       const tx = await (marketWithSigner as any).createMarket(
         params.question,
-        validation.category || params.category || 'General',
+        finalCategory,
         BigInt(params.endTime),
         initialYesWei,
         initialNoWei,

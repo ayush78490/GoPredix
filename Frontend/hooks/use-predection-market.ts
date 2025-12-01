@@ -117,7 +117,7 @@ export enum OrderType {
 // AI Validation Helper - with fallback
 async function validateMarketWithPerplexity(params: MarketCreationParams): Promise<{ valid: boolean, reason?: string, category?: string }> {
   try {
-    const res = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
+    const res = await fetch('https://go-predix.tarunsingh78490.workers.dev/api/validateMarket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),

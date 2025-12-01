@@ -133,7 +133,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       }
 
 
-      const response = await fetch('https://sigma-predection.vercel.app/api/validateMarket', {
+      const response = await fetch('https://go-predix.tarunsingh78490.workers.dev/api/validateMarket', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -165,10 +165,15 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         throw new Error('Invalid response from validation service')
       }
 
+      console.log('✅ AI Validation Response:', validation)
+      console.log('   Category returned:', validation.category)
+
       setValidationResult(validation)
 
       if (!validation.valid) {
+        console.log('❌ Validation failed:', validation.reason)
       } else {
+        console.log('✅ Validation passed')
       }
 
       return validation.valid
@@ -302,14 +307,24 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     const lowerQuestion = question.toLowerCase()
 
     const categoryKeywords = {
-      CRYPTO: ['bitcoin', 'ethereum', 'crypto', 'blockchain', 'btc', 'eth', 'defi', 'nft', 'token', 'pdx'],
-      POLITICS: ['election', 'president', 'government', 'policy', 'senate', 'congress', 'vote'],
-      SPORTS: ['game', 'match', 'tournament', 'championship', 'olympics', 'team', 'player'],
-      TECHNOLOGY: ['launch', 'release', 'update', 'software', 'hardware', 'ai', 'artificial intelligence'],
-      FINANCE: ['stock', 'market', 'earnings', 'economic', 'gdp', 'inflation', 'interest rate'],
-      ENTERTAINMENT: ['movie', 'film', 'oscar', 'award', 'celebrity', 'music', 'album'],
-      SCIENCE: ['discovery', 'research', 'study', 'medical', 'health', 'space', 'nasa'],
-      WORLD: ['earthquake', 'hurricane', 'summit', 'conference', 'international', 'global']
+      CRYPTO: [
+        'bitcoin', 'ethereum', 'crypto', 'blockchain', 'btc', 'eth', 'defi', 'nft', 'token', 'pdx',
+        'ton', 'toncoin', 'solana', 'sol', 'cardano', 'ada', 'polkadot', 'dot', 'binance', 'bnb',
+        'ripple', 'xrp', 'dogecoin', 'doge', 'shiba', 'matic', 'polygon', 'avalanche', 'avax',
+        'chainlink', 'link', 'uniswap', 'uni', 'litecoin', 'ltc', 'stellar', 'xlm', 'cosmos', 'atom',
+        'tron', 'trx', 'monero', 'xmr', 'eos', 'tezos', 'xtz', 'algorand', 'algo', 'fantom', 'ftm',
+        'near', 'aptos', 'apt', 'sui', 'arbitrum', 'optimism', 'base', 'zksync', 'starknet',
+        'cryptocurrency', 'altcoin', 'stablecoin', 'usdt', 'usdc', 'dai', 'busd',
+        'web3', 'dao', 'dapp', 'smart contract', 'mining', 'staking', 'yield', 'liquidity',
+        'metamask', 'wallet', 'exchange', 'coinbase', 'binance', 'kraken', 'dex', 'cex'
+      ],
+      POLITICS: ['election', 'president', 'government', 'policy', 'senate', 'congress', 'vote', 'minister', 'parliament', 'legislation'],
+      SPORTS: ['game', 'match', 'tournament', 'championship', 'olympics', 'team', 'player', 'league', 'cup', 'world cup'],
+      TECHNOLOGY: ['launch', 'release', 'update', 'software', 'hardware', 'ai', 'artificial intelligence', 'apple', 'google', 'microsoft', 'tesla', 'spacex'],
+      FINANCE: ['stock', 'market', 'earnings', 'economic', 'gdp', 'inflation', 'interest rate', 'nasdaq', 'dow', 's&p', 'forex'],
+      ENTERTAINMENT: ['movie', 'film', 'oscar', 'award', 'celebrity', 'music', 'album', 'netflix', 'disney', 'box office'],
+      SCIENCE: ['discovery', 'research', 'study', 'medical', 'health', 'space', 'nasa', 'vaccine', 'climate'],
+      WORLD: ['earthquake', 'hurricane', 'summit', 'conference', 'international', 'global', 'war', 'peace', 'treaty']
     }
 
     for (const [category, keywords] of Object.entries(categoryKeywords)) {
@@ -346,11 +361,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
     // Validate question with AI if not already done
     if (!validationResult) {
-      const isValid = await validateQuestion()
-      if (!isValid) {
-        setError("Please validate your question first")
-        return
-      }
+      setError("Please validate your question with AI first to ensure accurate category detection")
+      return
     }
 
     if (validationResult && !validationResult.valid) {
@@ -414,9 +426,29 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           }
         }
 
+        // Use AI validation category (should always be available due to validation check above)
+        let categoryToUse = validationResult?.category
+
+        // Smart override: If AI returned "OTHER" but local detection finds a specific category, use local
+        if (categoryToUse === 'OTHER' || categoryToUse === 'General' || !categoryToUse) {
+          const localCategory = determineCategory(question)
+          if (localCategory !== 'OTHER') {
+            console.log(`🔄 Overriding AI category "${categoryToUse}" with local detection: ${localCategory}`)
+            categoryToUse = localCategory
+          } else if (!categoryToUse) {
+            // This should not happen due to validation check, but fallback just in case
+            console.warn('⚠️ WARNING: No AI validation category found! This should not happen.')
+            console.warn('   Using basic category detection as emergency fallback.')
+            categoryToUse = localCategory
+          }
+        }
+
+        console.log('📊 Creating PDX market with category:', categoryToUse)
+        console.log('   validationResult:', validationResult)
+
         marketId = await pdxHook.createMarketWithPDX({
           question,
-          category: validationResult?.category || "GENERAL",
+          category: categoryToUse,
           endTime: endTimeUnix,
           initialYes,
           initialNo,
@@ -524,13 +556,14 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                 size="sm"
                 onClick={validateQuestion}
                 disabled={isValidating || !question || question.length < 10}
+                className={!validationResult ? 'border-yellow-500/50 text-yellow-400' : ''}
               >
                 {isValidating ? (
                   <LogoLoading size={16} />
                 ) : (
                   <Shield className="w-4 h-4 mr-2" />
                 )}
-                {isValidating ? "Validating..." : "Validate with AI"}
+                {isValidating ? "Validating..." : "Validate with AI (Required)"}
               </Button>
             </div>
             <Textarea
@@ -570,6 +603,16 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Info about AI validation requirement */}
+          {!validationResult && question.length >= 10 && (
+            <div className="p-3 bg-blue-950/20 border border-blue-500/50 rounded-lg text-sm text-blue-300">
+              <div className="font-semibold mb-1">🤖 AI Validation Required</div>
+              <div className="text-xs">
+                AI validation ensures accurate category detection (e.g., distinguishing "TON" cryptocurrency from "ton" weight unit) and validates question quality.
               </div>
             </div>
           )}
