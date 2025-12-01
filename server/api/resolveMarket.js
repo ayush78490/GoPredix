@@ -1,13 +1,19 @@
 const OpenAI = require('openai');
 
 // Initialize OpenAI client
+// Initialize OpenAI client lazily
 let openai;
-try {
-    openai = new OpenAI({
-        apiKey: process.env.OPEN_AI_API_KEY,
-    });
-} catch (error) {
-    console.error('Failed to initialize OpenAI:', error);
+
+function getOpenAI() {
+    if (!openai) {
+        if (!process.env.OPEN_AI_API_KEY) {
+            throw new Error('OPEN_AI_API_KEY is not set');
+        }
+        openai = new OpenAI({
+            apiKey: process.env.OPEN_AI_API_KEY,
+        });
+    }
+    return openai;
 }
 
 /**
@@ -69,7 +75,7 @@ Provide a detailed, factual analysis with specific evidence.`;
 
         console.log('Calling OpenAI for market resolution...');
 
-        const response = await openai.chat.completions.create({
+        const response = await getOpenAI().chat.completions.create({
             model: "gpt-4o",
             messages: [
                 { role: "system", content: systemPrompt },

@@ -1,13 +1,19 @@
 const OpenAI = require('openai');
 
 // Initialize OpenAI client
+// Initialize OpenAI client lazily
 let openai;
-try {
-  openai = new OpenAI({
-    apiKey: process.env.OPEN_AI_API_KEY,
-  });
-} catch (error) {
-  console.error('Failed to initialize OpenAI:', error);
+
+function getOpenAI() {
+  if (!openai) {
+    if (!process.env.OPEN_AI_API_KEY) {
+      throw new Error('OPEN_AI_API_KEY is not set');
+    }
+    openai = new OpenAI({
+      apiKey: process.env.OPEN_AI_API_KEY,
+    });
+  }
+  return openai;
 }
 
 // Category definitions
@@ -31,7 +37,7 @@ async function makeOpenAICall(messages, maxRetries = 3) {
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: messages,
         max_tokens: 1000,
