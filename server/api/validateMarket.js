@@ -447,7 +447,17 @@ function determineCategoryFromKeywords(question) {
   const lowerQuestion = question.toLowerCase();
   
   const categoryKeywords = {
-    CRYPTO: ['bitcoin', 'ethereum', 'crypto', 'blockchain', 'btc', 'eth', 'defi', 'nft', 'token', 'binance', 'bnb'],
+    CRYPTO: [
+      'bitcoin', 'ethereum', 'crypto', 'blockchain', 'btc', 'eth', 'defi', 'nft', 'token', 'binance', 'bnb',
+      'ton', 'toncoin', 'solana', 'sol', 'cardano', 'ada', 'polkadot', 'dot',
+      'ripple', 'xrp', 'dogecoin', 'doge', 'shiba', 'matic', 'polygon', 'avalanche', 'avax',
+      'chainlink', 'link', 'uniswap', 'uni', 'litecoin', 'ltc', 'stellar', 'xlm', 'cosmos', 'atom',
+      'tron', 'trx', 'monero', 'xmr', 'eos', 'tezos', 'xtz', 'algorand', 'algo', 'fantom', 'ftm',
+      'near', 'aptos', 'apt', 'sui', 'arbitrum', 'optimism', 'base', 'zksync', 'starknet',
+      'cryptocurrency', 'altcoin', 'stablecoin', 'usdt', 'usdc', 'dai', 'busd',
+      'web3', 'dao', 'dapp', 'smart contract', 'mining', 'staking', 'yield', 'liquidity',
+      'metamask', 'wallet', 'exchange', 'coinbase', 'kraken', 'dex', 'cex'
+    ],
     POLITICS: ['election', 'president', 'government', 'policy', 'senate', 'congress', 'vote', 'minister', 'parliament'],
     SPORTS: ['game', 'match', 'tournament', 'championship', 'olympics', 'team', 'player', 'win', 'score'],
     TECHNOLOGY: ['launch', 'release', 'update', 'software', 'hardware', 'ai', 'artificial intelligence', 'tech'],
