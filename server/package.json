@@ -5,7 +5,8 @@
   "main": "api/validateMarket.js",
   "scripts": {
     "start": "node validateMarket.js",
-    "dev": "node api/validateMarket.js"
+    "dev": "node api/validateMarket.js",
+    "resolution": "node start-resolution-service.js"
   },
   "dependencies": {
     "body-parser": "^1.20.3",
