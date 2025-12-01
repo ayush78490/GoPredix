@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 
 const RPC_URL = 'https://data-seed-prebsc-1-s1.binance.org:8545/';
-const MARKETPLACE_ADDRESS = '0x2FC004d8d92Dee66FDF042BcE63C88E255b1237a';
+const MARKETPLACE_ADDRESS = '0xc92c18CD349c7C60EF1B8c5A83c9000a73E7F4A0';
 const BNB_MARKET_ADDRESS = '0x12FD6C9B618949d940806B0E59e3c65507eC37E8';
 const PDX_TOKEN_ADDRESS = '0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8';
 
@@ -105,21 +105,11 @@ async function main() {
         }
 
         // 3. Simulate a buy transaction (if listing exists)
-        // Find listing for Market 3
-        let targetListingId = 0;
-        for (let i = 1; i < Number(nextListingId); i++) {
-            const l = await marketplace.getListing(i);
-            if (Number(l.marketId) === 3) {
-                targetListingId = i;
-                break;
-            }
-        }
-
-        if (targetListingId > 0) {
-            console.log(`\n🛒 SIMULATING BUY TRANSACTION FOR LISTING #${targetListingId} (Market 3)`);
+        if (Number(nextListingId) > 1) {
+            console.log('\n🛒 SIMULATING BUY TRANSACTION FOR LISTING #1');
             console.log('='.repeat(60));
 
-            const listing = await marketplace.getListing(targetListingId);
+            const listing = await marketplace.getListing(1);
             const marketId = Number(listing.marketId);
             const price = listing.price;
 

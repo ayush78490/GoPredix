@@ -35,9 +35,19 @@ export default function MarketplaceCard({ market, listing, onBuy, onCancel, isBu
                     ? 'bg-yellow-900/30'
                     : 'bg-gradient-to-r from-green-900/30 to-transparent'
                 }`}>
-                <span className="text-xs font-medium text-white/70">
-                    Listed by {isOwner ? 'You' : listing.seller.slice(0, 6) + '...' + listing.seller.slice(-4)}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-white/70">
+                        Listed by {isOwner ? 'You' : listing.seller.slice(0, 6) + '...' + listing.seller.slice(-4)}
+                    </span>
+                    {listing.type && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${listing.type === 'BNB'
+                            ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
+                            : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                            }`}>
+                            {listing.type}
+                        </span>
+                    )}
+                </div>
                 {isInactive && (
                     <span className="flex items-center gap-1 text-xs font-semibold text-red-400">
                         <XCircle className="w-3 h-3" />

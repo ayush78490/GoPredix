@@ -23,7 +23,7 @@ const MARKETPLACE_JSON = JSON.parse(
 
 // Configuration
 const RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/"
-const PREDICTION_MARKET_ADDRESS = "0x90FD905aB1F479399117F6EB6b3e3E58f94e26f1"  // BNB market
+const PREDICTION_MARKET_ADDRESS = "0x52Ca4B7673646B8b922ea00ccef6DD0375B14619"  // BNB market
 const PDX_TOKEN_ADDRESS = "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8"  // PDX token (Correct Address)
 const MARKETPLACE_FEE_BPS = 200  // 2%
 

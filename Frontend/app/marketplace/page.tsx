@@ -26,12 +26,33 @@ export default function MarketplacePage() {
     const [buyingMarketId, setBuyingMarketId] = useState<number | null>(null)
     const [cancellingMarketId, setCancellingMarketId] = useState<number | null>(null)
 
+    const fetchListings = async () => {
+        if (!isReady) {
+            console.log('⏳ Marketplace contract not ready yet')
+            return
+        }
+        setIsLoadingListings(true)
+        try {
+            console.log('🔍 Fetching marketplace listings...')
+            const allListings = await getAllListings()
+            console.log(`📦 Received ${allListings.length} listings from contract`)
+            setListings(allListings)
+        } catch (error) {
+            console.error("❌ Failed to fetch listings:", error)
+        } finally {
+            setIsLoadingListings(false)
+        }
+    }
+
     const handleCancel = async (marketId: number) => {
         if (!isConnected) return
 
         setCancellingMarketId(marketId)
         try {
-            await cancelListing(marketId)
+            const listing = listings.find(l => l.marketId === marketId)
+            if (!listing) throw new Error("Listing not found")
+
+            await cancelListing(marketId, listing.type)
             toast({
                 title: "Listing Cancelled",
                 description: "Your market listing has been cancelled.",
@@ -153,24 +174,6 @@ export default function MarketplacePage() {
         }
     }
 
-    const fetchListings = async () => {
-        if (!isReady) {
-            console.log('⏳ Marketplace contract not ready yet')
-            return
-        }
-        setIsLoadingListings(true)
-        try {
-            console.log('🔍 Fetching marketplace listings...')
-            const allListings = await getAllListings()
-            console.log(`📦 Received ${allListings.length} listings from contract`)
-            setListings(allListings)
-        } catch (error) {
-            console.error("❌ Failed to fetch listings:", error)
-        } finally {
-            setIsLoadingListings(false)
-        }
-    }
-
     useEffect(() => {
         if (isReady) {
             console.log('✅ Marketplace ready, fetching listings...')
@@ -219,14 +222,16 @@ export default function MarketplacePage() {
         setBuyingMarketId(marketId)
         console.log(`Buying market ${marketId}`)
         try {
-            // Find listing to check seller
+            // Find listing to check seller and type
             const listing = listings.find(l => l.marketId === marketId)
-            if (listing && isConnected && account && listing.seller.toLowerCase() === account.toLowerCase()) {
+            if (!listing) throw new Error("Listing not found")
+
+            if (isConnected && account && listing.seller.toLowerCase() === account.toLowerCase()) {
                 throw new Error("You cannot buy your own listing.")
             }
 
-            // buyMarket now only takes marketId - contract reads price from listing
-            await buyMarket(marketId)
+            // buyMarket now takes marketId and type
+            await buyMarket(marketId, listing.type)
 
             toast({
                 title: "Success!",

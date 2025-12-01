@@ -3,8 +3,10 @@ import { ethers, BrowserProvider, JsonRpcSigner } from 'ethers'
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import {
     CUSTODIAL_MARKETPLACE_ADDRESS,
+    PDX_MARKETPLACE_ADDRESS,
     NEXT_PUBLIC_PDX_TOKEN_ADDRESS,
     PREDICTION_MARKET_ADDRESS,
+    PDX_MARKET_ADDRESS,
 } from '../lib/web3/config'
 
 // ✅ COMPLETE ABI with all required fields
@@ -273,15 +275,21 @@ export interface MarketListing {
     listedAt: number
     isActive: boolean
     isTransferred: boolean
+    type: 'BNB' | 'PDX'
 }
+
+export type MarketType = 'BNB' | 'PDX'
 
 export function useMarketMarketplace() {
     const { address: account } = useAccount()
     const { data: walletClient } = useWalletClient()
     const publicClient = usePublicClient()
 
-    const [marketplaceContract, setMarketplaceContract] = useState<ethers.Contract | null>(null)
-    const [predictionMarketContract, setPredictionMarketContract] = useState<ethers.Contract | null>(null)
+    const [bnbMarketplaceContract, setBnbMarketplaceContract] = useState<ethers.Contract | null>(null)
+    const [pdxMarketplaceContract, setPdxMarketplaceContract] = useState<ethers.Contract | null>(null)
+    const [bnbPredictionMarketContract, setBnbPredictionMarketContract] = useState<ethers.Contract | null>(null)
+    const [pdxPredictionMarketContract, setPdxPredictionMarketContract] = useState<ethers.Contract | null>(null)
+
     const [provider, setProvider] = useState<BrowserProvider | null>(null)
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null)
     const [isReady, setIsReady] = useState(false)
@@ -310,22 +318,41 @@ export function useMarketMarketplace() {
         if (provider) {
             console.log('🔧 Initializing contracts...')
             try {
-                const contract = new ethers.Contract(
+                // BNB Contracts
+                const bnbMarketplace = new ethers.Contract(
                     CUSTODIAL_MARKETPLACE_ADDRESS,
                     MARKETPLACE_ABI as any,
                     provider
                 )
-                setMarketplaceContract(contract)
-                console.log('✅ Marketplace contract initialized')
+                setBnbMarketplaceContract(bnbMarketplace)
 
-                const pmContract = new ethers.Contract(
+                const bnbPm = new ethers.Contract(
                     PREDICTION_MARKET_ADDRESS,
                     PREDICTION_MARKET_ABI as any,
                     provider
                 )
-                setPredictionMarketContract(pmContract)
-                console.log('✅ Prediction market contract initialized')
+                setBnbPredictionMarketContract(bnbPm)
 
+                // PDX Contracts
+                if (PDX_MARKETPLACE_ADDRESS) {
+                    const pdxMarketplace = new ethers.Contract(
+                        PDX_MARKETPLACE_ADDRESS,
+                        MARKETPLACE_ABI as any,
+                        provider
+                    )
+                    setPdxMarketplaceContract(pdxMarketplace)
+                }
+
+                if (PDX_MARKET_ADDRESS) {
+                    const pdxPm = new ethers.Contract(
+                        PDX_MARKET_ADDRESS,
+                        PREDICTION_MARKET_ABI as any,
+                        provider
+                    )
+                    setPdxPredictionMarketContract(pdxPm)
+                }
+
+                console.log('✅ Contracts initialized')
                 setIsReady(true)
             } catch (error) {
                 console.error('❌ Contract initialization error:', error)
@@ -333,33 +360,51 @@ export function useMarketMarketplace() {
         }
     }, [provider])
 
-    const isOwnershipTransferred = useCallback(async (marketId: number): Promise<boolean> => {
-        if (!predictionMarketContract) return false
+    const getContracts = useCallback((type: MarketType) => {
+        if (type === 'BNB') {
+            return {
+                marketplace: bnbMarketplaceContract,
+                predictionMarket: bnbPredictionMarketContract,
+                marketplaceAddress: CUSTODIAL_MARKETPLACE_ADDRESS
+            }
+        } else {
+            return {
+                marketplace: pdxMarketplaceContract,
+                predictionMarket: pdxPredictionMarketContract,
+                marketplaceAddress: PDX_MARKETPLACE_ADDRESS
+            }
+        }
+    }, [bnbMarketplaceContract, bnbPredictionMarketContract, pdxMarketplaceContract, pdxPredictionMarketContract])
+
+    const isOwnershipTransferred = useCallback(async (marketId: number, type: MarketType = 'BNB'): Promise<boolean> => {
+        const { predictionMarket, marketplaceAddress } = getContracts(type)
+        if (!predictionMarket) return false
 
         try {
-            const marketInfo = await predictionMarketContract.getMarketInfo(BigInt(marketId))
+            const marketInfo = await predictionMarket.getMarketInfo(BigInt(marketId))
             // Check if marketplace is the owner (creator field would be marketplace address if transferred)
-            const isTransferred = marketInfo.creator?.toLowerCase() === CUSTODIAL_MARKETPLACE_ADDRESS.toLowerCase()
-            console.log(`   🔍 Market ${marketId} ownership: ${isTransferred ? 'transferred to marketplace' : 'still with original creator'}`)
+            const isTransferred = marketInfo.creator?.toLowerCase() === marketplaceAddress.toLowerCase()
+            console.log(`   🔍 [${type}] Market ${marketId} ownership: ${isTransferred ? 'transferred to marketplace' : 'still with original creator'}`)
             return isTransferred
         } catch (e) {
             console.error('Error checking ownership:', e)
             return false
         }
-    }, [predictionMarketContract])
+    }, [getContracts])
 
-    const getListing = useCallback(async (marketId: number): Promise<MarketListing | null> => {
-        if (!marketplaceContract) return null
+    const getListing = useCallback(async (marketId: number, type: MarketType = 'BNB'): Promise<MarketListing | null> => {
+        const { marketplace } = getContracts(type)
+        if (!marketplace) return null
 
         try {
-            const listingId = await marketplaceContract.getListingByMarket(marketId)
+            const listingId = await marketplace.getListingByMarket(marketId)
             if (Number(listingId) === 0) return null
 
-            const listing = await marketplaceContract.getListing(listingId)
+            const listing = await marketplace.getListing(listingId)
             if (!listing.isActive) return null
 
             // Check if ownership was transferred
-            const isTransferred = await isOwnershipTransferred(marketId)
+            const isTransferred = await isOwnershipTransferred(marketId, type)
 
             return {
                 listingId: Number(listingId),
@@ -368,68 +413,70 @@ export function useMarketMarketplace() {
                 price: ethers.formatEther(listing.price),
                 listedAt: Number(listing.listedAt),
                 isActive: listing.isActive,
-                isTransferred
+                isTransferred,
+                type
             }
         } catch (e) {
             console.error('Error fetching listing', e)
             return null
         }
-    }, [marketplaceContract, isOwnershipTransferred])
+    }, [getContracts, isOwnershipTransferred])
 
-    const listMarket = useCallback(async (marketId: number, price: string) => {
-        if (!signer || !marketplaceContract) throw new Error('Wallet not connected')
+    const listMarket = useCallback(async (marketId: number, price: string, type: MarketType = 'BNB') => {
+        const { marketplace } = getContracts(type)
+        if (!signer || !marketplace) throw new Error('Wallet not connected or contract not ready')
 
-        const contractWithSigner = marketplaceContract.connect(signer) as ethers.Contract
+        const contractWithSigner = marketplace.connect(signer) as ethers.Contract
         const priceWei = ethers.parseEther(price)
 
-        console.log(`📝 Listing market ${marketId} for ${price} PDX`)
+        console.log(`📝 Listing [${type}] market ${marketId} for ${price} PDX`)
         const tx = await contractWithSigner.listMarket(marketId, priceWei)
         console.log(`⏳ Tx hash: ${tx.hash}`)
         return await tx.wait()
-    }, [signer, marketplaceContract])
+    }, [signer, getContracts])
 
-    const transferOwnership = useCallback(async (marketId: number) => {
-        if (!signer || !predictionMarketContract) throw new Error('Wallet not connected')
+    const transferOwnership = useCallback(async (marketId: number, type: MarketType = 'BNB') => {
+        const { predictionMarket, marketplaceAddress } = getContracts(type)
+        if (!signer || !predictionMarket) throw new Error('Wallet not connected or contract not ready')
 
-        const contractWithSigner = predictionMarketContract.connect(signer) as ethers.Contract
-        console.log(`📤 Transferring ownership of market ${marketId} to ${CUSTODIAL_MARKETPLACE_ADDRESS}`)
+        const contractWithSigner = predictionMarket.connect(signer) as ethers.Contract
+        console.log(`📤 Transferring ownership of [${type}] market ${marketId} to ${marketplaceAddress}`)
 
         try {
-            const tx = await contractWithSigner.transferMarketOwnership(marketId, CUSTODIAL_MARKETPLACE_ADDRESS, { gasLimit: 200000 })
+            const tx = await contractWithSigner.transferMarketOwnership(marketId, marketplaceAddress, { gasLimit: 200000 })
             console.log(`⏳ Tx hash: ${tx.hash}`)
             return await tx.wait()
         } catch (error: any) {
             console.error('Transfer failed:', error)
             throw new Error('Transfer failed. Please ensure the PredictionMarket contract supports ownership transfer.')
         }
-    }, [signer, predictionMarketContract])
+    }, [signer, getContracts])
 
-    const buyMarket = useCallback(async (marketId: number) => {
-        console.log('📊 Contract:', marketplaceContract)
-        console.log('📊 Contract functions:', marketplaceContract?.interface?.fragments.map((f: any) => f.name))
+    const buyMarket = useCallback(async (marketId: number, type: MarketType = 'BNB') => {
+        const { marketplace, predictionMarket, marketplaceAddress } = getContracts(type)
 
         if (!account || !walletClient) throw new Error('Wallet not connected')
-        if (!marketplaceContract) throw new Error('Marketplace contract not initialized')
+        if (!marketplace) throw new Error('Marketplace contract not initialized')
         if (!signer) throw new Error('Signer not initialized')
 
         if (typeof marketId !== 'number' || isNaN(marketId)) {
             throw new Error(`Invalid marketId: ${marketId}`)
         }
 
-        console.log(`🛒 Starting buyMarket for marketId: ${marketId}`)
+        console.log(`🛒 Starting buyMarket for [${type}] marketId: ${marketId}`)
 
         try {
             // 0. CHECK MARKET STATE
             console.log('0️⃣ Checking market listing status...')
-            const isListed = await marketplaceContract.isMarketListed(BigInt(marketId))
+            const isListed = await marketplace.isMarketListed(BigInt(marketId))
             console.log(`   Is market listed: ${isListed}`)
 
             if (!isListed) {
                 throw new Error(`Market ${marketId} is not listed`)
             }
 
-            const listingId = await marketplaceContract.getListingByMarket(BigInt(marketId))
-            const listing = await marketplaceContract.getListing(listingId)
+            const listingId = await marketplace.getListingByMarket(BigInt(marketId))
+            const listing = await marketplace.getListing(listingId)
 
             console.log(`   Listing:`, {
                 seller: listing.seller,
@@ -447,9 +494,9 @@ export function useMarketMarketplace() {
             }
 
             // Check Market Status on PredictionMarket contract
-            if (predictionMarketContract) {
+            if (predictionMarket) {
                 console.log('📊 Checking Market Status on PredictionMarket contract...')
-                const marketInfo = await predictionMarketContract.getMarketInfo(BigInt(marketId))
+                const marketInfo = await predictionMarket.getMarketInfo(BigInt(marketId))
                 console.log('📊 Market Status:', Number(marketInfo.status))
                 console.log('   Status meaning: 0=Open, 1=Active, 2=ResolutionRequested, 3=Resolved, 4=Disputed')
             }
@@ -464,7 +511,7 @@ export function useMarketMarketplace() {
             ], signer)
 
             const balance = await pdxContract.balanceOf(userAddress)
-            const allowance = await pdxContract.allowance(userAddress, CUSTODIAL_MARKETPLACE_ADDRESS)
+            const allowance = await pdxContract.allowance(userAddress, marketplaceAddress)
 
             console.log(`   Balance: ${ethers.formatEther(balance)} PDX`)
             console.log(`   Allowance: ${ethers.formatEther(allowance)} PDX`)
@@ -475,19 +522,10 @@ export function useMarketMarketplace() {
 
             if (allowance < listing.price) {
                 console.log('⚠️ Approving PDX...')
-                const txApprove = await pdxContract.approve(CUSTODIAL_MARKETPLACE_ADDRESS, ethers.MaxUint256)
+                const txApprove = await pdxContract.approve(marketplaceAddress, ethers.MaxUint256)
                 await txApprove.wait()
                 console.log('✅ Approved')
             }
-
-            // Debugging Marketplace state (Requested by User)
-            console.log('🕵️‍♂️ Debugging Marketplace State...')
-            const marketplaceBalance = await pdxContract.balanceOf(CUSTODIAL_MARKETPLACE_ADDRESS)
-            console.log('   Marketplace PDX Balance:', ethers.formatEther(marketplaceBalance))
-
-            // Check allowance from marketplace to seller (as requested)
-            const marketplaceToSellerAllowance = await pdxContract.allowance(CUSTODIAL_MARKETPLACE_ADDRESS, listing.seller)
-            console.log('   Marketplace -> Seller Allowance:', ethers.formatEther(marketplaceToSellerAllowance))
 
             // 2. Buy - Manually encode the function call
             console.log('2️⃣ Executing buyMarket...')
@@ -501,7 +539,7 @@ export function useMarketMarketplace() {
             console.log('📦 Encoded data:', encodedData)
 
             const tx = await signer.sendTransaction({
-                to: CUSTODIAL_MARKETPLACE_ADDRESS,
+                to: marketplaceAddress,
                 data: encodedData,
                 gasLimit: 300000n
             })
@@ -515,82 +553,92 @@ export function useMarketMarketplace() {
             console.error('❌ Failed:', error.message)
             throw error
         }
-    }, [signer, marketplaceContract, account, walletClient])
+    }, [signer, getContracts, account, walletClient])
 
-    const cancelListing = useCallback(async (marketId: number) => {
-        if (!signer || !marketplaceContract) throw new Error('Wallet not connected')
+    const cancelListing = useCallback(async (marketId: number, type: MarketType = 'BNB') => {
+        const { marketplace } = getContracts(type)
+        if (!signer || !marketplace) throw new Error('Wallet not connected or contract not ready')
 
-        const contractWithSigner = marketplaceContract.connect(signer) as ethers.Contract
+        const contractWithSigner = marketplace.connect(signer) as ethers.Contract
         const tx = await contractWithSigner.cancelListing(marketId)
         return await tx.wait()
-    }, [signer, marketplaceContract])
+    }, [signer, getContracts])
 
-    const updatePrice = useCallback(async (marketId: number, newPrice: string) => {
-        if (!signer || !marketplaceContract) throw new Error('Wallet not connected')
+    const updatePrice = useCallback(async (marketId: number, newPrice: string, type: MarketType = 'BNB') => {
+        const { marketplace } = getContracts(type)
+        if (!signer || !marketplace) throw new Error('Wallet not connected or contract not ready')
 
-        const contractWithSigner = marketplaceContract.connect(signer) as ethers.Contract
+        const contractWithSigner = marketplace.connect(signer) as ethers.Contract
         const priceWei = ethers.parseEther(newPrice)
         const tx = await contractWithSigner.updatePrice(marketId, priceWei)
         return await tx.wait()
-    }, [signer, marketplaceContract])
+    }, [signer, getContracts])
 
     const getAllListings = useCallback(async (): Promise<MarketListing[]> => {
-        if (!marketplaceContract) return []
+        if (!bnbMarketplaceContract && !pdxMarketplaceContract) return []
 
-        try {
-            console.log('📋 Fetching listings...')
-            const nextId = await marketplaceContract.nextListingId()
-            const totalListings = Number(nextId)
-            console.log(`📋 Contract has ${totalListings - 1} listings (nextId: ${nextId})`)
+        const fetchFromContract = async (contract: ethers.Contract, type: MarketType): Promise<MarketListing[]> => {
+            try {
+                console.log(`📋 Fetching [${type}] listings...`)
+                const nextId = await contract.nextListingId()
+                const totalListings = Number(nextId)
+                console.log(`📋 [${type}] Contract has ${totalListings - 1} listings`)
 
-            if (totalListings <= 1) return []
+                if (totalListings <= 1) return []
 
-            const listings: MarketListing[] = []
-            const promises = []
-            for (let i = 1; i < totalListings; i++) {
-                promises.push(marketplaceContract.getListing(i))
+                const promises = []
+                for (let i = 1; i < totalListings; i++) {
+                    promises.push(contract.getListing(i))
+                }
+
+                const results = await Promise.all(promises)
+
+                // Check ownership for each listing
+                const listingsWithTransfer = await Promise.all(
+                    results.map(async (listing, index) => {
+                        const listingId = index + 1
+                        const marketId = Number(listing.marketId)
+                        const isTransferred = await isOwnershipTransferred(marketId, type)
+
+                        return {
+                            listingId,
+                            marketId,
+                            seller: listing.seller,
+                            price: ethers.formatEther(listing.price),
+                            listedAt: Number(listing.listedAt),
+                            isActive: listing.isActive,
+                            isTransferred,
+                            type
+                        }
+                    })
+                )
+                return listingsWithTransfer
+            } catch (e) {
+                console.error(`❌ Error fetching [${type}] listings:`, e)
+                return []
             }
-
-            const results = await Promise.all(promises)
-            console.log(`📋 Raw listings fetched:`, results)
-
-            // Check ownership for each listing
-            const listingsWithTransfer = await Promise.all(
-                results.map(async (listing, index) => {
-                    const listingId = index + 1
-                    const marketId = Number(listing.marketId)
-                    const isTransferred = await isOwnershipTransferred(marketId)
-
-                    return {
-                        listingId,
-                        marketId,
-                        seller: listing.seller,
-                        price: ethers.formatEther(listing.price),
-                        listedAt: Number(listing.listedAt),
-                        isActive: listing.isActive,
-                        isTransferred
-                    }
-                })
-            )
-
-            console.log(`✅ Fetched ${listingsWithTransfer.length} listings`)
-            return listingsWithTransfer
-        } catch (e) {
-            console.error('❌ Error:', e)
-            return []
         }
-    }, [marketplaceContract, isOwnershipTransferred])
 
-    const isMarketListed = useCallback(async (marketId: number): Promise<boolean> => {
-        const listing = await getListing(marketId)
+        const bnbListings = bnbMarketplaceContract ? await fetchFromContract(bnbMarketplaceContract, 'BNB') : []
+        const pdxListings = pdxMarketplaceContract ? await fetchFromContract(pdxMarketplaceContract, 'PDX') : []
+
+        const allListings = [...bnbListings, ...pdxListings]
+        console.log(`✅ Fetched ${allListings.length} total listings`)
+        return allListings
+
+    }, [bnbMarketplaceContract, pdxMarketplaceContract, isOwnershipTransferred])
+
+    const isMarketListed = useCallback(async (marketId: number, type: MarketType = 'BNB'): Promise<boolean> => {
+        const listing = await getListing(marketId, type)
         return !!listing
     }, [getListing])
 
-    const confirmTransfer = useCallback(async (marketId: number) => {
-        if (!signer || !marketplaceContract) throw new Error('Wallet not connected')
+    const confirmTransfer = useCallback(async (marketId: number, type: MarketType = 'BNB') => {
+        const { marketplace } = getContracts(type)
+        if (!signer || !marketplace) throw new Error('Wallet not connected or contract not ready')
 
-        const contractWithSigner = marketplaceContract.connect(signer) as ethers.Contract
-        console.log(`✅ Confirming transfer for market ${marketId}`)
+        const contractWithSigner = marketplace.connect(signer) as ethers.Contract
+        console.log(`✅ Confirming transfer for [${type}] market ${marketId}`)
 
         try {
             const tx = await contractWithSigner.confirmTransfer(marketId, { gasLimit: 200000 })
@@ -600,7 +648,7 @@ export function useMarketMarketplace() {
             console.error('Confirm transfer failed:', error)
             throw new Error('Confirm transfer failed. Please ensure ownership was transferred to the marketplace.')
         }
-    }, [signer, marketplaceContract])
+    }, [signer, getContracts])
 
     return {
         listMarket,

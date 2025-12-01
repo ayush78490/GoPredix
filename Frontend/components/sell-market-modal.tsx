@@ -34,31 +34,35 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
 
         if (!address) return []
 
-        // Filter for BNB markets only - the marketplace contract only supports BNB prediction markets
+        // Filter for markets created by user that are Open
         const filtered = markets.filter(m => {
             const isCreator = m.creator.toLowerCase() === address.toLowerCase()
-            const isBNB = m.paymentToken === "BNB"
             const isOpen = Number(m.status) === 0 // Ensure market is Open
 
             console.log(`Market ${m.id}:`, {
                 creator: m.creator,
                 paymentToken: m.paymentToken,
                 isCreator,
-                isBNB,
                 isOpen,
-                passes: isCreator && isBNB && isOpen
+                passes: isCreator && isOpen
             })
 
-            return isCreator && isBNB && isOpen
+            return isCreator && isOpen
         })
 
         console.log('🔍 Sell Modal - Filtered markets:', filtered.length)
         return filtered
     }, [markets, address])
 
+    const selectedMarket = useMemo(() =>
+        markets.find(m => m.numericId === selectedMarketId),
+        [markets, selectedMarketId])
+
+    const marketType = selectedMarket?.paymentToken === 'PDX' ? 'PDX' : 'BNB'
+
     useEffect(() => {
-        console.log('🔍 selectedMarketId changed to:', selectedMarketId, 'step:', step)
-    }, [selectedMarketId, step])
+        console.log('🔍 selectedMarketId changed to:', selectedMarketId, 'step:', step, 'type:', marketType)
+    }, [selectedMarketId, step, marketType])
 
     // Refresh markets when modal opens - REMOVED as per user request to avoid cache filling
     // useEffect(() => {
@@ -75,17 +79,12 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
 
         try {
             if (step === 1) {
-                console.log(`📡 Step 1: Creating marketplace listing...`)
+                console.log(`📡 Step 1: Creating marketplace listing for [${marketType}] market...`)
 
                 // Pre-flight checks
-                const isListed = await isMarketListed(selectedMarketId)
+                const isListed = await isMarketListed(selectedMarketId, marketType)
                 if (isListed) {
                     console.log('⚠️ Market already listed. Checking transfer status...')
-                    // Check if transfer is pending
-                    // We need to find the listing ID first
-                    // But we can just assume if it's listed but we are here, we might need to resume
-                    // Let's try to move to step 2 directly if the user confirms
-
                     toast({
                         title: "Market Already Listed",
                         description: "Resuming transfer process...",
@@ -94,7 +93,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                     return // Exit step 1 logic
                 }
 
-                await listMarket(selectedMarketId, price)
+                await listMarket(selectedMarketId, price, marketType)
 
                 toast({
                     title: "Step 1 Complete",
@@ -106,7 +105,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                 console.log(`📡 Step 2: Transferring ownership to marketplace...`)
 
                 // Check if already transferred
-                const isTransferred = await isOwnershipTransferred(selectedMarketId)
+                const isTransferred = await isOwnershipTransferred(selectedMarketId, marketType)
                 if (isTransferred) {
                     console.log('✅ Already transferred. Moving to step 3.')
                     toast({
@@ -117,7 +116,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                     return
                 }
 
-                await transferOwnership(selectedMarketId)
+                await transferOwnership(selectedMarketId, marketType)
 
                 toast({
                     title: "Step 2 Complete",
@@ -127,7 +126,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
             }
             else if (step === 3) {
                 console.log(`📡 Step 3: Confirming transfer...`)
-                await confirmTransfer(selectedMarketId)
+                await confirmTransfer(selectedMarketId, marketType)
 
                 toast({
                     title: "Market Listed Successfully! 🎉",
@@ -176,7 +175,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                     <DialogTitle className="text-xl font-bold">Sell Your Market</DialogTitle>
                     <DialogDescription asChild>
                         <div className="text-muted-foreground pt-2 space-y-2">
-                            <p>List your <span className="text-yellow-400 font-semibold">🔶 BNB market</span> for sale.</p>
+                            <p>List your <span className="text-yellow-400 font-semibold">prediction market</span> for sale.</p>
                             <div className="flex items-center gap-2 text-sm bg-blue-950/30 p-2 rounded border border-blue-500/20">
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 1 ? 'bg-blue-500 text-white' : 'bg-gray-700'}`}>1</div>
                                 <ArrowRight className="w-4 h-4 text-muted-foreground" />
@@ -191,7 +190,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                     {step === 1 && (
                         <div className="space-y-2">
                             <div className="flex justify-between items-center">
-                                <label className="text-sm font-medium">Select Your BNB Market</label>
+                                <label className="text-sm font-medium">Select Your Market</label>
                                 <Button
                                     variant="ghost"
                                     size="sm"
