@@ -1,4 +1,4 @@
-name = "prediction-market-api"
+name = "go-predix"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
