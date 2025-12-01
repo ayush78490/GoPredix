@@ -1,0 +1,7 @@
+name = "prediction-market-api"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# OPEN_AI_API_KEY = "..."

@@ -70,7 +70,7 @@ Provide a detailed, factual analysis with specific evidence.`;
         console.log('Calling OpenAI for market resolution...');
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4",
+            model: "gpt-4o",
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt }

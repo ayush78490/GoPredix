@@ -4,13 +4,29 @@
     {
       "src": "api/validateMarket.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/resolveMarket.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/api/validateMarket",
       "dest": "/api/validateMarket.js",
-      "methods": ["GET", "POST", "OPTIONS"]
+      "methods": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ]
+    },
+    {
+      "src": "/api/resolveMarket",
+      "dest": "/api/resolveMarket.js",
+      "methods": [
+        "POST",
+        "OPTIONS"
+      ]
     },
     {
       "src": "/",
