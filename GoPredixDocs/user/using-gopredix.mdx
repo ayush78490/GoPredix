@@ -1,0 +1,219 @@
+---
+title: "Using GoPreDix Overview"
+description: "Learn how to use GoPreDix prediction markets"
+---
+
+# Using GoPreDix
+
+Master the basics of trading predictions on GoPreDix.
+
+## Quick Overview
+
+### What Can You Do?
+
+1. **Browse Markets** - See what people are predicting
+2. **Create Markets** - Launch your own market
+3. **Trade Predictions** - Buy and sell shares of outcomes
+4. **Monitor Portfolio** - Track your positions
+5. **Claim Rewards** - Get paid when you win
+
+## How Markets Work
+
+### Market Structure
+
+Every market has:
+
+- **Question** - What you are predicting (e.g., "Will BTC reach $100k?")
+- **Outcomes** - Possible answers (e.g., "Yes" or "No")
+- **Deadline** - When voting closes
+- **Prices** - Current probability of each outcome
+- **Creator** - Who made the market
+- **Volume** - Total trading activity
+
+### Example Market
+
+```
+Question: "Will BTC reach $100k by December 2025?"
+Outcomes: ["Yes", "No"]
+Current Prices: ["0.65", "0.35"]  (65% probability for "Yes")
+Deadline: December 31, 2025 at 11:59 PM
+Volume: $500,000
+```
+
+## Understanding Prices
+
+### What Prices Mean
+
+Prices represent **probability**:
+
+- **Price 0.70** equals 70 percent probability
+- **Price 0.50** equals 50 percent probability  
+- **Price 0.30** equals 30 percent probability
+
+### How Prices Change
+
+Prices adjust based on trading:
+
+- **More buying** results in price increases
+- **More selling** results in price decreases
+- **Balanced** activity keeps price stable
+
+### Price as Your Opportunity
+
+If you think actual probability differs from market price:
+
+- **Market says 30 percent, you think 50 percent** - Buy (potential profit!)
+- **Market says 70 percent, you think 40 percent** - Sell short
+
+## Key Metrics
+
+### Volume
+
+Total amount traded in the market. Higher volume means more liquid.
+
+### Liquidity
+
+How easily you can buy and sell shares. High liquidity means better prices.
+
+### Open Interest
+
+Total value at stake in the market. Shows market interest level.
+
+### Participants
+
+Number of traders in the market. More participants means better price discovery.
+
+## Trading Basics
+
+### Buying Shares
+
+1. Select a market
+2. Pick an outcome
+3. Enter amount
+4. Review price
+5. Click "Buy"
+6. Confirm in wallet
+7. Wait for confirmation
+
+**Result:** You own shares that gain value if outcome wins
+
+### Selling Shares
+
+1. Go to Portfolio
+2. Find your position
+3. Click "Sell"
+4. Enter amount
+5. Review price
+6. Click "Sell"
+7. Confirm in wallet
+
+**Result:** Get cash back (may be profit or loss)
+
+### Settling Markets
+
+When market deadline passes:
+
+1. Oracle determines outcome
+2. Smart contract calculates winners
+3. You can claim rewards
+4. Funds appear in wallet
+
+## Portfolio Management
+
+### Track Your Positions
+
+In **Portfolio**, you see:
+
+- All your open positions
+- Unrealized P and L (profit and loss)
+- Entry prices
+- Current prices
+- Market details
+
+### Monitor Performance
+
+Metrics displayed:
+
+- **Win Rate** - Percentage of profitable trades
+- **Total P and L** - Total profit and loss
+- **Realized P and L** - From settled markets
+- **Unrealized P and L** - From open positions
+- **Total Volume** - All trades ever
+
+## Risk Management
+
+### Position Sizing
+
+- Small positions - Lower risk, learn first
+- Diversify - Do not put all in one market
+- Reserve capital - Keep cash for new opportunities
+- Stop loss - Sell if it goes too far wrong
+
+### Slippage
+
+Price impact when you buy and sell:
+
+- Small trades - Less than 0.5 percent slippage
+- Large trades - Higher slippage
+- Set tolerance - Avoid bad fills
+
+### Market Risk
+
+- Trade only if confident
+- Research events
+- Check multiple sources
+- Do not follow crowds blindly
+
+## Common Tasks
+
+### Find a Market
+
+1. Go to Markets
+2. Use filters (category, deadline, volume)
+3. Search for keywords
+4. Sort by volume and deadline
+
+### Join Existing Market
+
+1. Click market
+2. Review details
+3. Pick outcome you believe in
+4. Buy shares
+5. Done!
+
+### Create Your Own Market
+
+See [Create Market](./create-market) guide
+
+### View Trading Activity
+
+1. Click market
+2. See recent trades
+3. View prices over time
+4. Monitor live updates
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card
+    title="Create Market"
+    icon="plus"
+    href="./create-market"
+  >
+    Launch your prediction
+  </Card>
+  <Card
+    title="Place Prediction"
+    icon="chart-line"
+    href="./place-prediction"
+  >
+    Trade existing markets
+  </Card>
+  <Card
+    title="Claim Rewards"
+    icon="trophy"
+    href="./claim-rewards"
+  >
+    Collect winnings
+  </Card>
+</CardGroup>

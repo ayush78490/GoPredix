@@ -1,0 +1,175 @@
+---
+title: "Connect Your Wallet"
+description: "Set up MetaMask and connect to GoPreDix"
+---
+
+# Connect Your Wallet
+
+Learn how to connect your MetaMask wallet to GoPreDix.
+
+## Step 1: Install MetaMask
+
+### On Desktop
+
+1. Go to [metamask.io](https://metamask.io)
+2. Click **"Download"**
+3. Select your browser (Chrome, Firefox, Safari, Edge)
+4. Click **"Install"**
+5. Follow browser prompts to add extension
+6. Click the MetaMask icon to open
+
+### On Mobile
+
+1. Open App Store or Google Play
+2. Search **"MetaMask"**
+3. Install official app (by ConsenSys)
+4. Open and create/import wallet
+
+## Step 2: Create or Import Wallet
+
+### Create New Wallet
+
+1. Click **"Get Started"**
+2. Click **"Create a Wallet"**
+3. Set password (strong!)
+4. **SAVE YOUR SEED PHRASE** in a safe place
+5. Click **"Next"**
+6. Confirm seed phrase order
+7. Done!
+
+### Import Existing Wallet
+
+1. Click **"Get Started"**
+2. Click **"Import Wallet"**
+3. Enter your seed phrase
+4. Set password
+5. Done!
+
+<Warning>
+Never share your seed phrase with anyone. Anyone with it can access your funds!
+</Warning>
+
+## Step 3: Add BSC Testnet
+
+MetaMask may auto-add BSC Testnet. If not, add manually:
+
+### Desktop
+
+1. Click **network selector** (top-left)
+2. Click **"Add Network"**
+3. Click **"Add a network manually"**
+4. Fill in:
+   - **Network Name:** BSC Testnet
+   - **RPC URL:** https://data-seed-prebsc-1-b.binance.org:8545
+   - **Chain ID:** 97
+   - **Currency Symbol:** BNB
+   - **Block Explorer:** https://testnet.bscscan.com
+
+5. Click **"Save"**
+
+### Mobile
+
+1. Tap the **menu icon** (≡)
+2. Go to **Settings**
+3. Go to **Networks**
+4. Click **"Add Network"**
+5. Enter same details as above
+6. Tap **"Add"**
+
+## Step 4: Get Testnet Tokens
+
+### From Faucet
+
+1. Visit [BSC Testnet Faucet](https://testfaucet.binance.org/)
+2. Select **"Testnet"**
+3. Paste your wallet address
+4. Click **"Give me BNB"**
+5. Wait 1-2 minutes
+6. Tokens appear in MetaMask!
+
+**Claim limit:** 0.5 BNB per day per wallet
+
+## Step 5: Connect to GoPreDix
+
+1. Go to [Predix](https://www.gopredix.xyz)
+2. Click **"Connect Wallet"**
+3. Select **"MetaMask"**
+4. Approve in MetaMask popup
+5. Sign authentication message
+6. **Connected!** 🎉
+
+## Verify Connection
+
+Check that:
+- ✅ MetaMask shows your wallet address
+- ✅ Network is set to **BSC Testnet**
+- ✅ You have testnet BNB in wallet
+- ✅ GoPreDix shows your address
+
+## Troubleshooting
+
+### MetaMask Not Showing
+
+- Refresh page (Ctrl+R or Cmd+R)
+- Close and reopen browser
+- Check MetaMask is installed
+- Try different browser
+
+### Can't See BSC Testnet
+
+- Check RPC URL is correct
+- Verify Chain ID is 97
+- Try removing and re-adding network
+- Restart MetaMask
+
+### Wrong Network
+
+- Click network selector in MetaMask
+- Select **"BSC Testnet"**
+- Refresh GoPreDix page
+
+### No Testnet Tokens
+
+- Visit faucet again (24h cooldown)
+- Try different wallet address
+- Check Explorer: https://testnet.bscscan.com
+
+### Transaction Keeps Failing
+
+- Check you have enough BNB for gas
+- Increase gas price manually
+- Try again in a few minutes
+- Restart MetaMask
+
+## Security Tips
+
+<Tip>
+Good security practices:
+- ✅ Never share seed phrase
+- ✅ Never share private key
+- ✅ Enable 2FA if available
+- ✅ Use strong password
+- ✅ Keep seed phrase offline
+- ✅ Back up seed phrase
+</Tip>
+
+## Next Steps
+
+Now that your wallet is connected:
+
+<CardGroup cols={2}>
+  <Card
+    title="Manage Profile"
+    icon="user"
+    href="./manage-profile"
+  >
+    Set up your profile info
+  </Card>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="../getting-started/quickstart"
+  >
+    Place your first prediction
+  </Card>
+</CardGroup>

@@ -1,0 +1,294 @@
+---
+title: "Wallet Integration Example"
+description: "Integrate MetaMask wallet with GoPreDix"
+---
+
+# Wallet Integration Example
+
+Complete guide to integrating MetaMask wallet with GoPreDix.
+
+## Frontend Setup
+
+### HTML
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GoPreDix Wallet Integration</title>
+</head>
+<body>
+    <button id="connectBtn">Connect Wallet</button>
+    <div id="status"></div>
+    <div id="markets"></div>
+    
+    <script src="main.js"></script>
+</body>
+</html>
+```
+
+## Connect Wallet
+
+### JavaScript
+
+```javascript
+import { ethers } from 'ethers';
+
+let userAddress = null;
+let signer = null;
+
+async function connectWallet() {
+    if (!window.ethereum) {
+        alert('Please install MetaMask');
+        return;
+    }
+    
+    try {
+        // Request account access
+        const accounts = await window.ethereum.request({
+            method: 'eth_requestAccounts'
+        });
+        
+        userAddress = accounts[0];
+        console.log('Connected:', userAddress);
+        
+        // Create signer for transactions
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
+        
+        updateUI();
+    } catch (error) {
+        console.error('Connection failed:', error);
+    }
+}
+
+document.getElementById('connectBtn').addEventListener('click', connectWallet);
+```
+
+## Check Network
+
+```javascript
+async function checkNetwork() {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const network = await provider.getNetwork();
+    
+    const BSC_TESTNET_CHAINID = 97;
+    
+    if (network.chainId !== BSC_TESTNET_CHAINID) {
+        console.log('Wrong network! Switching...');
+        await switchNetwork();
+    }
+}
+
+async function switchNetwork() {
+    try {
+        await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x61' }] // 97 in hex
+        });
+    } catch (error) {
+        // Network doesn't exist, add it
+        await addNetwork();
+    }
+}
+
+async function addNetwork() {
+    await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+            chainId: '0x61',
+            chainName: 'BSC Testnet',
+            rpcUrls: ['https://data-seed-prebsc-1-b.binance.org:8545'],
+            nativeCurrency: {
+                name: 'BNB',
+                symbol: 'BNB',
+                decimals: 18
+            },
+            blockExplorerUrls: ['https://testnet.bscscan.com']
+        }]
+    });
+}
+```
+
+## Load GoPreDix SDK
+
+```javascript
+import { GoPreDix } from '@gopredix/sdk';
+
+let client = null;
+
+async function initializeGoPreDix() {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    
+    client = new GoPreDix({
+        rpcUrl: 'https://data-seed-prebsc-1-b.binance.org:8545',
+        provider: provider,
+        signer: signer
+    });
+    
+    console.log('GoPreDix initialized');
+}
+```
+
+## Display Markets
+
+```javascript
+async function loadMarkets() {
+    if (!client) {
+        console.error('GoPreDix not initialized');
+        return;
+    }
+    
+    try {
+        const markets = await client.markets.list({ limit: 10 });
+        
+        const html = markets.map(market => `
+            <div class="market-card">
+                <h3>${market.question}</h3>
+                <p>Category: ${market.category}</p>
+                <p>Volume: ${market.volume}</p>
+                <div class="outcomes">
+                    ${market.outcomes.map(o => `
+                        <div class="outcome">
+                            <span>${o.name}</span>
+                            <span>${(o.price * 100).toFixed(1)}%</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <button onclick="buyShares('${market.id}')">Trade</button>
+            </div>
+        `).join('');
+        
+        document.getElementById('markets').innerHTML = html;
+    } catch (error) {
+        console.error('Error loading markets:', error);
+    }
+}
+```
+
+## Execute Trade
+
+```javascript
+async function buyShares(marketId) {
+    if (!client || !signer) {
+        alert('Connect wallet first');
+        return;
+    }
+    
+    try {
+        const market = await client.markets.get(marketId);
+        const outcome = market.outcomes[0]; // Buy first outcome
+        
+        console.log('Buying shares...');
+        
+        const trade = await client.trades.buy({
+            marketId: marketId,
+            outcomeId: outcome.id,
+            amount: 100,
+            maxPrice: outcome.price * 1.1
+        });
+        
+        console.log('Trade executed:', trade.txHash);
+        alert('Trade successful!');
+        
+        loadMarkets(); // Refresh
+    } catch (error) {
+        console.error('Trade failed:', error);
+        alert('Trade failed: ' + error.message);
+    }
+}
+```
+
+## Update UI
+
+```javascript
+function updateUI() {
+    if (userAddress) {
+        document.getElementById('status').innerHTML = `
+            <div class="wallet-status">
+                <p>Connected: ${userAddress.substring(0, 6)}...${userAddress.substring(38)}</p>
+                <button onclick="loadMarkets()">Load Markets</button>
+            </div>
+        `;
+        
+        checkNetwork();
+        initializeGoPreDix();
+    }
+}
+```
+
+## Full Integration Code
+
+```javascript
+require('dotenv').config();
+const { GoPreDix } = require('@gopredix/sdk');
+const { ethers } = require('ethers');
+
+// Global state
+let client = null;
+let userAddress = null;
+let signer = null;
+
+// Connect wallet
+async function connectWallet() {
+    if (!window.ethereum) {
+        throw new Error('MetaMask not installed');
+    }
+    
+    const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts'
+    });
+    
+    userAddress = accounts[0];
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
+    
+    await checkAndSwitchNetwork();
+    await initializeGoPreDix();
+    
+    return userAddress;
+}
+
+// Check and switch network
+async function checkAndSwitchNetwork() {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const network = await provider.getNetwork();
+    
+    if (network.chainId !== 97) { // BSC Testnet
+        await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x61' }]
+        });
+    }
+}
+
+// Initialize GoPreDix
+async function initializeGoPreDix() {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    client = new GoPreDix({
+        rpcUrl: 'https://data-seed-prebsc-1-b.binance.org:8545',
+        provider: provider,
+        signer: signer
+    });
+}
+
+// Execute trade
+async function executeTrade(marketId, outcomeId, amount) {
+    if (!client) throw new Error('GoPreDix not initialized');
+    
+    return await client.trades.buy({
+        marketId,
+        outcomeId,
+        amount,
+        maxPrice: 1.0
+    });
+}
+
+// Export for HTML
+window.connectWallet = connectWallet;
+window.executeTrade = executeTrade;
+```
+
+---
+
+**Ready to connect wallets to your app!**

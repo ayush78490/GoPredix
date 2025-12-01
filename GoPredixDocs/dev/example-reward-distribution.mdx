@@ -1,0 +1,259 @@
+---
+title: "Reward Distribution Example"
+description: "Implement reward distribution system"
+---
+
+# Reward Distribution Example
+
+Complete guide to implementing reward distribution.
+
+## Overview
+
+Reward distribution process:
+
+1. Market settles with winning outcome
+2. Smart contract calculates winner shares
+3. Rewards distributed to winners
+4. Users claim their rewards
+
+## Smart Contract Settlement
+
+```javascript
+async function settleMarket(marketId, winningOutcomeId) {
+    try {
+        console.log('Settling market...');
+        
+        const tx = await client.markets.settle({
+            marketId: marketId,
+            winningOutcomeId: winningOutcomeId,
+            reason: 'Market deadline reached'
+        });
+        
+        console.log('Settlement transaction:', tx.txHash);
+        
+        // Wait for confirmation
+        const receipt = await tx.wait();
+        console.log('Settlement confirmed');
+        
+        return receipt;
+    } catch (error) {
+        console.error('Settlement failed:', error);
+        throw error;
+    }
+}
+```
+
+## Calculate Rewards
+
+```javascript
+async function calculateRewards(marketId) {
+    try {
+        const market = await client.markets.get(marketId);
+        
+        if (market.status !== 'RESOLVED') {
+            throw new Error('Market not resolved yet');
+        }
+        
+        const rewards = {
+            marketId: marketId,
+            winningOutcome: market.winningOutcome,
+            totalRewardPool: market.totalVolume * market.feePercentage,
+            participants: market.participants,
+            rewards: []
+        };
+        
+        return rewards;
+    } catch (error) {
+        console.error('Error calculating rewards:', error);
+        throw error;
+    }
+}
+```
+
+## Distribute Rewards
+
+```javascript
+async function distributeRewards(marketId, userAddresses) {
+    try {
+        console.log(`Distributing rewards for market ${marketId}`);
+        console.log(`Recipients: ${userAddresses.length}`);
+        
+        for (const userAddress of userAddresses) {
+            const userReward = await client.rewards.distribute({
+                marketId: marketId,
+                userAddress: userAddress
+            });
+            
+            console.log(`Reward sent to ${userAddress}: ${userReward.amount}`);
+        }
+        
+        console.log('Distribution complete');
+    } catch (error) {
+        console.error('Distribution failed:', error);
+        throw error;
+    }
+}
+```
+
+## Monitor Claims
+
+```javascript
+async function monitorRewardClaims(marketId) {
+    // Listen for reward claim events
+    const contract = await client.getContract();
+    
+    contract.on('RewardClaimed', (claimer, market, amount) => {
+        console.log(`Reward claimed: ${claimer} received ${amount}`);
+        
+        // Update database
+        db.claims.create({
+            marketId: market,
+            claimer: claimer,
+            amount: amount.toString(),
+            timestamp: Date.now()
+        });
+    });
+}
+```
+
+## Complete Reward Flow
+
+```javascript
+const { GoPreDix } = require('@gopredix/sdk');
+
+class RewardDistributor {
+    constructor(client) {
+        this.client = client;
+    }
+    
+    async settleAndDistribute(marketId, winningOutcomeId) {
+        console.log('=== Reward Distribution Process ===\n');
+        
+        // Step 1: Settle market
+        console.log('Step 1: Settling market...');
+        await this.settleMarket(marketId, winningOutcomeId);
+        
+        // Step 2: Calculate rewards
+        console.log('\nStep 2: Calculating rewards...');
+        const rewardData = await this.calculateRewards(marketId);
+        console.log(`Total reward pool: ${rewardData.totalRewardPool}`);
+        console.log(`Winners: ${rewardData.participants}`);
+        
+        // Step 3: Get all participants
+        console.log('\nStep 3: Fetching participants...');
+        const market = await this.client.markets.get(marketId);
+        const trades = await this.client.trades.getMarketTrades(marketId);
+        
+        // Get unique winners
+        const winners = [...new Set(
+            trades
+                .filter(t => t.outcomeId === winningOutcomeId)
+                .map(t => t.trader)
+        )];
+        
+        console.log(`Found ${winners.length} winners`);
+        
+        // Step 4: Distribute rewards
+        console.log('\nStep 4: Distributing rewards...');
+        await this.distributeRewards(marketId, winners);
+        
+        // Step 5: Monitor claims
+        console.log('\nStep 5: Monitoring claims...');
+        await this.monitorRewardClaims(marketId);
+        
+        console.log('\n=== Distribution Complete ===');
+    }
+    
+    async settleMarket(marketId, winningOutcomeId) {
+        const tx = await this.client.markets.settle({
+            marketId: marketId,
+            winningOutcomeId: winningOutcomeId
+        });
+        
+        const receipt = await tx.wait();
+        console.log(`✓ Market settled: ${receipt.transactionHash}`);
+    }
+    
+    async calculateRewards(marketId) {
+        const market = await this.client.markets.get(marketId);
+        
+        return {
+            marketId: marketId,
+            totalRewardPool: market.volume * 0.01, // 1% fee
+            status: market.status
+        };
+    }
+    
+    async distributeRewards(marketId, winners) {
+        for (const winner of winners) {
+            try {
+                const claim = await this.client.rewards.claim({
+                    marketId: marketId,
+                    userAddress: winner
+                });
+                
+                console.log(`✓ ${winner}: ${claim.amount}`);
+            } catch (error) {
+                console.error(`✗ Failed for ${winner}:`, error.message);
+            }
+        }
+    }
+    
+    async monitorRewardClaims(marketId) {
+        return new Promise((resolve) => {
+            let claimedCount = 0;
+            const expectedClaims = 100; // Expected number
+            
+            const checkInterval = setInterval(async () => {
+                const market = await this.client.markets.get(marketId);
+                
+                console.log(`Claims processed: ${claimedCount}/${expectedClaims}`);
+                
+                if (claimedCount >= expectedClaims) {
+                    clearInterval(checkInterval);
+                    resolve();
+                }
+            }, 5000); // Check every 5 seconds
+        });
+    }
+}
+
+// Usage
+async function main() {
+    const client = new GoPreDix({
+        rpcUrl: 'https://data-seed-prebsc-1-b.binance.org:8545'
+    });
+    
+    const distributor = new RewardDistributor(client);
+    
+    await distributor.settleAndDistribute(
+        'market_123',
+        'outcome_1'
+    );
+}
+
+main().catch(console.error);
+```
+
+## API Integration
+
+```javascript
+// Express.js endpoint for reward distribution
+app.post('/api/distribute-rewards/:marketId', async (req, res) => {
+    try {
+        const { marketId } = req.params;
+        const { winningOutcomeId } = req.body;
+        
+        const distributor = new RewardDistributor(client);
+        await distributor.settleAndDistribute(marketId, winningOutcomeId);
+        
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+```
+
+---
+
+**Automate reward distribution!**

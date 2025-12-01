@@ -1,0 +1,197 @@
+---
+title: "Market Creation Example"
+description: "Complete example of creating a prediction market"
+---
+
+# Market Creation Example
+
+Complete step by step example of creating a prediction market.
+
+## Prerequisites
+
+- Node.js installed
+- GoPreDix SDK installed
+- Wallet with testnet BNB
+- RPC URL configured
+
+## Setup
+
+### Install Dependencies
+
+```bash
+npm init -y
+npm install @gopredix/sdk ethers dotenv
+```
+
+### Create .env File
+
+```
+RPC_URL=https://data-seed-prebsc-1-b.binance.org:8545
+PRIVATE_KEY=your_private_key_here
+```
+
+## Full Example
+
+### Step 1: Initialize Client
+
+```javascript
+require('dotenv').config();
+const { GoPreDix } = require('@gopredix/sdk');
+
+const client = new GoPreDix({
+  rpcUrl: process.env.RPC_URL,
+  privateKey: process.env.PRIVATE_KEY
+});
+```
+
+### Step 2: Define Market
+
+```javascript
+const marketConfig = {
+  question: 'Will BTC reach 100,000 dollars by December 31, 2025?',
+  outcomes: ['Yes', 'No'],
+  deadline: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days
+  category: 'finance',
+  description: 'Bitcoin price prediction. Resolution based on CoinMarketCap closing price on Dec 31, 2025.',
+  initialLiquidity: 1.5 // 1.5 BNB
+};
+```
+
+### Step 3: Create Market
+
+```javascript
+async function createMarket() {
+  try {
+    console.log('Creating market...');
+    console.log('Question:', marketConfig.question);
+    console.log('Outcomes:', marketConfig.outcomes);
+    
+    const market = await client.markets.create(marketConfig);
+    
+    console.log('Market created successfully!');
+    console.log('Market ID:', market.id);
+    console.log('Contract Address:', market.contractAddress);
+    console.log('Transaction Hash:', market.txHash);
+    
+    return market;
+  } catch (error) {
+    console.error('Error creating market:', error.message);
+    throw error;
+  }
+}
+```
+
+### Step 4: Verify Market
+
+```javascript
+async function verifyMarket(marketId) {
+  console.log('Verifying market...');
+  
+  const market = await client.markets.get(marketId);
+  
+  console.log('Market Details:');
+  console.log('- Question:', market.question);
+  console.log('- Status:', market.status);
+  console.log('- Outcomes:', market.outcomes.map(o => o.name));
+  console.log('- Current Prices:', market.outcomes.map(o => o.price));
+  console.log('- Volume:', market.volume);
+  console.log('- Participants:', market.participants);
+  
+  return market;
+}
+```
+
+### Step 5: Execute Script
+
+```javascript
+async function main() {
+  const market = await createMarket();
+  const verified = await verifyMarket(market.id);
+  console.log('Market is live and trading!');
+}
+
+main().catch(console.error);
+```
+
+## Complete Script
+
+```javascript
+require('dotenv').config();
+const { GoPreDix } = require('@gopredix/sdk');
+
+const client = new GoPreDix({
+  rpcUrl: process.env.RPC_URL,
+  privateKey: process.env.PRIVATE_KEY
+});
+
+async function createAndVerifyMarket() {
+  const marketConfig = {
+    question: 'Will BTC reach 100,000 dollars by December 31, 2025?',
+    outcomes: ['Yes', 'No'],
+    deadline: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60),
+    category: 'finance',
+    description: 'Bitcoin price prediction.',
+    initialLiquidity: 1.5
+  };
+  
+  console.log('Step 1: Creating market...');
+  const market = await client.markets.create(marketConfig);
+  console.log('✓ Market created:', market.id);
+  
+  console.log('\nStep 2: Verifying market...');
+  const verified = await client.markets.get(market.id);
+  console.log('✓ Market verified');
+  console.log('  - Status:', verified.status);
+  console.log('  - Participants:', verified.participants);
+  console.log('  - Volume:', verified.volume);
+  
+  console.log('\nStep 3: Checking outcomes...');
+  verified.outcomes.forEach(outcome => {
+    console.log(`  - ${outcome.name}: ${outcome.price} (${outcome.price * 100}%)`);
+  });
+  
+  console.log('\n✓ Market is live and trading!');
+  return market;
+}
+
+createAndVerifyMarket().catch(error => {
+  console.error('Error:', error.message);
+  process.exit(1);
+});
+```
+
+## Run Script
+
+```bash
+node createMarket.js
+```
+
+## Expected Output
+
+```
+Step 1: Creating market...
+✓ Market created: market_123
+
+Step 2: Verifying market...
+✓ Market verified
+  - Status: ACTIVE
+  - Participants: 0
+  - Volume: 0
+
+Step 3: Checking outcomes...
+  - Yes: 0.5 (50%)
+  - No: 0.5 (50%)
+
+✓ Market is live and trading!
+```
+
+## Next Steps
+
+1. **Monitor** - Track trades and prices
+2. **Promote** - Share market link
+3. **Settle** - Resolve when deadline reached
+4. **Claim** - Collect your creator fees
+
+---
+
+**Your first market is live!**

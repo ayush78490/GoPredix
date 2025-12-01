@@ -1,0 +1,97 @@
+---
+title: "Smart Contracts Overview"
+description: "PreDix smart contract architecture"
+---
+
+# Smart Contracts Overview
+
+PreDix uses Solidity smart contracts on BSC for all on chain operations.
+
+## Architecture
+
+### Core Contracts
+
+**MarketFactory**
+- Deploys new market contracts
+- Manages market registry
+- Handles market parameters
+
+**Market (Per Market)**
+- Manages individual market
+- Handles trading logic
+- Manages liquidity pools
+- Settles outcomes
+
+**Settlement**
+- Determines winning outcomes
+- Distributes rewards
+- Manages oracle integration
+
+**RewardToken (GPX)**
+- Governance token
+- Staking mechanism
+- Reward distribution
+
+## Key Features
+
+### Non Custodial
+
+- Users control private keys
+- Smart contracts manage funds
+- No central authority needed
+
+### Transparent
+
+- All transactions on blockchain
+- Verifiable outcomes
+- Immutable records
+
+### Composable
+
+- Open APIs
+- Integration ready
+- DeFi compatible
+
+## Main Functions
+
+### Market Creation
+
+```solidity
+function createMarket(
+  string memory question,
+  string[] memory outcomes,
+  uint256 deadline
+) public payable returns (address)
+```
+
+### Trading
+
+```solidity
+function buyShares(
+  uint256 outcomeId,
+  uint256 amount,
+  uint256 maxPrice
+) public payable
+```
+
+### Settlement
+
+```solidity
+function settle(uint256 winningOutcomeId) external
+```
+
+## Contract Addresses
+
+### Testnet
+
+- MarketFactory: TBA
+- Settlement: TBA
+
+### Mainnet (Coming Q1 2026)
+
+- MarketFactory: TBA
+- Settlement: TBA
+
+---
+
+**Ready to interact with smart contracts?**

@@ -1,0 +1,328 @@
+---
+title: "Reward Update Webhooks"
+description: "Real time reward and claim updates via webhooks"
+---
+
+# Reward Update Webhooks
+
+Receive real time notifications for reward related events.
+
+## Webhook Events
+
+### reward.earned
+
+Triggered when user earns rewards.
+
+```json
+{
+  "id": "webhook_201",
+  "event": "reward.earned",
+  "timestamp": 1699699200,
+  "data": {
+    "userId": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+    "marketId": "market_123",
+    "amount": 50000,
+    "reason": "prediction_won"
+  }
+}
+```
+
+### reward.available
+
+Triggered when rewards are available for claiming.
+
+```json
+{
+  "id": "webhook_202",
+  "event": "reward.available",
+  "timestamp": 1735690200,
+  "data": {
+    "userId": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+    "marketId": "market_123",
+    "claimableAmount": 50000,
+    "deadline": 1735776600
+  }
+}
+```
+
+### reward.claimed
+
+Triggered when user claims reward.
+
+```json
+{
+  "id": "webhook_203",
+  "event": "reward.claimed",
+  "timestamp": 1735691000,
+  "data": {
+    "userId": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+    "marketId": "market_123",
+    "claimedAmount": 50000,
+    "txHash": "0xabc123..."
+  }
+}
+```
+
+### points.earned
+
+Triggered when user earns PrediX Points.
+
+```json
+{
+  "id": "webhook_204",
+  "event": "points.earned",
+  "timestamp": 1699699200,
+  "data": {
+    "userId": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+    "points": 250,
+    "reason": "market_creation",
+    "marketId": "market_123",
+    "totalPoints": 2500
+  }
+}
+```
+
+### nft.redeemed
+
+Triggered when user redeems PrediX OG NFT.
+
+```json
+{
+  "id": "webhook_205",
+  "event": "nft.redeemed",
+  "timestamp": 1699699200,
+  "data": {
+    "userId": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+    "nftTier": "OG Voyager",
+    "pointsSpent": 10000,
+    "nftId": "nft_789",
+    "txHash": "0xdef456..."
+  }
+}
+```
+
+## Setup Webhook
+
+```javascript
+const webhook = await fetch('/api/v1/webhooks', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer token'
+  },
+  body: JSON.stringify({
+    url: 'https://yourapp.com/webhooks/rewards',
+    events: [
+      'reward.earned',
+      'reward.available',
+      'reward.claimed',
+      'points.earned',
+      'nft.redeemed'
+    ]
+  })
+});
+```
+
+## Event Handlers
+
+### Reward Earned
+
+```javascript
+function handleRewardEarned(data) {
+    console.log(`User earned reward: ${data.amount}`);
+    
+    db.rewards.create({
+        userId: data.userId,
+        marketId: data.marketId,
+        amount: data.amount,
+        status: 'earned',
+        earnedAt: Date.now()
+    });
+    
+    // Send notification
+    sendNotification(data.userId, `You earned ${data.amount} from prediction!`);
+}
+```
+
+### Reward Available
+
+```javascript
+function handleRewardAvailable(data) {
+    console.log(`Reward available for claiming: ${data.claimableAmount}`);
+    
+    db.rewards.update(
+        { marketId: data.marketId, userId: data.userId },
+        { 
+            status: 'claimable',
+            availableAt: Date.now(),
+            claimDeadline: data.deadline
+        }
+    );
+    
+    // Send reminder
+    sendNotification(
+        data.userId, 
+        `Your reward of ${data.claimableAmount} is ready to claim!`
+    );
+}
+```
+
+### Reward Claimed
+
+```javascript
+function handleRewardClaimed(data) {
+    console.log(`Reward claimed: ${data.claimedAmount}`);
+    
+    db.rewards.update(
+        { marketId: data.marketId, userId: data.userId },
+        { 
+            status: 'claimed',
+            claimedAmount: data.claimedAmount,
+            claimedAt: Date.now(),
+            txHash: data.txHash
+        }
+    );
+    
+    // Update user balance
+    db.users.increment(data.userId, 'balance', data.claimedAmount);
+    
+    // Log transaction
+    db.transactions.create({
+        userId: data.userId,
+        type: 'reward_claim',
+        amount: data.claimedAmount,
+        txHash: data.txHash
+    });
+}
+```
+
+### Points Earned
+
+```javascript
+function handlePointsEarned(data) {
+    console.log(`Points earned: ${data.points}`);
+    
+    db.points.create({
+        userId: data.userId,
+        points: data.points,
+        reason: data.reason,
+        marketId: data.marketId,
+        earnedAt: Date.now()
+    });
+    
+    // Update total
+    db.users.update(
+        { userId: data.userId },
+        { totalPoints: data.totalPoints }
+    );
+    
+    // Check for NFT redemption eligibility
+    checkNFTEligibility(data.userId, data.totalPoints);
+}
+```
+
+### NFT Redeemed
+
+```javascript
+function handleNFTRedeemed(data) {
+    console.log(`NFT redeemed: ${data.nftTier}`);
+    
+    db.nfts.create({
+        userId: data.userId,
+        tier: data.nftTier,
+        nftId: data.nftId,
+        pointsSpent: data.pointsSpent,
+        redeemedAt: Date.now(),
+        txHash: data.txHash
+    });
+    
+    // Deduct points
+    db.users.update(
+        { userId: data.userId },
+        { totalPoints: db.users.get(data.userId).totalPoints - data.pointsSpent }
+    );
+    
+    // Grant NFT benefits
+    grantNFTBenefits(data.userId, data.nftTier);
+    
+    // Send congratulations
+    sendNotification(
+        data.userId,
+        `Congratulations! You have redeemed PrediX OG ${data.nftTier} NFT!`
+    );
+}
+```
+
+## Complete Reward Webhook Server
+
+```javascript
+const express = require('express');
+const crypto = require('crypto');
+
+const app = express();
+app.use(express.json());
+
+function verifySignature(req) {
+    const signature = req.headers['x-webhook-signature'];
+    const secret = process.env.WEBHOOK_SECRET;
+    
+    const hash = crypto
+        .createHmac('sha256', secret)
+        .update(JSON.stringify(req.body))
+        .digest('hex');
+    
+    return hash === signature;
+}
+
+app.post('/webhooks/rewards', (req, res) => {
+    if (!verifySignature(req)) {
+        return res.status(401).json({ error: 'Invalid signature' });
+    }
+    
+    const { event, data, timestamp } = req.body;
+    
+    console.log(`\n=== Reward Webhook ===`);
+    console.log(`Event: ${event}`);
+    console.log(`User: ${data.userId}`);
+    
+    try {
+        processRewardEvent(event, data);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Processing failed' });
+    }
+});
+
+function processRewardEvent(event, data) {
+    switch(event) {
+        case 'reward.earned':
+            console.log(`✓ Reward earned: ${data.amount}`);
+            handleRewardEarned(data);
+            break;
+        case 'reward.available':
+            console.log(`✓ Reward available: ${data.claimableAmount}`);
+            handleRewardAvailable(data);
+            break;
+        case 'reward.claimed':
+            console.log(`✓ Reward claimed: ${data.claimedAmount}`);
+            handleRewardClaimed(data);
+            break;
+        case 'points.earned':
+            console.log(`✓ Points earned: ${data.points}`);
+            handlePointsEarned(data);
+            break;
+        case 'nft.redeemed':
+            console.log(`✓ NFT redeemed: ${data.nftTier}`);
+            handleNFTRedeemed(data);
+            break;
+    }
+}
+
+app.listen(3000, () => {
+    console.log('Reward webhook server running on port 3000');
+});
+```
+
+---
+
+**Build real time reward tracking!**

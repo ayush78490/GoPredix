@@ -1,0 +1,156 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "willow",
+  "name": "GoPreDix",
+  "colors": {
+    "primary": "#10B981",
+    "light": "#34D399",
+    "dark": "#047857"
+  },
+  "favicon": "/GoPredix.png" ,
+  "logo": {
+    "light": "/GoPredix.png",
+    "dark": "/GoPredix.png"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "User Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "user/Predix",
+              "user/quickstart",
+              "user/faq"
+            ]
+          },
+          {
+            "group": "Account & Wallet",
+            "pages": [
+              "user/connect-wallet",
+              "user/manage-profile",
+              "user/security"
+            ]
+          },
+          {
+            "group": "Using GoPreDix",
+            "pages": [
+              "user/using-gopredix",
+              "user/create-market",
+              "user/place-prediction",
+              "user/claim-rewards"
+            ]
+          },
+          {
+            "group": "Roadmap and Future Plans",
+            "pages": [
+              "user/Roadmap",
+              "user/tokenomics",
+              "user/rewards"
+            ]
+          },
+          {
+            "group": "Legal",
+            "pages": [
+              "user/privacy-Policy",
+              
+              "user/terms"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developer Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "dev/introduction",
+              "dev/authentication",
+              "dev/rate-limits",
+              "dev/errors"
+            ]
+          },
+          {
+            "group": "REST API Endpoints",
+            "pages": [
+              "dev/api-get-markets",
+              "dev/api-create-market",
+              "dev/api-place-prediction",
+              "dev/api-get-user",
+              "dev/api-settle-market",
+              "dev/api-claim-reward",
+              "dev/api-webhook"
+            ]
+          },
+          {
+            "group": "Smart Contract Integration",
+            "pages": [
+              "dev/contracts-overview",
+              "dev/contracts-deploying",
+              "dev/contracts-interacting",
+              "dev/contracts-events"
+            ]
+          },
+          {
+            "group": "SDKs & Libraries",
+            "pages": [
+              "dev/sdk-javascript",
+              "dev/sdk-typescript",
+              "dev/sdk-python"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "dev/example-market-creation",
+              "dev/example-wallet-integration",
+              "dev/example-reward-distribution"
+            ]
+          },
+          {
+            "group": "Webhooks & Callbacks",
+            "pages": [
+              "dev/webhooks-market-status",
+              "dev/webhooks-reward-updates"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:support@gopredix.com"
+      },
+      {
+        "label": "Discord",
+        "href": "https://discord.gg/gopredix"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Launch App",
+      "href": "https://app.gopredix.com"
+    }
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity"
+    ]
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/gopredix",
+      "github": "https://github.com/gopredix",
+      "linkedin": "https://linkedin.com/company/gopredix"
+    }
+  }
+}

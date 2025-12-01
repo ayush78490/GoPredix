@@ -1,0 +1,113 @@
+---
+title: "Introduction"
+description: "The API is in DEVELOPMENT phase. We Will relese very soon"
+---
+
+## What is PreDix?
+
+PreDix is a decentralized prediction market platform built on blockchain. It allows users to create and participate in prediction markets on real world events.
+
+## API Overview
+
+The PreDix API provides endpoints to:
+
+- **Markets** - Create, list, and manage prediction markets
+- **Trading** - Buy and sell shares in markets
+- **Rewards** - Claim winnings and track earnings
+- **Users** - Manage user profiles and portfolios
+- **Webhooks** - Receive real time event notifications
+
+## Base URL
+
+```
+https://api.gopredix.xyz/v1
+```
+
+## Getting Started
+
+### 1. Get API Key
+
+1. Sign up at [gopredix.xyz](https://www.api.gopredix.xyz) [After Realse it will be visible]
+2. Go to Settings
+3. Click "API Keys"
+4. Generate new API key
+5. Copy and save securely
+
+### 2. Authentication
+
+Include API key in request headers:
+
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+### 3. Make First Request
+
+```bash
+curl -X GET https://api.gopredix.com/v1/markets \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Response Format
+
+All responses are JSON:
+
+```json
+{
+  "success": true,
+  "data": {...},
+  "error": null
+}
+```
+
+## Error Handling
+
+Errors include status code and message:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Missing required parameter"
+  }
+}
+```
+
+## Rate Limits
+
+- **Unauthenticated:** 30 requests per minute
+- **Authenticated:** 100 requests per minute
+- **Premium:** 1,000 requests per minute
+
+See [Rate Limits](./rate-limits) for details.
+
+## Documentation Structure
+
+1. **Overview** (this section)
+2. [Authentication](./authentication) - How to authenticate
+3. [Rate Limits](./rate-limits) - API rate limiting
+4. [Errors](./errors) - Error codes and handling
+5. **REST API** - Endpoint documentation
+6. **Smart Contracts** - Blockchain integration
+7. **SDKs** - Language specific libraries
+8. **Examples** - Code examples
+9. **Webhooks** - Event notifications
+
+## Next Steps
+
+- Read [Authentication](./authentication) guide
+- Check [Rate Limits](./rate-limits) policy
+- Review [Errors](./errors) reference
+- Explore REST API endpoints
+
+## Support
+
+- **Documentation:** [Full API docs](https://docs.gopredix.com)
+- **Support Email:** support@gopredix.xyz
+- **Discord:** [Join Community](https://discord.gg/gopredix)
+- **Status Page:** [API Status](https://status.gopredix.com)
+
+---
+
+**Ready to build? Let's get started!**

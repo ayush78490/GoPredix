@@ -1,0 +1,224 @@
+---
+title: "Python SDK"
+description: "Official GoPreDix Python SDK"
+---
+
+# Python SDK
+
+Official SDK for Python developers.
+
+## Installation
+
+```bash
+pip install gopredix-sdk
+```
+
+## Quick Start
+
+```python
+from gopredix import GoPreDix
+
+client = GoPreDix(
+    rpc_url='https://data-seed-prebsc-1-b.binance.org:8545'
+)
+
+# Get markets
+markets = client.markets.list()
+print('Markets:', markets)
+```
+
+## Configuration
+
+```python
+from gopredix import GoPreDix
+
+client = GoPreDix(
+    rpc_url='https://data-seed-prebsc-1-b.binance.org:8545',
+    contract_address='0x...',
+    api_url='https://api.gopredix.com'
+)
+```
+
+## Markets API
+
+### List Markets
+
+```python
+markets = client.markets.list(
+    page=1,
+    limit=20,
+    category='finance',
+    status='active'
+)
+
+for market in markets:
+    print(f'{market["question"]} - Volume: {market["volume"]}')
+```
+
+### Get Market
+
+```python
+market = client.markets.get('market_123')
+print(market['question'])
+print(market['outcomes'])
+```
+
+### Create Market
+
+```python
+market = client.markets.create(
+    question='Will BTC reach 100k?',
+    outcomes=['Yes', 'No'],
+    deadline=int(time.time()) + 86400 * 30,
+    category='finance'
+)
+
+print(f'Market created: {market["id"]}')
+```
+
+## Trading API
+
+### Buy Shares
+
+```python
+trade = client.trades.buy(
+    market_id='market_123',
+    outcome_id='outcome_1',
+    amount=100,
+    max_price=0.75
+)
+
+print(f'Trade executed: {trade["trade_id"]}')
+```
+
+### Sell Shares
+
+```python
+trade = client.trades.sell(
+    market_id='market_123',
+    outcome_id='outcome_1',
+    amount=50
+)
+
+print(f'Sold {trade["amount"]} shares')
+```
+
+### Get User Trades
+
+```python
+trades = client.trades.get_user_trades(
+    user_id='0x...',
+    limit=50
+)
+
+for trade in trades:
+    print(f'Trade: {trade["shares"]} shares at {trade["price"]}')
+```
+
+## Rewards API
+
+### Get Rewards
+
+```python
+rewards = client.rewards.get('0x...')
+print(f'Total earned: {rewards["total_earned"]}')
+print(f'Claimable: {rewards["claimable"]}')
+```
+
+### Claim Reward
+
+```python
+claim = client.rewards.claim(market_id='market_123')
+print(f'Claimed: {claim["amount"]}')
+```
+
+## User API
+
+### Get Profile
+
+```python
+profile = client.users.get_profile('0x...')
+print(f'Username: {profile["username"]}')
+print(f'Win rate: {profile["win_rate"]}')
+```
+
+## Error Handling
+
+```python
+from gopredix.exceptions import GoPreDixError, InsufficientFundsError
+
+try:
+    trade = client.trades.buy(...)
+except InsufficientFundsError:
+    print('Not enough funds')
+except GoPreDixError as e:
+    print(f'Error: {e.message}')
+```
+
+## Examples
+
+### Monitor Market
+
+```python
+def monitor_market(market_id):
+    market = client.markets.get(market_id)
+    
+    print(f'Monitoring: {market["question"]}')
+    
+    for outcome in market['outcomes']:
+        print(f'{outcome["name"]}: {outcome["price"]}')
+
+monitor_market('market_123')
+```
+
+### Automated Trading
+
+```python
+def buy_if_price_low(market_id, outcome_id, target_price):
+    market = client.markets.get(market_id)
+    
+    outcome = next(
+        (o for o in market['outcomes'] if o['id'] == outcome_id),
+        None
+    )
+    
+    if outcome and outcome['price'] < target_price:
+        trade = client.trades.buy(
+            market_id=market_id,
+            outcome_id=outcome_id,
+            amount=100,
+            max_price=target_price
+        )
+        
+        print(f'Trade executed: {trade["id"]}')
+
+buy_if_price_low('market_123', 'outcome_1', 0.7)
+```
+
+### Batch Operations
+
+```python
+def batch_claim_rewards(market_ids):
+    results = []
+    
+    for market_id in market_ids:
+        try:
+            claim = client.rewards.claim(market_id=market_id)
+            results.append({
+                'market': market_id,
+                'claimed': claim['amount']
+            })
+        except GoPreDixError as e:
+            results.append({
+                'market': market_id,
+                'error': str(e)
+            })
+    
+    return results
+
+results = batch_claim_rewards(['m1', 'm2', 'm3'])
+```
+
+---
+
+**Start building with Python!**

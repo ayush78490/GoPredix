@@ -1,0 +1,253 @@
+---
+title: "Errors"
+description: "Error codes and handling"
+---
+
+# Errors
+
+Understand GoPreDix error codes and how to handle them.
+
+## Error Response Format
+
+All errors follow standard format:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human readable message",
+    "details": {
+      "field": "additional info"
+    }
+  }
+}
+```
+
+## Error Categories
+
+### Authentication Errors (401, 403)
+
+User authentication failed.
+
+| Code | Status | Message | Fix |
+|------|--------|---------|-----|
+| UNAUTHORIZED | 401 | No auth token provided | Add Authorization header |
+| TOKEN_EXPIRED | 401 | Token has expired | Refresh token |
+| INVALID_TOKEN | 401 | Bad token format | Check token value |
+| INSUFFICIENT_PERMISSIONS | 403 | Not allowed | Check access level |
+| INVALID_API_KEY | 401 | API key invalid | Verify API key |
+
+### Validation Errors (400)
+
+Invalid request parameters.
+
+| Code | Status | Message | Fix |
+|------|--------|---------|-----|
+| INVALID_REQUEST | 400 | Malformed request | Check JSON syntax |
+| MISSING_PARAMETER | 400 | Required param missing | Add parameter |
+| INVALID_PARAMETER | 400 | Invalid value format | Check value |
+| VALIDATION_FAILED | 400 | Data validation failed | Review requirements |
+| INVALID_QUESTION | 400 | Market question invalid | Improve clarity |
+| INVALID_OUTCOMES | 400 | Outcomes invalid | Check format |
+
+### Resource Errors (404, 409)
+
+Resource not found or conflict.
+
+| Code | Status | Message | Fix |
+|------|--------|---------|-----|
+| NOT_FOUND | 404 | Resource not found | Check ID/URL |
+| MARKET_NOT_FOUND | 404 | Market doesn't exist | Verify market ID |
+| USER_NOT_FOUND | 404 | User doesn't exist | Check user ID |
+| TRADE_NOT_FOUND | 404 | Trade not found | Verify trade ID |
+| ALREADY_EXISTS | 409 | Resource exists | Use different ID |
+| DUPLICATE_MARKET | 409 | Market question duplicate | Create unique question |
+| CONFLICT | 409 | State conflict | Retry later |
+
+### Blockchain Errors (400, 503)
+
+Smart contract or network issues.
+
+| Code | Status | Message | Fix |
+|------|--------|---------|-----|
+| INSUFFICIENT_GAS | 400 | Not enough gas | Increase gas price |
+| INSUFFICIENT_BALANCE | 400 | Not enough funds | Get more BNB |
+| CONTRACT_ERROR | 500 | Smart contract failed | Check contract state |
+| NETWORK_ERROR | 503 | Blockchain unavailable | Retry later |
+| TRANSACTION_FAILED | 400 | TX didn't execute | Check parameters |
+| MARKET_NOT_ACTIVE | 400 | Market closed | Check market status |
+| MARKET_NOT_LOCKED | 400 | Market still active | Wait for deadline |
+
+### Rate Limiting (429)
+
+Too many requests.
+
+| Code | Status | Message | Fix |
+|------|--------|---------|-----|
+| RATE_LIMIT_EXCEEDED | 429 | Too many requests | Wait and retry |
+| QUOTA_EXCEEDED | 429 | Daily quota exceeded | Wait until tomorrow |
+
+### Server Errors (500, 503)
+
+Server side issues.
+
+| Code | Status | Message | Fix |
+|------|--------|---------|-----|
+| INTERNAL_ERROR | 500 | Server error | Retry or contact support |
+| SERVICE_UNAVAILABLE | 503 | Maintenance mode | Check status page |
+| GATEWAY_TIMEOUT | 504 | Request timeout | Retry with longer timeout |
+
+## Handling Errors
+
+### JavaScript
+
+```javascript
+try {
+  const response = await fetch('/api/v1/markets', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+  
+  const result = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(result.error.message);
+  }
+  
+  console.log('Success:', result.data);
+} catch (error) {
+  console.error('Error:', error.message);
+}
+```
+
+### Python
+
+```python
+import requests
+
+try:
+  response = requests.post('/api/v1/markets', json=data)
+  response.raise_for_status()
+  
+  result = response.json()
+  print('Success:', result['data'])
+except requests.exceptions.HTTPError as error:
+  print(f'Error: {error.response.json()["error"]["message"]}')
+except Exception as error:
+  print(f'Error: {error}')
+```
+
+## Retry Logic
+
+### Exponential Backoff
+
+```javascript
+async function apiCall(url, options, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      
+      if (response.ok) {
+        return response.json();
+      }
+      
+      const error = await response.json();
+      
+      // Retry on server errors and rate limits
+      if ([429, 500, 503].includes(response.status)) {
+        const delay = Math.pow(2, i) * 1000; // Exponential backoff
+        console.log(`Retry in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      throw error;
+    } catch (error) {
+      if (i === retries - 1) throw error;
+    }
+  }
+}
+```
+
+## Common Scenarios
+
+### Insufficient Funds
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INSUFFICIENT_BALANCE",
+    "message": "Insufficient BNB balance for transaction"
+  }
+}
+```
+
+**Fix:** Add more BNB to wallet
+
+### Market Not Active
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "MARKET_NOT_ACTIVE",
+    "message": "Cannot trade in inactive market"
+  }
+}
+```
+
+**Fix:** Check market status before trading
+
+### Invalid Question
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_QUESTION",
+    "message": "Question is too vague. Please be more specific."
+  }
+}
+```
+
+**Fix:** Improve question clarity and be more specific
+
+## Debug Tips
+
+### Check Status Code
+
+```javascript
+const response = await fetch(url);
+console.log('Status:', response.status); // 200, 400, 429, 500, etc
+```
+
+### Log Full Response
+
+```javascript
+const result = await response.json();
+console.log('Full error:', JSON.stringify(result, null, 2));
+```
+
+### Verify Request
+
+```javascript
+console.log('Request URL:', url);
+console.log('Request headers:', options.headers);
+console.log('Request body:', options.body);
+```
+
+## Support
+
+### Still Having Issues?
+
+1. Check this documentation
+2. Review error message carefully
+3. Check API status page
+4. Contact support@gopredix.xyz
+5. Join Discord for help
+
+---
+
+**Handle errors gracefully!**

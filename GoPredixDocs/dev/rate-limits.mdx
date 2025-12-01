@@ -1,0 +1,228 @@
+---
+title: "Rate Limits"
+description: "API rate limiting and quotas"
+---
+
+# Rate Limits
+
+Understand GoPreDix API rate limiting policy.
+
+## Rate Limiting Policy
+
+The API uses rate limiting to ensure fair usage and service stability.
+
+### Default Limits
+
+| Tier | Requests/Min | Requests/Day |
+|------|---|---|
+| Unauthenticated | 30 | 1,000 |
+| Authenticated | 100 | 10,000 |
+| Premium | 1,000 | 100,000 |
+
+## Endpoint Specific Limits
+
+| Endpoint | Default | Premium |
+|----------|---------|---------|
+| GET /markets | 100/min | 1,000/min |
+| POST /markets | 10/min | 100/min |
+| GET /trades | 100/min | 1,000/min |
+| POST /trades | 50/min | 500/min |
+| GET /users | 100/min | 1,000/min |
+| POST /settle | 10/min | 100/min |
+
+## Rate Limit Headers
+
+Every response includes rate limit information:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 87
+X-RateLimit-Reset: 1636390800
+X-RateLimit-Retry-After: 60
+```
+
+### Header Meanings
+
+- **Limit:** Your rate limit
+- **Remaining:** Requests left in window
+- **Reset:** Unix timestamp when limit resets
+- **Retry-After:** Seconds until next request allowed
+
+## Checking Rate Limit
+
+### JavaScript
+
+```javascript
+const response = await fetch('/api/v1/markets');
+
+const limit = response.headers.get('X-RateLimit-Limit');
+const remaining = response.headers.get('X-RateLimit-Remaining');
+const reset = response.headers.get('X-RateLimit-Reset');
+
+console.log(`Limit: ${limit}`);
+console.log(`Remaining: ${remaining}`);
+console.log(`Reset: ${new Date(reset * 1000)}`);
+```
+
+### Python
+
+```python
+import requests
+
+response = requests.get('/api/v1/markets')
+
+limit = response.headers['X-RateLimit-Limit']
+remaining = response.headers['X-RateLimit-Remaining']
+reset = response.headers['X-RateLimit-Reset']
+
+print(f'Limit: {limit}')
+print(f'Remaining: {remaining}')
+print(f'Reset: {reset}')
+```
+
+## Handling Rate Limits
+
+### Status Code 429
+
+When rate limited, you receive HTTP 429:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many requests. Retry after 60 seconds."
+  }
+}
+```
+
+### Retry Logic
+
+Implement exponential backoff:
+
+```javascript
+async function makeRequestWithRetry(url, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const response = await fetch(url);
+      
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('X-RateLimit-Retry-After');
+        const waitTime = (parseInt(retryAfter) + 1) * 1000;
+        
+        console.log(`Rate limited. Waiting ${waitTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Request failed:', error);
+    }
+  }
+}
+```
+
+## Best Practices
+
+### Monitor Usage
+
+Check remaining requests before making calls:
+
+```javascript
+if (remaining < 10) {
+  console.warn('Low rate limit remaining!');
+}
+```
+
+### Batch Requests
+
+Combine multiple requests when possible:
+
+```javascript
+// Instead of 10 separate calls
+const marketIds = ['m1', 'm2', 'm3', 'm4', 'm5'];
+
+// Make one call with filter
+const markets = await client.markets.list({
+  ids: marketIds
+});
+```
+
+### Cache Responses
+
+Store responses to avoid repeated calls:
+
+```javascript
+const cache = {};
+
+async function getMarket(marketId) {
+  if (cache[marketId]) {
+    return cache[marketId];
+  }
+  
+  const market = await fetch(`/api/v1/markets/${marketId}`);
+  cache[marketId] = market;
+  return market;
+}
+```
+
+### Use Webhooks
+
+Subscribe to events instead of polling:
+
+```javascript
+// Instead of polling every minute
+setInterval(async () => {
+  const markets = await fetch('/api/v1/markets');
+  // Process...
+}, 60000);
+
+// Use webhooks
+client.on('market.updated', (market) => {
+  console.log('Market updated:', market);
+});
+```
+
+## Increasing Limits
+
+### Premium Tier
+
+Upgrade to Premium for higher limits:
+
+- **10x higher limits** - 1,000 requests/min
+- **Higher daily quota** - 100,000 requests/day
+- **Priority support** - Fast response times
+- **Custom limits** - Request even higher limits
+
+**Price:** $99/month
+
+### Contact
+
+For enterprise limits or custom arrangements:
+
+Email: partnerships@gopredix.xyz
+
+## Fair Usage
+
+The API applies fair usage policy:
+
+- Avoid excessive polling
+- Don't scrape all data
+- Implement caching
+- Use appropriate webhooks
+- Space out requests
+
+Violations may result in account suspension.
+
+## Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 429 | Rate limited |
+| 503 | Service unavailable |
+
+---
+
+**Use rate limits responsibly!**

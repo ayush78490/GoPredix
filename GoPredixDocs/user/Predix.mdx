@@ -1,0 +1,160 @@
+---
+title: "Getting Started with GoPreDix"
+description: "Welcome to GoPreDix - the decentralized prediction market platform"
+---
+
+# Welcome to GoPreDix
+
+GoPreDix is a **decentralized prediction market platform** built on blockchain technology. Create markets, trade predictions, and earn rewards on real-world events.
+
+## What is GoPreDix?
+
+GoPreDix enables you to:
+
+- **Create Markets** - Launch prediction markets on any event
+- **Trade Predictions** - Buy/sell shares of outcomes
+- **Earn Rewards** - Profit from accurate predictions
+- **Own Your Data** - All data stored on blockchain
+
+## Key Features
+
+✅ **Decentralized** - No central authority, truly owned by users
+✅ **Transparent** - All trades visible on blockchain
+✅ **Fast** - Transactions settle in seconds on BSC
+✅ **Low Fees** - 0.5% trading fees, 1% market creation
+✅ **Non-Custodial** - You control your funds with MetaMask
+
+## Quick Overview
+
+### How It Works
+
+```
+                        ┌──────────────────────────────┐
+                        │        FRONTEND (Next.js)     │
+                        │──────────────────────────────│
+                        │ MetaMask Connect             │
+                        │ Create / Trade Markets       │
+                        │ Resolve / Dispute UI         │
+                        └───────────────┬──────────────┘
+                                        │ JSON-RPC (wagmi)
+                                        ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     SMART CONTRACT (EVM)                         │
+│               PredictionMarketWithMultipliers                    │
+│──────────────────────────────────────────────────────────────────│
+│ Markets: title, category, status, deadline, lockTime, result     │
+│ Pools: totalYes, totalNo                                         │
+│ Multipliers: multiplierYES, multiplierNO (×1000)                 │
+│ User Bets: userBets[user][marketId][YES/NO]                      │
+│                                                                  │
+│  FLOW:                                                           │
+│   createMarket()  → Created                                      │
+│   startTrading()  → Trading                                      │
+│   placeBet()      → Updates pools + multipliers                  │
+│   resolveMarket() → Resolved + PnL                              │
+│   disputeMarket() → Disputed                                     │
+│   redeemWinnings() → payout = bet × multiplier / SCALE           │
+└──────────────────────────────────────────────────────────────────┘
+                                        ▲
+                                        │ Contract Events
+                                        ▼
+                   ┌────────────────────────────────────────┐
+                   │            BACKEND (Node.js)            │
+                   │────────────────────────────────────────│
+                   │ Listens to events                      │
+                   │ Stores data in PostgreSQL              │
+                   │ API for frontend                       │
+                   │ Auto tasks (cron)                      │
+                   └───────────────────┬────────────────────┘
+                                       │ SQL
+                                       ▼
+                      ┌──────────────────────────────────┐
+                      │        DATABASE (PostgreSQL)      │
+                      │──────────────────────────────────│
+                      │ markets, bets, transactions       │
+                      └──────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│                       DEVELOPMENT                         │
+│──────────────────────────────────────────────────────────│
+│ Hardhat: Compile, Test, Deploy, ABI, Scripts             │
+│ Networks: BNB Testnet / Localhost                        │
+└──────────────────────────────────────────────────────────┘
+
+
+```
+
+### Markets Example
+
+**Question:** "Will BTC reach $100k by December 2025?"
+
+**Outcomes:** Yes | No
+
+**Current Prices:** 
+- Yes: 0.65 (65% probability)
+- No: 0.35 (35% probability)
+
+## Getting Started
+
+### New to Crypto?
+
+1. [Install MetaMask](https://metamask.io)
+2. [Set up BSC Testnet](./connect-wallet)
+3. [Get testnet tokens](https://testfaucet.binance.org/)
+4. Create your profile
+5. Start trading!
+
+### Experienced Trader?
+
+Jump to [Quick Start Guide](./quickstart)
+
+## Platform Statistics
+
+- **Active Markets:** 1,000+
+- **Total Volume:** $50M+
+- **Unique Traders:** 10,000+
+- **Supported Chains:** BSC (Ethereum planned)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="./quickstart"
+  >
+    Create your first prediction in 5 minutes
+  </Card>
+  <Card
+    title="Connect Wallet"
+    icon="wallet"
+    href="./connect-wallet"
+  >
+    Set up MetaMask and connect to GoPreDix
+  </Card>
+  <Card
+    title="Create Market"
+    icon="plus"
+    href="./create-market"
+  >
+    Launch your own prediction market
+  </Card>
+  <Card
+    title="FAQ"
+    icon="circle-question"
+    href="./faq"
+  >
+    Common questions answered
+  </Card>
+</CardGroup>
+
+## Support
+
+- **Discord:** Join our community
+- **Email:** support@gopredix.xyz
+- **Docs:** Read full documentation
+- **Status:** Check system status
+
+---
+
+**Ready to start predicting?** [Launch the app →](https://www.gopredix.xyz)

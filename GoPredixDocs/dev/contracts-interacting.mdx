@@ -1,0 +1,134 @@
+---
+title: "Interacting with Contracts"
+description: "Interact with deployed GoPreDix smart contracts"
+---
+
+# Interacting with Smart Contracts
+
+Connect to and interact with deployed GoPreDix contracts.
+
+## Using Ethers.js
+
+### Setup
+
+```javascript
+const ethers = require('ethers');
+
+const rpcUrl = 'https://data-seed-prebsc-1-b.binance.org:8545';
+const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+
+const privateKey = process.env.PRIVATE_KEY;
+const wallet = new ethers.Wallet(privateKey, provider);
+```
+
+### Contract Instance
+
+```javascript
+const contractAddress = '0x...';
+const contractABI = [...]; // Import ABI
+
+const contract = new ethers.Contract(contractAddress, contractABI, wallet);
+```
+
+## Common Operations
+
+### Create Market
+
+```javascript
+const tx = await contract.createMarket(
+  "Will BTC reach 100k?",
+  ["Yes", "No"],
+  Math.floor(Date.now() / 1000) + 86400
+);
+
+const receipt = await tx.wait();
+console.log('Market created at:', receipt.contractAddress);
+```
+
+### Buy Shares
+
+```javascript
+const tx = await contract.buyShares(
+  0, // outcome index
+  ethers.parseEther('100'), // amount
+  ethers.parseEther('0.75') // max price
+);
+
+const receipt = await tx.wait();
+console.log('Shares bought:', receipt.transactionHash);
+```
+
+### Get Market Info
+
+```javascript
+const market = await contract.getMarket(marketAddress);
+console.log('Market:', {
+  question: market.question,
+  outcomes: market.outcomes,
+  status: market.status
+});
+```
+
+### Check Balance
+
+```javascript
+const balance = await contract.balanceOf(wallet.address, outcomeId);
+console.log('Shares owned:', balance.toString());
+```
+
+### Settle Market
+
+```javascript
+const tx = await contract.settle(1); // winning outcome id
+
+const receipt = await tx.wait();
+console.log('Market settled:', receipt.transactionHash);
+```
+
+## Error Handling
+
+```javascript
+try {
+  const tx = await contract.buyShares(...);
+  await tx.wait();
+} catch (error) {
+  if (error.code === 'INSUFFICIENT_FUNDS') {
+    console.error('Not enough BNB for gas');
+  } else if (error.reason === 'Market is not active') {
+    console.error('Cannot trade in inactive market');
+  } else {
+    console.error('Transaction failed:', error.message);
+  }
+}
+```
+
+## Reading Data
+
+### Read Only Calls (No Gas)
+
+```javascript
+// Get market info without spending gas
+const marketInfo = await contract.getMarketInfo(marketId);
+
+// Get your balance
+const balance = await contract.balanceOf(userAddress, outcomeId);
+
+// Get current price
+const price = await contract.getPrice(outcomeId);
+```
+
+### Estimate Gas
+
+```javascript
+const gasEstimate = await contract.estimateGas.buyShares(
+  0,
+  ethers.parseEther('100'),
+  ethers.parseEther('0.75')
+);
+
+console.log('Estimated gas:', gasEstimate.toString());
+```
+
+---
+
+**Start building on GoPreDix!**

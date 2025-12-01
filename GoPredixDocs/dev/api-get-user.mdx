@@ -1,0 +1,68 @@
+---
+title: "API Get User"
+description: "Get user profile information"
+---
+
+# GET User Profile
+
+Retrieve user profile and account information.
+
+## Endpoint
+
+```
+GET /api/v1/users/:userId
+```
+
+## Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|---|
+| userId | string | Yes | User ID or wallet address |
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "user_123",
+    "walletAddress": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+    "username": "trader1",
+    "email": "user@example.com",
+    "age": 25,
+    "profileImage": "https://...",
+    "bio": "Crypto trader and prediction enthusiast",
+    "reputation": 850,
+    "totalVolume": 100000,
+    "winRate": 0.65,
+    "joinedAt": 1699612800,
+    "totalTrades": 150,
+    "totalMarkets": 5
+  }
+}
+```
+
+## Example Usage
+
+```javascript
+const user = await fetch('/api/v1/users/0x742d35Cc6634C0532925a3b844Bc7e7595f42471', {
+  headers: {
+    'Authorization': 'Bearer token'
+  }
+});
+
+const data = await user.json();
+console.log('User profile:', data.data);
+```
+
+## Status Codes
+
+| Code | Message |
+|------|---------|
+| 200 | Success |
+| 404 | User not found |
+| 401 | Unauthorized |
+
+---
+
+**Get user information easily!**

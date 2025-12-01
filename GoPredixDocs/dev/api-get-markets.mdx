@@ -1,0 +1,86 @@
+---
+title: "GET Markets"
+description: "Retrieve prediction markets from GoPreDix API"
+---
+
+# GET Markets
+
+Retrieve list of active markets from GoPreDix.
+
+## Endpoint
+
+```
+GET /api/v1/markets
+```
+
+## Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|---|
+| page | integer | No | Page number (default: 1) |
+| limit | integer | No | Results per page (default: 10, max: 100) |
+| category | string | No | Filter by category (finance, sports, politics, tech, other) |
+| status | string | No | Filter by status (active, locked, resolved) |
+| sort | string | No | Sort order (volume, deadline, new) |
+| search | string | No | Search markets by question |
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "market_123",
+      "question": "Will BTC reach 100k dollars?",
+      "description": "Bitcoin price prediction",
+      "outcomes": [
+        {
+          "id": "outcome_1",
+          "name": "Yes",
+          "price": 0.65
+        },
+        {
+          "id": "outcome_2",
+          "name": "No",
+          "price": 0.35
+        }
+      ],
+      "status": "ACTIVE",
+      "category": "finance",
+      "creator": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+      "volume": 50000,
+      "participants": 250,
+      "deadline": 1735689600,
+      "createdAt": 1699612800,
+      "updatedAt": 1699699200
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 1000,
+    "pages": 100
+  }
+}
+```
+
+## Example Usage
+
+```javascript
+const markets = await fetch('/api/v1/markets?category=finance&status=active&limit=20');
+const data = await markets.json();
+console.log(data.data);
+```
+
+## Status Codes
+
+| Code | Message |
+|------|---------|
+| 200 | Success |
+| 400 | Invalid parameters |
+| 500 | Server error |
+
+---
+
+**Ready to start querying markets?**

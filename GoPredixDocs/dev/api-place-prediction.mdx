@@ -1,0 +1,87 @@
+---
+title: "api Place Prediction"
+description: "Place a prediction trade in a market"
+---
+
+# POST Place Prediction
+
+Place a trade (buy shares) in a prediction market.
+
+## Endpoint
+
+```
+POST /api/v1/trades
+```
+
+## Request
+
+```json
+{
+  "marketId": "market_123",
+  "outcomeId": "outcome_1",
+  "amount": 100,
+  "maxPrice": 0.75
+}
+```
+
+## Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|---|
+| marketId | string | Yes | Market ID to trade in |
+| outcomeId | string | Yes | Outcome ID to buy shares of |
+| amount | number | Yes | Number of shares to buy |
+| maxPrice | number | Yes | Maximum price per share |
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "tradeId": "trade_789",
+    "marketId": "market_123",
+    "outcome": "Yes",
+    "shares": 100,
+    "price": 0.70,
+    "total": 70,
+    "gas": 0.05,
+    "txHash": "0xabc123...",
+    "timestamp": 1699699200
+  }
+}
+```
+
+## Example Usage
+
+```javascript
+const trade = await fetch('/api/v1/trades', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer token'
+  },
+  body: JSON.stringify({
+    marketId: "market_123",
+    outcomeId: "outcome_1",
+    amount: 100,
+    maxPrice: 0.75
+  })
+});
+
+const data = await trade.json();
+console.log('Trade placed:', data.data.tradeId);
+```
+
+## Status Codes
+
+| Code | Message |
+|------|---------|
+| 201 | Trade placed successfully |
+| 400 | Invalid parameters |
+| 401 | Unauthorized |
+| 503 | Insufficient liquidity |
+
+---
+
+**Ready to place your first trade?**

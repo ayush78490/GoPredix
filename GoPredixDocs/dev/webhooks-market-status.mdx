@@ -1,0 +1,296 @@
+---
+title: "Market Status Webhooks"
+description: "Real time market status updates via webhooks"
+---
+
+# Market Status Webhooks
+
+Receive real time updates when market status changes.
+
+## Webhook Events
+
+### market.created
+
+Triggered when market is created.
+
+```json
+{
+  "id": "webhook_123",
+  "event": "market.created",
+  "timestamp": 1699699200,
+  "data": {
+    "marketId": "market_123",
+    "question": "Will BTC reach 100k?",
+    "creator": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+    "outcomes": ["Yes", "No"],
+    "deadline": 1735689600,
+    "category": "finance"
+  }
+}
+```
+
+### market.locked
+
+Triggered when market deadline is reached.
+
+```json
+{
+  "id": "webhook_124",
+  "event": "market.locked",
+  "timestamp": 1735689600,
+  "data": {
+    "marketId": "market_123",
+    "status": "LOCKED",
+    "reason": "Deadline reached",
+    "lockedAt": 1735689600
+  }
+}
+```
+
+### market.resolved
+
+Triggered when market is settled.
+
+```json
+{
+  "id": "webhook_125",
+  "event": "market.resolved",
+  "timestamp": 1735690200,
+  "data": {
+    "marketId": "market_123",
+    "status": "RESOLVED",
+    "winningOutcome": "Yes",
+    "totalWinners": 250,
+    "totalRewardPool": 50000,
+    "resolvedAt": 1735690200
+  }
+}
+```
+
+## Setup Webhook
+
+### Via API
+
+```javascript
+const webhook = await fetch('/api/v1/webhooks', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer token'
+  },
+  body: JSON.stringify({
+    url: 'https://yourapp.com/webhooks/market-status',
+    events: ['market.created', 'market.locked', 'market.resolved']
+  })
+});
+
+const result = await webhook.json();
+console.log('Webhook registered:', result.data.id);
+```
+
+## Receive Webhook
+
+### Express.js Endpoint
+
+```javascript
+const express = require('express');
+const app = express();
+
+app.post('/webhooks/market-status', express.json(), (req, res) => {
+    const { event, data, timestamp } = req.body;
+    
+    console.log(`Received: ${event}`);
+    console.log('Data:', data);
+    
+    // Process based on event type
+    switch(event) {
+        case 'market.created':
+            handleMarketCreated(data);
+            break;
+        case 'market.locked':
+            handleMarketLocked(data);
+            break;
+        case 'market.resolved':
+            handleMarketResolved(data);
+            break;
+    }
+    
+    res.json({ success: true });
+});
+```
+
+## Event Handlers
+
+### Market Created
+
+```javascript
+function handleMarketCreated(data) {
+    console.log('New market created:', data.marketId);
+    
+    // Save to database
+    db.markets.create({
+        marketId: data.marketId,
+        question: data.question,
+        creator: data.creator,
+        outcomes: data.outcomes,
+        deadline: data.deadline,
+        createdAt: Date.now()
+    });
+    
+    // Send notification
+    notifyUsers('New market created', data.question);
+}
+```
+
+### Market Locked
+
+```javascript
+function handleMarketLocked(data) {
+    console.log('Market locked:', data.marketId);
+    
+    // Update status
+    db.markets.update(
+        { marketId: data.marketId },
+        { status: 'LOCKED' }
+    );
+    
+    // Stop accepting new trades
+    disableTrading(data.marketId);
+}
+```
+
+### Market Resolved
+
+```javascript
+function handleMarketResolved(data) {
+    console.log('Market resolved:', data.marketId);
+    
+    // Update status
+    db.markets.update(
+        { marketId: data.marketId },
+        { 
+            status: 'RESOLVED',
+            winningOutcome: data.winningOutcome,
+            rewardPool: data.totalRewardPool
+        }
+    );
+    
+    // Trigger reward distribution
+    distributeRewards(data.marketId, data.totalRewardPool);
+}
+```
+
+## Verify Webhook Signature
+
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhookSignature(payload, signature, secret) {
+    const hash = crypto
+        .createHmac('sha256', secret)
+        .update(JSON.stringify(payload))
+        .digest('hex');
+    
+    return hash === signature;
+}
+
+app.post('/webhooks/market-status', (req, res) => {
+    const signature = req.headers['x-webhook-signature'];
+    const secret = process.env.WEBHOOK_SECRET;
+    
+    if (!verifyWebhookSignature(req.body, signature, secret)) {
+        return res.status(401).json({ error: 'Invalid signature' });
+    }
+    
+    // Process webhook
+    processWebhook(req.body);
+    res.json({ success: true });
+});
+```
+
+## Retry Policy
+
+Failed webhooks retry automatically:
+
+- Attempt 1: Immediate
+- Attempt 2: 5 minutes
+- Attempt 3: 30 minutes
+- Attempt 4: 2 hours
+- Attempt 5: 24 hours
+
+## Complete Webhook Server
+
+```javascript
+const express = require('express');
+const crypto = require('crypto');
+const dotenv = require('dotenv');
+
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+// Webhook signature verification
+function verifySignature(req) {
+    const signature = req.headers['x-webhook-signature'];
+    const secret = process.env.WEBHOOK_SECRET;
+    
+    const hash = crypto
+        .createHmac('sha256', secret)
+        .update(JSON.stringify(req.body))
+        .digest('hex');
+    
+    return hash === signature;
+}
+
+// Webhook endpoint
+app.post('/webhooks/market-status', (req, res) => {
+    if (!verifySignature(req)) {
+        return res.status(401).json({ error: 'Invalid signature' });
+    }
+    
+    const { event, data, timestamp } = req.body;
+    
+    try {
+        console.log(`\n=== Webhook Received ===`);
+        console.log(`Event: ${event}`);
+        console.log(`Market: ${data.marketId}`);
+        console.log(`Time: ${new Date(timestamp).toISOString()}`);
+        
+        // Process event
+        processEvent(event, data);
+        
+        // Send response
+        res.json({ 
+            success: true,
+            processed: true 
+        });
+    } catch (error) {
+        console.error('Error processing webhook:', error);
+        res.status(500).json({ error: 'Processing failed' });
+    }
+});
+
+// Event processor
+function processEvent(event, data) {
+    switch(event) {
+        case 'market.created':
+            console.log(`✓ Market created: ${data.question}`);
+            break;
+        case 'market.locked':
+            console.log(`✓ Market locked: ${data.marketId}`);
+            break;
+        case 'market.resolved':
+            console.log(`✓ Market resolved: Winner = ${data.winningOutcome}`);
+            break;
+    }
+}
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Webhook server running on port ${PORT}`);
+});
+```
+
+---
+
+**Set up real time market status tracking!**

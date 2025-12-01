@@ -1,0 +1,187 @@
+---
+title: "Smart Contract Events"
+description: "Listen to and handle smart contract events"
+---
+
+# Smart Contract Events
+
+Monitor on chain events from GoPreDix contracts.
+
+## Available Events
+
+### MarketCreated
+
+Emitted when a market is created.
+
+```solidity
+event MarketCreated(
+  address indexed market,
+  string question,
+  address creator,
+  uint256 deadline
+);
+```
+
+### TradeExecuted
+
+Emitted when a trade is executed.
+
+```solidity
+event TradeExecuted(
+  address indexed market,
+  address indexed trader,
+  uint256 outcome,
+  uint256 shares,
+  uint256 price
+);
+```
+
+### MarketSettled
+
+Emitted when market is settled.
+
+```solidity
+event MarketSettled(
+  address indexed market,
+  uint256 winningOutcome,
+  uint256 timestamp
+);
+```
+
+### RewardClaimed
+
+Emitted when reward is claimed.
+
+```solidity
+event RewardClaimed(
+  address indexed claimer,
+  address indexed market,
+  uint256 amount
+);
+```
+
+## Listening to Events
+
+### Using Ethers.js
+
+```javascript
+const contract = new ethers.Contract(address, abi, provider);
+
+// Listen to MarketCreated events
+contract.on('MarketCreated', (market, question, creator, deadline) => {
+  console.log('Market created:', {
+    address: market,
+    question: question,
+    creator: creator,
+    deadline: deadline
+  });
+});
+```
+
+### Listen to Specific Market
+
+```javascript
+const filter = contract.filters.TradeExecuted(marketAddress);
+
+contract.on(filter, (market, trader, outcome, shares, price) => {
+  console.log('Trade executed:', {
+    trader: trader,
+    shares: shares.toString(),
+    price: price.toString()
+  });
+});
+```
+
+## Query Historical Events
+
+### Get Past Events
+
+```javascript
+const events = await contract.queryFilter(
+  contract.filters.MarketCreated(),
+  blockStart,
+  blockEnd
+);
+
+events.forEach(event => {
+  console.log('Market created:', event.args.question);
+});
+```
+
+### Get Events for Specific Market
+
+```javascript
+const filter = contract.filters.TradeExecuted(marketAddress);
+const events = await contract.queryFilter(filter, 0, 'latest');
+
+events.forEach(event => {
+  console.log('Trade:', {
+    trader: event.args.trader,
+    shares: event.args.shares.toString()
+  });
+});
+```
+
+## Real Time Monitoring
+
+### Monitor All Events
+
+```javascript
+contract.on('*', (event) => {
+  console.log('Event:', {
+    eventName: event.eventSignature,
+    args: event.args,
+    blockNumber: event.blockNumber,
+    transactionHash: event.transactionHash
+  });
+});
+```
+
+### Stop Listening
+
+```javascript
+// Remove specific listener
+contract.off('MarketCreated', listener);
+
+// Remove all listeners
+contract.removeAllListeners('MarketCreated');
+```
+
+## Event Examples
+
+### Process Trade Events
+
+```javascript
+contract.on('TradeExecuted', async (market, trader, outcome, shares, price) => {
+  // Update your database
+  await db.trades.create({
+    marketAddress: market,
+    trader: trader,
+    outcome: outcome.toNumber(),
+    shares: shares.toString(),
+    price: price.toString(),
+    timestamp: Date.now()
+  });
+
+  // Notify user
+  await notifyUser(trader, 'Trade executed');
+});
+```
+
+### Track Market Settlements
+
+```javascript
+contract.on('MarketSettled', async (market, winningOutcome) => {
+  console.log('Market settled:', {
+    market: market,
+    winner: winningOutcome.toNumber()
+  });
+
+  // Trigger settlement process
+  await settleMarket(market, winningOutcome);
+});
+```
+
+---
+
+**Build real time applications with events!**

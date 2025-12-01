@@ -1,0 +1,233 @@
+---
+title: "Authentication"
+description: "API authentication methods and security"
+---
+
+# Authentication
+
+Learn how to authenticate with the GoPreDix API.
+
+## Authentication Methods
+
+GoPreDix API supports multiple authentication methods:
+
+1. **API Key** - Simple token based authentication
+2. **JWT Token** - Session based authentication
+3. **Wallet Signature** - Web3 authentication
+
+## API Key Authentication
+
+### Generate API Key
+
+1. Login to your GoPreDix account
+2. Go to Settings → API Keys
+3. Click "Generate New Key"
+4. Copy the key (shown only once)
+5. Save securely
+
+**Never share your API key!**
+
+### Using API Key
+
+Include in Authorization header:
+
+```bash
+curl -X GET https://api.gopredix.com/v1/markets \
+  -H "Authorization: Bearer sk_live_abc123..."
+```
+
+### JavaScript
+
+```javascript
+const response = await fetch('https://api.gopredix.com/v1/markets', {
+  headers: {
+    'Authorization': 'Bearer sk_live_abc123...'
+  }
+});
+```
+
+### Python
+
+```python
+import requests
+
+headers = {
+    'Authorization': 'Bearer sk_live_abc123...'
+}
+
+response = requests.get(
+    'https://api.gopredix.com/v1/markets',
+    headers=headers
+)
+```
+
+## JWT Token Authentication
+
+### Get JWT Token
+
+```bash
+curl -X POST https://api.gopredix.com/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d {
+    "email": "user@example.com",
+    "password": "password"
+  }
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGc...",
+    "expiresIn": 3600
+  }
+}
+```
+
+### Use JWT Token
+
+```bash
+curl -X GET https://api.gopredix.com/v1/markets \
+  -H "Authorization: Bearer eyJhbGc..."
+```
+
+### Refresh Token
+
+```bash
+curl -X POST https://api.gopredix.com/v1/auth/refresh \
+  -H "Authorization: Bearer eyJhbGc..."
+```
+
+## Wallet Signature Authentication
+
+### Connect Wallet
+
+```javascript
+import { ethers } from 'ethers';
+
+const provider = new ethers.BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+const address = await signer.getAddress();
+```
+
+### Sign Message
+
+```javascript
+const message = 'Sign to authenticate with GoPreDix';
+const signature = await signer.signMessage(message);
+```
+
+### Authenticate
+
+```javascript
+const response = await fetch('https://api.gopredix.com/v1/auth/wallet', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    address: address,
+    message: message,
+    signature: signature
+  })
+});
+
+const data = await response.json();
+const token = data.data.token;
+```
+
+## Request Headers
+
+Include these headers with each request:
+
+```
+Authorization: Bearer YOUR_TOKEN
+Content-Type: application/json
+User-Agent: MyApp/1.0
+```
+
+### Example Request
+
+```bash
+curl -X POST https://api.gopredix.com/v1/markets \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d {
+    "question": "Will BTC reach 100k?",
+    "outcomes": ["Yes", "No"],
+    "deadline": 1735689600
+  }
+```
+
+## Token Expiration
+
+- **API Key:** No expiration (revoke manually)
+- **JWT Token:** 1 hour (refresh to extend)
+- **Wallet Signature:** 24 hours
+
+## Security Best Practices
+
+### DO
+
+- ✅ Keep API key secret
+- ✅ Rotate API keys regularly
+- ✅ Use environment variables
+- ✅ Refresh expired tokens
+- ✅ Use HTTPS only
+
+### DON'T
+
+- ❌ Commit API keys to git
+- ❌ Share API keys
+- ❌ Use keys in frontend code
+- ❌ Log API keys
+- ❌ Use HTTP (always use HTTPS)
+
+## Environment Variables
+
+Store credentials safely:
+
+```bash
+# .env file
+API_KEY=sk_live_abc123...
+API_SECRET=sk_secret_xyz789...
+JWT_TOKEN=eyJhbGc...
+```
+
+Load in code:
+
+```javascript
+const apiKey = process.env.API_KEY;
+```
+
+## Errors
+
+### Missing Authentication
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Missing or invalid authentication"
+  }
+}
+```
+
+### Invalid Token
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "TOKEN_EXPIRED",
+    "message": "Token has expired. Please refresh."
+  }
+}
+```
+
+---
+
+**Secure your API credentials!**

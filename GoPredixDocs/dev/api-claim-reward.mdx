@@ -1,0 +1,78 @@
+---
+title: "API Claim Reward"
+description: "Claim winnings from a settled market"
+---
+
+# POST Claim Reward
+
+Claim your winnings from a settled market.
+
+## Endpoint
+
+```
+POST /api/v1/rewards/claim
+```
+
+## Request
+
+```json
+{
+  "marketId": "market_123",
+  "shares": 100
+}
+```
+
+## Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|---|
+| marketId | string | Yes | Market ID to claim from |
+| shares | number | Yes | Number of shares to claim |
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "claimId": "claim_456",
+    "marketId": "market_123",
+    "sharesRedeemed": 100,
+    "amountClaimed": 50000,
+    "txHash": "0xghi789...",
+    "claimedAt": 1699785600
+  }
+}
+```
+
+## Example Usage
+
+```javascript
+const claim = await fetch('/api/v1/rewards/claim', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer token'
+  },
+  body: JSON.stringify({
+    marketId: "market_123",
+    shares: 100
+  })
+});
+
+const data = await claim.json();
+console.log('Reward claimed:', data.data.amountClaimed);
+```
+
+## Status Codes
+
+| Code | Message |
+|------|---------|
+| 200 | Reward claimed |
+| 400 | Invalid market or shares |
+| 401 | Unauthorized |
+| 404 | Market not found |
+
+---
+
+**Claim your winnings now!**

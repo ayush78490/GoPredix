@@ -1,0 +1,125 @@
+---
+title: "Deploying Smart Contracts"
+description: "Deploy GoPreDix contracts to BSC"
+---
+
+# Deploying Smart Contracts
+
+Guide to deploying GoPreDix smart contracts.
+
+## Prerequisites
+
+- Node.js v14 plus
+- Hardhat or Truffle
+- BSC testnet or mainnet account
+- Test BNB for gas
+
+## Setup
+
+### Install Dependencies
+
+```bash
+npm install hardhat @nomiclabs/hardhat-ethers ethers
+npm install --save-dev @nomiclabs/hardhat-waffle ethereum-waffle chai
+```
+
+### Initialize Project
+
+```bash
+npx hardhat
+```
+
+## Configuration
+
+### hardhat.config.js
+
+```javascript
+require("@nomiclabs/hardhat-waffle");
+
+module.exports = {
+  solidity: "0.8.19",
+  networks: {
+    bsc_testnet: {
+      url: "https://data-seed-prebsc-1-b.binance.org:8545",
+      chainId: 97,
+      accounts: [process.env.PRIVATE_KEY]
+    },
+    bsc_mainnet: {
+      url: "https://bsc-dataseed.binance.org",
+      chainId: 56,
+      accounts: [process.env.PRIVATE_KEY]
+    }
+  }
+};
+```
+
+## Deploy Script
+
+### scripts/deploy.js
+
+```javascript
+async function main() {
+  console.log("Deploying GoPreDix contracts...");
+
+  const MarketFactory = await ethers.getContractFactory("MarketFactory");
+  const marketFactory = await MarketFactory.deploy();
+  await marketFactory.deployed();
+  
+  console.log("MarketFactory deployed to:", marketFactory.address);
+
+  const Settlement = await ethers.getContractFactory("Settlement");
+  const settlement = await Settlement.deploy(marketFactory.address);
+  await settlement.deployed();
+  
+  console.log("Settlement deployed to:", settlement.address);
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+```
+
+## Deploy Commands
+
+### To Testnet
+
+```bash
+npx hardhat run scripts/deploy.js --network bsc_testnet
+```
+
+### To Mainnet
+
+```bash
+npx hardhat run scripts/deploy.js --network bsc_mainnet
+```
+
+## Verification
+
+### Verify Contract
+
+```bash
+npx hardhat verify --network bsc_testnet <CONTRACT_ADDRESS>
+```
+
+### Check Deployment
+
+```bash
+npx hardhat run scripts/verify.js --network bsc_testnet
+```
+
+## Environment Variables
+
+Create .env file:
+
+```
+PRIVATE_KEY=your_private_key_here
+```
+
+**Never commit .env file to version control!**
+
+---
+
+**Ready to deploy your contracts?**

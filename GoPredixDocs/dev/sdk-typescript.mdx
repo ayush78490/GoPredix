@@ -1,0 +1,213 @@
+---
+title: "TypeScript SDK"
+description: "Official GoPreDix TypeScript SDK with type safety"
+---
+
+# TypeScript SDK
+
+Official SDK for TypeScript with full type safety.
+
+## Installation
+
+```bash
+npm install @gopredix/sdk ethers
+npm install --save-dev typescript @types/node
+```
+
+## Quick Start
+
+```typescript
+import { GoPreDix } from '@gopredix/sdk';
+
+const client = new GoPreDix({
+  rpcUrl: 'https://data-seed-prebsc-1-b.binance.org:8545'
+});
+
+// Get markets with types
+const markets: Market[] = await client.markets.list();
+console.log('Markets:', markets);
+```
+
+## Configuration
+
+```typescript
+import { GoPreDixConfig } from '@gopredix/sdk';
+
+const config: GoPreDixConfig = {
+  rpcUrl: process.env.RPC_URL,
+  contractAddress: process.env.CONTRACT_ADDRESS,
+  apiUrl: 'https://api.gopredix.com'
+};
+
+const client = new GoPreDix(config);
+```
+
+## Type Definitions
+
+```typescript
+interface Market {
+  id: string;
+  question: string;
+  outcomes: Outcome[];
+  status: 'ACTIVE' | 'LOCKED' | 'RESOLVED';
+  volume: number;
+  deadline: number;
+}
+
+interface Outcome {
+  id: string;
+  name: string;
+  price: number;
+}
+
+interface Trade {
+  id: string;
+  marketId: string;
+  shares: number;
+  price: number;
+}
+```
+
+## Markets API
+
+### List Markets
+
+```typescript
+interface ListOptions {
+  page?: number;
+  limit?: number;
+  category?: string;
+  status?: string;
+}
+
+const markets = await client.markets.list({
+  category: 'finance',
+  status: 'active'
+});
+```
+
+### Create Market
+
+```typescript
+interface CreateMarketInput {
+  question: string;
+  outcomes: string[];
+  deadline: number;
+  category: string;
+}
+
+const market = await client.markets.create({
+  question: 'Will BTC reach 100k?',
+  outcomes: ['Yes', 'No'],
+  deadline: Math.floor(Date.now() / 1000) + 2592000,
+  category: 'finance'
+});
+```
+
+## Trading API
+
+### Buy Shares
+
+```typescript
+interface BuyInput {
+  marketId: string;
+  outcomeId: string;
+  amount: number;
+  maxPrice: number;
+}
+
+const trade: Trade = await client.trades.buy({
+  marketId: 'market_123',
+  outcomeId: 'outcome_1',
+  amount: 100,
+  maxPrice: 0.75
+});
+```
+
+### Get User Portfolio
+
+```typescript
+interface Portfolio {
+  trades: Trade[];
+  totalValue: number;
+  unrealizedPnL: number;
+}
+
+const portfolio: Portfolio = await client.trades.getPortfolio(
+  '0x742d35Cc6634C0532925a3b844Bc7e7595f42471'
+);
+```
+
+## Rewards API
+
+```typescript
+interface Reward {
+  id: string;
+  amount: number;
+  status: 'pending' | 'claimed';
+}
+
+const rewards: Reward[] = await client.rewards.getAll('0x...');
+```
+
+## Error Handling
+
+```typescript
+import { GoPreDixError, InsufficientFundsError } from '@gopredix/sdk';
+
+try {
+  const trade = await client.trades.buy({...});
+} catch (error) {
+  if (error instanceof InsufficientFundsError) {
+    console.error('Insufficient funds:', error.message);
+  } else if (error instanceof GoPreDixError) {
+    console.error('GoPreDix error:', error.code, error.message);
+  } else {
+    console.error('Unknown error:', error);
+  }
+}
+```
+
+## Advanced Examples
+
+### Market Monitoring
+
+```typescript
+async function monitorMarket(marketId: string): Promise<void> {
+  const market = await client.markets.get(marketId);
+  
+  console.log(`Monitoring: ${market.question}`);
+  
+  for (const outcome of market.outcomes) {
+    console.log(`${outcome.name}: ${outcome.price}`);
+  }
+}
+```
+
+### Automated Trading
+
+```typescript
+async function buyIfPriceLow(
+  marketId: string,
+  outcomeId: string,
+  targetPrice: number
+): Promise<void> {
+  const market = await client.markets.get(marketId);
+  const outcome = market.outcomes.find(o => o.id === outcomeId);
+  
+  if (outcome && outcome.price < targetPrice) {
+    const trade = await client.trades.buy({
+      marketId,
+      outcomeId,
+      amount: 100,
+      maxPrice: targetPrice
+    });
+    
+    console.log('Trade executed:', trade.id);
+  }
+}
+```
+
+---
+
+**Build type safe applications with TypeScript!**

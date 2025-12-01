@@ -1,0 +1,189 @@
+---
+title: "JavaScript SDK"
+description: "Official GoPreDix JavaScript SDK"
+---
+
+# JavaScript SDK
+
+Official SDK for JavaScript and Node.js developers.
+
+## Installation
+
+```bash
+npm install @gopredix/sdk ethers
+```
+
+## Quick Start
+
+```javascript
+import { GoPreDix } from '@gopredix/sdk';
+
+const client = new GoPreDix({
+  rpcUrl: 'https://data-seed-prebsc-1-b.binance.org:8545'
+});
+
+// Get markets
+const markets = await client.markets.list();
+console.log('Markets:', markets);
+```
+
+## Configuration
+
+```javascript
+const client = new GoPreDix({
+  rpcUrl: process.env.RPC_URL,
+  contractAddress: process.env.CONTRACT_ADDRESS,
+  apiUrl: 'https://api.gopredix.com'
+});
+```
+
+## Markets API
+
+### List Markets
+
+```javascript
+const markets = await client.markets.list({
+  page: 1,
+  limit: 20,
+  category: 'finance',
+  status: 'active'
+});
+```
+
+### Get Market Details
+
+```javascript
+const market = await client.markets.get('market_123');
+console.log(market.question);
+console.log(market.outcomes);
+```
+
+### Create Market
+
+```javascript
+const market = await client.markets.create({
+  question: 'Will BTC reach 100k?',
+  outcomes: ['Yes', 'No'],
+  deadline: Math.floor(Date.now() / 1000) + 86400 * 30,
+  category: 'finance'
+});
+
+console.log('Market created:', market.id);
+```
+
+## Trading API
+
+### Buy Shares
+
+```javascript
+const trade = await client.trades.buy({
+  marketId: 'market_123',
+  outcomeId: 'outcome_1',
+  amount: 100,
+  maxPrice: 0.75
+});
+
+console.log('Trade executed:', trade.tradeId);
+```
+
+### Sell Shares
+
+```javascript
+const trade = await client.trades.sell({
+  marketId: 'market_123',
+  outcomeId: 'outcome_1',
+  amount: 50
+});
+
+console.log('Sold:', trade.amount, 'shares');
+```
+
+### Get User Trades
+
+```javascript
+const trades = await client.trades.getUserTrades({
+  userId: '0x...',
+  limit: 50
+});
+```
+
+## Rewards API
+
+### Get Rewards
+
+```javascript
+const rewards = await client.rewards.get('0x...');
+console.log('Rewards:', {
+  totalEarned: rewards.totalEarned,
+  claimable: rewards.claimable
+});
+```
+
+### Claim Reward
+
+```javascript
+const claim = await client.rewards.claim({
+  marketId: 'market_123'
+});
+
+console.log('Claimed:', claim.amount);
+```
+
+## User API
+
+### Get Profile
+
+```javascript
+const profile = await client.users.getProfile('0x...');
+console.log(profile.username);
+console.log(profile.winRate);
+```
+
+## Error Handling
+
+```javascript
+try {
+  const trade = await client.trades.buy({...});
+} catch (error) {
+  if (error.code === 'INSUFFICIENT_FUNDS') {
+    console.error('Not enough funds');
+  } else if (error.code === 'MARKET_NOT_ACTIVE') {
+    console.error('Market is not active');
+  } else {
+    console.error('Error:', error.message);
+  }
+}
+```
+
+## Examples
+
+### Monitor Market Prices
+
+```javascript
+const markets = await client.markets.list({ limit: 10 });
+
+for (const market of markets) {
+  const updated = await client.markets.get(market.id);
+  console.log(market.question, updated.outcomes);
+}
+```
+
+### Trade on Price Change
+
+```javascript
+const market = await client.markets.get('market_123');
+const outcome = market.outcomes[0];
+
+if (outcome.price > 0.7) {
+  console.log('Price high, time to sell');
+  await client.trades.sell({
+    marketId: market.id,
+    outcomeId: outcome.id,
+    amount: 50
+  });
+}
+```
+
+---
+
+**Start building with JavaScript!**

@@ -1,0 +1,94 @@
+---
+title: "POST Create Market"
+description: "Create a new prediction market on GoPreDix"
+---
+
+# POST Create Market
+
+Create a new prediction market.
+
+## Endpoint
+
+```
+POST /api/v1/markets
+```
+
+## Request
+
+```json
+{
+  "question": "Will BTC reach 100k dollars by December 31, 2025?",
+  "outcomes": ["Yes", "No"],
+  "deadline": 1735689600,
+  "category": "finance",
+  "description": "Bitcoin price prediction market",
+  "initialLiquidity": 1.5,
+  "resolution": "CoinMarketCap closing price on deadline date"
+}
+```
+
+## Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|---|
+| question | string | Yes | Market question (10 to 500 characters) |
+| outcomes | array | Yes | Array of 2 to 6 outcome names |
+| deadline | integer | Yes | Unix timestamp for market deadline |
+| category | string | Yes | Category (finance, sports, politics, tech, other) |
+| description | string | No | Market description (max 1000 characters) |
+| initialLiquidity | number | No | Initial liquidity in BNB (min 0) |
+| resolution | string | No | Resolution criteria |
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "market_456",
+    "question": "Will BTC reach 100k dollars by December 31, 2025?",
+    "outcomes": [
+      {"id": "outcome_1", "name": "Yes"},
+      {"id": "outcome_2", "name": "No"}
+    ],
+    "status": "ACTIVE",
+    "contractAddress": "0xabc123...",
+    "creator": "0x742d35Cc6634C0532925a3b844Bc7e7595f42471",
+    "createdAt": 1699699200,
+    "txHash": "0xdef456..."
+  }
+}
+```
+
+## Example Usage
+
+```javascript
+const newMarket = await fetch('/api/v1/markets', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer token'
+  },
+  body: JSON.stringify({
+    question: "Will BTC reach 100k dollars?",
+    outcomes: ["Yes", "No"],
+    deadline: Math.floor(Date.now() / 1000) + 86400 * 30,
+    category: "finance"
+  })
+});
+const data = await newMarket.json();
+console.log(data.data.id);
+```
+
+## Status Codes
+
+| Code | Message |
+|------|---------|
+| 201 | Market created |
+| 400 | Invalid parameters |
+| 401 | Unauthorized |
+| 500 | Server error |
+
+---
+
+**Create your first market now!**

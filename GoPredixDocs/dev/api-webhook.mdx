@@ -1,0 +1,146 @@
+---
+title: "Api Webhooks Setup"
+description: "Configure webhooks for real time events"
+---
+
+# Webhooks and Callbacks
+
+Receive real time notifications of platform events via webhooks.
+
+## What are Webhooks?
+
+Webhooks allow your application to receive real time updates from GoPreDix when events occur.
+
+## Webhook Events
+
+### market.created
+
+Triggered when a new market is created.
+
+```json
+{
+  "event": "market.created",
+  "timestamp": 1699699200,
+  "data": {
+    "marketId": "market_123",
+    "question": "Will BTC reach 100k?",
+    "creator": "0x742d35...",
+    "outcomes": ["Yes", "No"]
+  }
+}
+```
+
+### market.locked
+
+Triggered when market deadline reached.
+
+```json
+{
+  "event": "market.locked",
+  "data": {
+    "marketId": "market_123",
+    "lockedAt": 1699699200
+  }
+}
+```
+
+### market.settled
+
+Triggered when market is settled.
+
+```json
+{
+  "event": "market.settled",
+  "data": {
+    "marketId": "market_123",
+    "outcome": "Yes",
+    "winners": 150,
+    "totalRewards": 50000
+  }
+}
+```
+
+### trade.placed
+
+Triggered when trade is executed.
+
+```json
+{
+  "event": "trade.placed",
+  "data": {
+    "tradeId": "trade_456",
+    "marketId": "market_123",
+    "outcome": "Yes",
+    "shares": 100,
+    "price": 0.70
+  }
+}
+```
+
+## Configure Webhook
+
+### Via Dashboard
+
+1. Go to Settings
+2. Click Webhooks
+3. Enter webhook URL
+4. Select events to receive
+5. Save
+
+### Via API
+
+```javascript
+const webhook = await fetch('/api/v1/webhooks', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer token'
+  },
+  body: JSON.stringify({
+    url: 'https://yourapp.com/webhooks',
+    events: ['market.created', 'market.settled', 'trade.placed']
+  })
+});
+```
+
+## Webhook Payload Structure
+
+Every webhook includes:
+
+```json
+{
+  "id": "webhook_123",
+  "event": "market.created",
+  "timestamp": 1699699200,
+  "data": { ... }
+}
+```
+
+## Webhook Signature Verification
+
+Verify webhook authenticity:
+
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhook(payload, signature, secret) {
+  const hash = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+  
+  return hash === signature;
+}
+```
+
+## Retry Policy
+
+Failed webhooks retry with exponential backoff:
+- Attempt 1: Immediate
+- Attempt 2: 5 minutes
+- Attempt 3: 30 minutes
+- Attempt 4: 2 hours
+- Attempt 5: 24 hours
+
+---
+
+**Set up webhooks to build real time applications!**

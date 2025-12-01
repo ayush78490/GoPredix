@@ -1,0 +1,81 @@
+---
+title: "API Settle Market"
+description: "Settle a prediction market and determine winner"
+---
+
+# POST Settle Market
+
+Settle a market and determine the winning outcome.
+
+## Endpoint
+
+```
+POST /api/v1/markets/:marketId/settle
+```
+
+## Request
+
+```json
+{
+  "winningOutcomeId": "outcome_1",
+  "reason": "Market deadline reached. BTC price confirmed at 105,000 dollars"
+}
+```
+
+## Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|---|
+| marketId | string | Yes | Market ID to settle |
+| winningOutcomeId | string | Yes | ID of winning outcome |
+| reason | string | No | Settlement reason |
+
+## Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "marketId": "market_123",
+    "status": "RESOLVED",
+    "winningOutcome": "Yes",
+    "totalWinners": 250,
+    "totalRewardPool": 50000,
+    "rewardPerShare": 200,
+    "settledAt": 1699785600,
+    "txHash": "0xdef456..."
+  }
+}
+```
+
+## Example Usage
+
+```javascript
+const settled = await fetch('/api/v1/markets/market_123/settle', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer token'
+  },
+  body: JSON.stringify({
+    winningOutcomeId: "outcome_1",
+    reason: "BTC reached 100k"
+  })
+});
+
+const data = await settled.json();
+console.log('Market settled:', data.data);
+```
+
+## Status Codes
+
+| Code | Message |
+|------|---------|
+| 200 | Market settled |
+| 400 | Invalid outcome |
+| 401 | Unauthorized |
+| 409 | Market already settled |
+
+---
+
+**Settle markets and trigger payouts!**
