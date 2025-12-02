@@ -29,8 +29,6 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
     const [step, setStep] = useState<1 | 2 | 3>(1) // 1: List, 2: Transfer, 3: Confirm
 
     const userMarkets = useMemo(() => {
-        console.log('🔍 Sell Modal - Total markets:', markets.length)
-        console.log('🔍 Sell Modal - User address:', address)
 
         if (!address) return []
 
@@ -39,18 +37,10 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
             const isCreator = m.creator.toLowerCase() === address.toLowerCase()
             const isOpen = Number(m.status) === 0 // Ensure market is Open
 
-            console.log(`Market ${m.id}:`, {
-                creator: m.creator,
-                paymentToken: m.paymentToken,
-                isCreator,
-                isOpen,
-                passes: isCreator && isOpen
-            })
 
             return isCreator && isOpen
         })
 
-        console.log('🔍 Sell Modal - Filtered markets:', filtered.length)
         return filtered
     }, [markets, address])
 
@@ -61,7 +51,6 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
     const marketType = selectedMarket?.paymentToken === 'PDX' ? 'PDX' : 'BNB'
 
     useEffect(() => {
-        console.log('🔍 selectedMarketId changed to:', selectedMarketId, 'step:', step, 'type:', marketType)
     }, [selectedMarketId, step, marketType])
 
     // Refresh markets when modal opens - REMOVED as per user request to avoid cache filling
@@ -79,12 +68,10 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
 
         try {
             if (step === 1) {
-                console.log(`📡 Step 1: Creating marketplace listing for [${marketType}] market...`)
 
                 // Pre-flight checks
                 const isListed = await isMarketListed(selectedMarketId, marketType)
                 if (isListed) {
-                    console.log('⚠️ Market already listed. Checking transfer status...')
                     toast({
                         title: "Market Already Listed",
                         description: "Resuming transfer process...",
@@ -102,12 +89,10 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                 setStep(2)
             }
             else if (step === 2) {
-                console.log(`📡 Step 2: Transferring ownership to marketplace...`)
 
                 // Check if already transferred
                 const isTransferred = await isOwnershipTransferred(selectedMarketId, marketType)
                 if (isTransferred) {
-                    console.log('✅ Already transferred. Moving to step 3.')
                     toast({
                         title: "Already Transferred",
                         description: "Ownership already transferred. Proceeding to confirmation.",
@@ -125,7 +110,6 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                 setStep(3)
             }
             else if (step === 3) {
-                console.log(`📡 Step 3: Confirming transfer...`)
                 await confirmTransfer(selectedMarketId, marketType)
 
                 toast({
@@ -214,9 +198,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                                         <div
                                             key={market.id}
                                             onClick={() => {
-                                                console.log('🔍 Market clicked:', market.id, 'numericId:', market.numericId)
                                                 setSelectedMarketId(market.numericId)
-                                                console.log('🔍 Selected market ID set to:', market.numericId)
                                             }}
                                             className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedMarketId === market.numericId
                                                 ? "bg-primary/20 border-primary"

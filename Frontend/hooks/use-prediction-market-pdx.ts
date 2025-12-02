@@ -635,9 +635,6 @@ export function usePredictionMarketPDX() {
       const gasLimit = (gasEstimate * BigInt(130)) / BigInt(100)
 
       const finalCategory = validation.category || params.category || 'General'
-      console.log('🔧 PDX Hook - Creating market with category:', finalCategory)
-      console.log('   validation.category:', validation.category)
-      console.log('   params.category:', params.category)
 
       const tx = await (marketWithSigner as any).createMarket(
         params.question,
@@ -874,10 +871,8 @@ export function usePredictionMarketPDX() {
     }
 
     // Approve market to spend tokens
-    console.log('Approving YES tokens...')
     const approveTx = await (yesTokenContract as any).approve(PDX_PREDICTION_MARKET_ADDRESS, tokenAmountWei)
     await approveTx.wait()
-    console.log('Approval confirmed')
 
     // Verify approval
     const allowance = await (yesTokenContract as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
@@ -886,7 +881,6 @@ export function usePredictionMarketPDX() {
     }
 
     // Now sell the tokens
-    console.log('Selling YES tokens...')
     const tx = await (marketWithSigner as any).sellYesForPDX(
       BigInt(marketId),
       tokenAmountWei,
@@ -932,10 +926,8 @@ export function usePredictionMarketPDX() {
     }
 
     // Approve market to spend tokens
-    console.log('Approving NO tokens...')
     const approveTx = await (noTokenContract as any).approve(PDX_PREDICTION_MARKET_ADDRESS, tokenAmountWei)
     await approveTx.wait()
-    console.log('Approval confirmed')
 
     // Verify approval
     const allowance = await (noTokenContract as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
@@ -944,7 +936,6 @@ export function usePredictionMarketPDX() {
     }
 
     // Now sell the tokens
-    console.log('Selling NO tokens...')
     const tx = await (marketWithSigner as any).sellNoForPDX(
       BigInt(marketId),
       tokenAmountWei,

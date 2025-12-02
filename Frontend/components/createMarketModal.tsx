@@ -165,15 +165,11 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         throw new Error('Invalid response from validation service')
       }
 
-      console.log('✅ AI Validation Response:', validation)
-      console.log('   Category returned:', validation.category)
 
       setValidationResult(validation)
 
       if (!validation.valid) {
-        console.log('❌ Validation failed:', validation.reason)
       } else {
-        console.log('✅ Validation passed')
       }
 
       return validation.valid
@@ -433,18 +429,13 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
         if (categoryToUse === 'OTHER' || categoryToUse === 'General' || !categoryToUse) {
           const localCategory = determineCategory(question)
           if (localCategory !== 'OTHER') {
-            console.log(`🔄 Overriding AI category "${categoryToUse}" with local detection: ${localCategory}`)
             categoryToUse = localCategory
           } else if (!categoryToUse) {
             // This should not happen due to validation check, but fallback just in case
-            console.warn('⚠️ WARNING: No AI validation category found! This should not happen.')
-            console.warn('   Using basic category detection as emergency fallback.')
             categoryToUse = localCategory
           }
         }
 
-        console.log('📊 Creating PDX market with category:', categoryToUse)
-        console.log('   validationResult:', validationResult)
 
         marketId = await pdxHook.createMarketWithPDX({
           question,

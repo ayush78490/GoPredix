@@ -31,10 +31,10 @@ const PDX_MARKET_ABI = extractABI(PDX_MARKET_ARTIFACT)
 const PDX_HELPER_ABI = extractABI(PDX_HELPER_ARTIFACT)
 
 // Contract addresses
-const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
+const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS
 const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS
-const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_PREDICTION_MARKET_ADDRESS || "0x275fa689f785fa232861a076aD4cc1955F88171A"
-const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || "0x02D4E1573ec5ade27eC852fBBf873d7073219E21"
+const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_CONTRACT_ADDRESS
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
 
 interface UserStats {
@@ -47,6 +47,8 @@ interface UserStats {
   totalPnl: number
   winningMarkets: number
   activePositions: number
+  disputedPositions: number
+  disputedValue: number
   favoriteCategory: string
   totalInvestment: string
   bnbInvestment: string
@@ -429,6 +431,8 @@ export default function Leaderboard() {
       let currentPortfolioValue = 0
       let unrealizedPnl = 0
       let activePositions = 0
+      let disputedPositions = 0
+      let disputedValue = 0
       const categoryCount: { [key: string]: number } = {}
 
       for (const position of allPositions) {
@@ -451,6 +455,12 @@ export default function Leaderboard() {
           activePositions++
         }
 
+        // Check if market is disputed (status = 4)
+        if (position.market.status === 4) {
+          disputedPositions++
+          disputedValue += positionValue
+        }
+
         const category = position.market.category || "General"
         categoryCount[category] = (categoryCount[category] || 0) + 1
       }
@@ -470,6 +480,8 @@ export default function Leaderboard() {
         totalPnl,
         winningMarkets: 0,
         activePositions,
+        disputedPositions,
+        disputedValue,
         favoriteCategory,
         totalInvestment: (parseFloat(investments.bnb) + parseFloat(investments.pdx)).toFixed(4),
         bnbInvestment: investments.bnb,
@@ -490,6 +502,8 @@ export default function Leaderboard() {
         totalPnl: 0,
         winningMarkets: 0,
         activePositions: 0,
+        disputedPositions: 0,
+        disputedValue: 0,
         favoriteCategory: "General",
         totalInvestment: "0",
         bnbInvestment: "0",
@@ -576,11 +590,12 @@ export default function Leaderboard() {
       const statsPromises = tradersToProcess.map(trader => calculateUserStats(trader))
       const allStats = await Promise.all(statsPromises)
 
-      const activeTraders = allStats.filter(stats =>
-        stats.totalMarketsTraded > 0 || parseFloat(stats.totalInvestment) > 0
-      )
+      // Show all traders, even with $0 investment (market creators)
+      const activeTraders = allStats
 
-      activeTraders.sort((a, b) => b.totalPnl - a.totalPnl)
+      // Sort by total investment (top investors)
+      activeTraders.sort((a, b) => parseFloat(b.totalInvestment) - parseFloat(a.totalInvestment))
+
 
       setUserStats(activeTraders)
 
@@ -688,9 +703,9 @@ export default function Leaderboard() {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold mb-2">Trading Leaderboard</h1>
+                <h1 className="text-3xl md:text-4xl font-bold mb-2">Investor Leaderboard</h1>
                 <p className="text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg inline-block">
-                  Live rankings from BNB & PDX markets - No wallet needed to view
+                  Top investors ranked by total investment - Track disputed positions
                 </p>
               </div>
             </div>
@@ -775,17 +790,13 @@ export default function Leaderboard() {
             </Card>
             <Card className="backdrop-blur-sm bg-card/80 hover:border-white/50">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total P&L</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Investment</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center">
-                  <Trophy className="w-8 h-8 text-primary mr-2" />
-                  <div className={`text-2xl font-bold ${userStats.reduce((sum, user) => sum + user.totalPnl, 0) >= 0
-                    ? "text-green-600"
-                    : "text-red-600"
-                    }`}>
-                    {userStats.reduce((sum, user) => sum + user.totalPnl, 0) >= 0 ? "+" : ""}
-                    ${userStats.reduce((sum, user) => sum + user.totalPnl, 0).toLocaleString()}
+                  <TrendingUp className="w-8 h-8 text-primary mr-2" />
+                  <div className="text-2xl font-bold text-blue-600">
+                    ${userStats.reduce((sum, user) => sum + parseFloat(user.totalInvestment), 0).toLocaleString()}
                   </div>
                 </div>
               </CardContent>
@@ -804,9 +815,9 @@ export default function Leaderboard() {
           {!isLoading && !error && userStats.length > 0 && (
             <Card className="backdrop-blur-sm bg-card/80 hover:shadow-blue-500/50">
               <CardHeader>
-                <CardTitle>Top Traders</CardTitle>
+                <CardTitle>Top Investors</CardTitle>
                 <CardDescription>
-                  Ranked by total P&L across BNB & PDX markets. Live data from GoPredix contracts.
+                  Ranked by total investment across BNB & PDX markets. Live data from GoPredix contracts.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -857,38 +868,51 @@ export default function Leaderboard() {
                             </div>
                             <div className="text-sm text-muted-foreground mt-1">
                               {user.totalMarketsTraded} markets • {user.activePositions} active
+                              {user.disputedPositions > 0 && (
+                                <span className="text-orange-500 font-semibold"> • {user.disputedPositions} disputed</span>
+                              )}
                             </div>
                           </div>
                         </div>
 
                         <div className="text-right">
-                          <div className={`text-lg font-bold ${user.totalPnl >= 0 ? "text-green-600" : "text-red-600"
-                            }`}>
-                            {user.totalPnl >= 0 ? "+" : ""}${user.totalPnl.toFixed(2)}
+                          <div className="text-lg font-bold text-blue-600">
+                            ${parseFloat(user.totalInvestment).toFixed(2)}
                           </div>
                           <div className="text-xs text-muted-foreground">
+                            Total Investment
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
                             🔶 {parseFloat(user.bnbInvestment).toFixed(4)} BNB
                           </div>
                           <div className="text-xs text-muted-foreground">
                             💎 {parseFloat(user.pdxInvestment).toFixed(4)} PDX
                           </div>
+                          {user.disputedValue > 0 && (
+                            <div className="text-xs text-orange-500 font-semibold mt-1">
+                              ⚠️ ${user.disputedValue.toFixed(2)} disputed
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
                         <div>
-                          <span className="text-muted-foreground">Volume: </span>
-                          <span className="font-medium">${user.totalVolume.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Portfolio: </span>
+                          <span className="text-muted-foreground">Portfolio Value: </span>
                           <span className="font-medium">${user.currentPortfolioValue.toFixed(2)}</span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Unrealized: </span>
-                          <span className={`font-medium ${user.unrealizedPnl >= 0 ? "text-green-600" : "text-red-600"
+                          <span className="text-muted-foreground">Total P&L: </span>
+                          <span className={`font-medium ${user.totalPnl >= 0 ? "text-green-600" : "text-red-600"
                             }`}>
-                            {user.unrealizedPnl >= 0 ? "+" : ""}${user.unrealizedPnl.toFixed(2)}
+                            {user.totalPnl >= 0 ? "+" : ""}${user.totalPnl.toFixed(2)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Disputed Value: </span>
+                          <span className={`font-medium ${user.disputedValue > 0 ? "text-orange-500" : ""}
+                            }`}>
+                            ${user.disputedValue.toFixed(2)}
                           </span>
                         </div>
                         <div>

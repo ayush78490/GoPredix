@@ -316,7 +316,6 @@ export function useMarketMarketplace() {
     // Initialize contracts
     useEffect(() => {
         if (provider) {
-            console.log('🔧 Initializing contracts...')
             try {
                 // BNB Contracts
                 const bnbMarketplace = new ethers.Contract(
@@ -352,7 +351,6 @@ export function useMarketMarketplace() {
                     setPdxPredictionMarketContract(pdxPm)
                 }
 
-                console.log('✅ Contracts initialized')
                 setIsReady(true)
             } catch (error) {
                 console.error('❌ Contract initialization error:', error)
@@ -384,7 +382,6 @@ export function useMarketMarketplace() {
             const marketInfo = await predictionMarket.getMarketInfo(BigInt(marketId))
             // Check if marketplace is the owner (creator field would be marketplace address if transferred)
             const isTransferred = marketInfo.creator?.toLowerCase() === marketplaceAddress.toLowerCase()
-            console.log(`   🔍 [${type}] Market ${marketId} ownership: ${isTransferred ? 'transferred to marketplace' : 'still with original creator'}`)
             return isTransferred
         } catch (e) {
             console.error('Error checking ownership:', e)
@@ -429,9 +426,7 @@ export function useMarketMarketplace() {
         const contractWithSigner = marketplace.connect(signer) as ethers.Contract
         const priceWei = ethers.parseEther(price)
 
-        console.log(`📝 Listing [${type}] market ${marketId} for ${price} PDX`)
         const tx = await contractWithSigner.listMarket(marketId, priceWei)
-        console.log(`⏳ Tx hash: ${tx.hash}`)
         return await tx.wait()
     }, [signer, getContracts])
 
@@ -440,11 +435,9 @@ export function useMarketMarketplace() {
         if (!signer || !predictionMarket) throw new Error('Wallet not connected or contract not ready')
 
         const contractWithSigner = predictionMarket.connect(signer) as ethers.Contract
-        console.log(`📤 Transferring ownership of [${type}] market ${marketId} to ${marketplaceAddress}`)
 
         try {
             const tx = await contractWithSigner.transferMarketOwnership(marketId, marketplaceAddress, { gasLimit: 200000 })
-            console.log(`⏳ Tx hash: ${tx.hash}`)
             return await tx.wait()
         } catch (error: any) {
             console.error('Transfer failed:', error)
@@ -463,13 +456,10 @@ export function useMarketMarketplace() {
             throw new Error(`Invalid marketId: ${marketId}`)
         }
 
-        console.log(`🛒 Starting buyMarket for [${type}] marketId: ${marketId}`)
 
         try {
             // 0. CHECK MARKET STATE
-            console.log('0️⃣ Checking market listing status...')
             const isListed = await marketplace.isMarketListed(BigInt(marketId))
-            console.log(`   Is market listed: ${isListed}`)
 
             if (!isListed) {
                 throw new Error(`Market ${marketId} is not listed`)
@@ -478,12 +468,6 @@ export function useMarketMarketplace() {
             const listingId = await marketplace.getListingByMarket(BigInt(marketId))
             const listing = await marketplace.getListing(listingId)
 
-            console.log(`   Listing:`, {
-                seller: listing.seller,
-                price: ethers.formatEther(listing.price),
-                isActive: listing.isActive,
-                isTransferred: listing.isTransferred
-            })
 
             if (!listing.isActive) {
                 throw new Error(`Listing not active`)
@@ -495,14 +479,10 @@ export function useMarketMarketplace() {
 
             // Check Market Status on PredictionMarket contract
             if (predictionMarket) {
-                console.log('📊 Checking Market Status on PredictionMarket contract...')
                 const marketInfo = await predictionMarket.getMarketInfo(BigInt(marketId))
-                console.log('📊 Market Status:', Number(marketInfo.status))
-                console.log('   Status meaning: 0=Open, 1=Active, 2=ResolutionRequested, 3=Resolved, 4=Disputed')
             }
 
             // 1. Check PDX
-            console.log('1️⃣ Checking PDX...')
             const userAddress = await signer.getAddress()
             const pdxContract = new ethers.Contract(NEXT_PUBLIC_PDX_TOKEN_ADDRESS, [
                 'function allowance(address owner, address spender) view returns (uint256)',
@@ -513,22 +493,17 @@ export function useMarketMarketplace() {
             const balance = await pdxContract.balanceOf(userAddress)
             const allowance = await pdxContract.allowance(userAddress, marketplaceAddress)
 
-            console.log(`   Balance: ${ethers.formatEther(balance)} PDX`)
-            console.log(`   Allowance: ${ethers.formatEther(allowance)} PDX`)
 
             if (balance < listing.price) {
                 throw new Error(`Insufficient balance`)
             }
 
             if (allowance < listing.price) {
-                console.log('⚠️ Approving PDX...')
                 const txApprove = await pdxContract.approve(marketplaceAddress, ethers.MaxUint256)
                 await txApprove.wait()
-                console.log('✅ Approved')
             }
 
             // 2. Buy - Manually encode the function call
-            console.log('2️⃣ Executing buyMarket...')
 
             // Manually encode buyMarket(uint256 marketId)
             const iface = new ethers.Interface([
@@ -536,7 +511,6 @@ export function useMarketMarketplace() {
             ])
             const encodedData = iface.encodeFunctionData('buyMarket', [BigInt(marketId)])
 
-            console.log('📦 Encoded data:', encodedData)
 
             const tx = await signer.sendTransaction({
                 to: marketplaceAddress,
@@ -544,9 +518,7 @@ export function useMarketMarketplace() {
                 gasLimit: 300000n
             })
 
-            console.log('⏳ Tx sent:', tx.hash)
             const receipt = await tx.wait()
-            console.log('✅ Success!')
 
             return receipt
         } catch (error: any) {
@@ -579,10 +551,8 @@ export function useMarketMarketplace() {
 
         const fetchFromContract = async (contract: ethers.Contract, type: MarketType): Promise<MarketListing[]> => {
             try {
-                console.log(`📋 Fetching [${type}] listings...`)
                 const nextId = await contract.nextListingId()
                 const totalListings = Number(nextId)
-                console.log(`📋 [${type}] Contract has ${totalListings - 1} listings`)
 
                 if (totalListings <= 1) return []
 
@@ -623,7 +593,6 @@ export function useMarketMarketplace() {
         const pdxListings = pdxMarketplaceContract ? await fetchFromContract(pdxMarketplaceContract, 'PDX') : []
 
         const allListings = [...bnbListings, ...pdxListings]
-        console.log(`✅ Fetched ${allListings.length} total listings`)
         return allListings
 
     }, [bnbMarketplaceContract, pdxMarketplaceContract, isOwnershipTransferred])
@@ -638,11 +607,9 @@ export function useMarketMarketplace() {
         if (!signer || !marketplace) throw new Error('Wallet not connected or contract not ready')
 
         const contractWithSigner = marketplace.connect(signer) as ethers.Contract
-        console.log(`✅ Confirming transfer for [${type}] market ${marketId}`)
 
         try {
             const tx = await contractWithSigner.confirmTransfer(marketId, { gasLimit: 200000 })
-            console.log(`⏳ Tx hash: ${tx.hash}`)
             return await tx.wait()
         } catch (error: any) {
             console.error('Confirm transfer failed:', error)

@@ -48,16 +48,10 @@ class FallbackRpcProvider extends JsonRpcProvider {
                 lastError = error
                 this.failureCount++
 
-                // Check if it's a rate limit error
                 const isRateLimit =
                     error?.message?.includes('rate limit') ||
                     error?.code === -32005 ||
                     error?.error?.code === -32005
-
-                console.log(
-                    `⚠️ RPC ${method} failed on ${this.urls[this.currentUrlIndex]} (attempt ${attempt + 1}/${this.urls.length})`,
-                    isRateLimit ? 'RATE LIMIT' : error?.message
-                )
 
                 // Switch to next provider if we've hit too many failures or rate limit
                 if (isRateLimit || this.failureCount >= this.maxFailuresBeforeSwitch) {

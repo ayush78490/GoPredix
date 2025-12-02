@@ -84,7 +84,7 @@ export function ResolutionPanel({
             if (paymentToken === 'BNB') {
                 await bnbHook.claimRedemption(marketId)
             } else {
-                await pdxHook.claimRedemption(marketId)
+                await pdxHook.claimPDXRedemption(marketId)
             }
             setSuccess(`Successfully claimed ${winningAmount} ${paymentToken}!`)
         } catch (err: any) {

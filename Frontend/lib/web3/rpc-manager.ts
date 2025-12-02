@@ -43,8 +43,6 @@ class RPCManager {
                 break;
             }
         } while (this.failedRpcs.has(this.rpcUrls[this.currentRpcIndex]));
-
-        console.log(`Switched to RPC: ${this.getCurrentRpcUrl()}`);
     }
 
     /**
@@ -53,7 +51,6 @@ class RPCManager {
     markCurrentRpcAsFailed(): void {
         const currentRpc = this.rpcUrls[this.currentRpcIndex];
         this.failedRpcs.add(currentRpc);
-        console.warn(`RPC marked as failed: ${currentRpc}`);
         this.switchToNextRpc();
     }
 
@@ -101,7 +98,6 @@ class RPCManager {
                             error.code === 'CALL_EXCEPTION';
 
                         if (isRateLimit && attempt < maxRetries - 1) {
-                            console.warn(`Rate limit detected, switching RPC (attempt ${attempt + 1}/${maxRetries})`);
                             this.markCurrentRpcAsFailed();
 
                             // Wait before retry with exponential backoff
@@ -155,7 +151,6 @@ class RPCManager {
      */
     resetFailedRpcs(): void {
         this.failedRpcs.clear();
-        console.log('Failed RPCs list cleared');
     }
 }
 

@@ -28,14 +28,11 @@ export default function MarketplacePage() {
 
     const fetchListings = async () => {
         if (!isReady) {
-            console.log('⏳ Marketplace contract not ready yet')
             return
         }
         setIsLoadingListings(true)
         try {
-            console.log('🔍 Fetching marketplace listings...')
             const allListings = await getAllListings()
-            console.log(`📦 Received ${allListings.length} listings from contract`)
             setListings(allListings)
         } catch (error) {
             console.error("❌ Failed to fetch listings:", error)
@@ -176,28 +173,19 @@ export default function MarketplacePage() {
 
     useEffect(() => {
         if (isReady) {
-            console.log('✅ Marketplace ready, fetching listings...')
             fetchListings()
         }
     }, [isReady, getAllListings])
 
     const listedMarkets = useMemo(() => {
-        console.log(`🔗 Matching ${listings.length} listings with ${markets.length} available markets...`)
-        console.log(`   Available market numericIds:`, markets.map(m => ({ id: m.id, numericId: m.numericId })))
-
         const matched = listings.map(listing => {
-            console.log(`   Looking for market with numericId=${listing.marketId}`)
-
             // Try to find market by numericId
             let market = markets.find(m => m.numericId === listing.marketId)
 
             if (!market) {
-                console.warn(`⚠️ No market found for listing #${listing.listingId} (marketId: ${listing.marketId})`)
-                console.warn(`   Available numericIds: ${markets.map(m => m.numericId).join(', ')}`)
                 return null
             }
 
-            console.log(`✓ Matched listing #${listing.listingId} to market ${market.id} (numericId: ${market.numericId}, active: ${listing.isActive}, transferred: ${listing.isTransferred})`)
             return {
                 market: convertToFrontendMarket(market),
                 listing
@@ -205,7 +193,6 @@ export default function MarketplacePage() {
         }).filter(item => item !== null) as { market: any, listing: MarketListing }[]
 
         const activeMatched = matched.filter(m => m.listing.isActive) // Show all active listings, even if pending transfer
-        console.log(`📊 Final result: ${matched.length} total listed markets (${activeMatched.length} active)`)
         return activeMatched
     }, [listings, markets])
 
@@ -220,7 +207,6 @@ export default function MarketplacePage() {
         }
 
         setBuyingMarketId(marketId)
-        console.log(`Buying market ${marketId}`)
         try {
             // Find listing to check seller and type
             const listing = listings.find(l => l.marketId === marketId)

@@ -52,10 +52,8 @@ export function useAllMarkets() {
   const fetchBNBMarket = useCallback(
     async (marketId: number): Promise<UnifiedMarket | null> => {
       try {
-        console.log(`🔍 Fetching BNB market ID ${marketId}...`)
         const market = await bnbHook.getMarket(marketId)
         if (market) {
-          console.log(`✅ BNB market ${marketId} fetched:`, market.question)
           return {
             ...market,
             id: `BNB-${marketId}`,
@@ -67,7 +65,6 @@ export function useAllMarkets() {
             paymentToken: "BNB" as const
           }
         }
-        console.log(`⚠️ BNB market ${marketId} returned null`)
         return null
       } catch (error) {
         console.error(`❌ Error fetching BNB market ${marketId}:`, error)
@@ -115,19 +112,15 @@ export function useAllMarkets() {
   // Fetch all BNB markets by iterating through IDs
   const getAllBNBMarkets = useCallback(async (): Promise<UnifiedMarket[]> => {
     try {
-      console.log('🔍 getAllBNBMarkets called, contract ready:', bnbHook.isContractReady, 'contract exists:', !!bnbHook.marketContract)
 
       if (!bnbHook.marketContract) {
-        console.log('⚠️ BNB market contract not available')
         return []
       }
 
       try {
-        console.log('🔍 BNB Hook contract address:', await bnbHook.marketContract.getAddress())
         const nextMarketId = await bnbHook.marketContract.nextMarketId()
         const totalMarkets = Number(nextMarketId)
 
-        console.log(`📊 BNB Contract has ${totalMarkets} markets (nextMarketId: ${nextMarketId})`)
 
         if (totalMarkets === 0) {
           return []

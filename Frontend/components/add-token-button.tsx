@@ -35,12 +35,9 @@ export function AddTokenButton() {
 
             if (wasAdded) {
                 setIsAdded(true);
-                console.log('PDX token added!');
             } else {
-                console.log('PDX token not added');
             }
         } catch (error) {
-            console.log(error);
         }
     };
 
