@@ -1,4 +1,5 @@
-const OpenAI = require('openai');
+import OpenAI from 'openai';
+import { ethers } from 'ethers';
 
 // Initialize OpenAI client
 // Initialize OpenAI client lazily
@@ -14,6 +15,267 @@ function getOpenAI() {
     });
   }
   return openai;
+}
+
+// Contract configuration
+const MARKET_ABI = [
+  'function nextMarketId() view returns (uint256)',
+  'function markets(uint256) view returns (address creator, string question, string category, uint256 endTime, uint8 status, uint8 outcome, address yesToken, address noToken, uint256 yesPool, uint256 noPool, uint256 lpTotalSupply, uint256 totalBacking, uint256 platformFees, uint256 resolutionRequestedAt, address resolutionRequester, string resolutionReason, uint256 resolutionConfidence, uint256 disputeDeadline, address disputer, string disputeReason)'
+];
+
+// Cache for markets to avoid repeated fetching
+let marketsCache = null;
+let marketsCacheTimestamp = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Fetch all existing markets from blockchain contracts
+ */
+async function fetchAllMarkets() {
+  // Check cache first
+  const now = Date.now();
+  if (marketsCache && (now - marketsCacheTimestamp) < CACHE_DURATION) {
+    console.log('Using cached markets data');
+    return marketsCache;
+  }
+
+  const markets = [];
+
+  try {
+    const rpcUrl = process.env.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545/';
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+    // Contract addresses
+    const contracts = [
+      { address: process.env.BNB_PREDICTION_MARKET_ADDRESS, type: 'BNB' },
+      { address: process.env.PDX_PREDICTION_MARKET_ADDRESS, type: 'PDX' }
+    ];
+
+    for (const { address, type } of contracts) {
+      if (!address) {
+        console.log(`⚠️ ${type} contract address not configured, skipping`);
+        continue;
+      }
+
+      try {
+        const contract = new ethers.Contract(address, MARKET_ABI, provider);
+        const nextId = await contract.nextMarketId();
+        const marketCount = Number(nextId);
+
+        console.log(`Fetching ${marketCount} markets from ${type} contract...`);
+
+        for (let i = 0; i < marketCount; i++) {
+          try {
+            const marketData = await contract.markets(BigInt(i));
+
+            // Only include active markets (status 0 = Open, 1 = Closed, 2 = ResolutionRequested)
+            const status = Number(marketData[4]);
+            if (status <= 2) {
+              markets.push({
+                id: i,
+                question: marketData[1],
+                category: marketData[2],
+                endTime: Number(marketData[3]),
+                status: status,
+                type: type
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching ${type} market ${i}:`, error.message);
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching markets from ${type} contract:`, error.message);
+      }
+    }
+
+    // Update cache
+    marketsCache = markets;
+    marketsCacheTimestamp = now;
+
+    console.log(`Fetched ${markets.length} total active markets`);
+    return markets;
+  } catch (error) {
+    console.error('Error in fetchAllMarkets:', error);
+    return [];
+  }
+}
+
+/**
+ * Normalize question for comparison
+ */
+function normalizeQuestion(question) {
+  return question
+    .toLowerCase()
+    .trim()
+    .replace(/[?!.,;:]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Check if two questions have the same intent using AI
+ */
+async function checkSimilarIntent(question1, question2) {
+  try {
+    const systemPrompt = `You are a prediction market question analyzer. Your job is to determine if two prediction market questions have the SAME INTENT, even if worded differently.
+
+Two questions have the SAME INTENT if:
+- They ask about the same event or outcome
+- They have the same resolution criteria
+- One is just a rephrased version of the other
+- The answer to one would definitively answer the other
+
+Return JSON only: { "sameIntent": boolean, "reason": string }`;
+
+    const userPrompt = `Do these two prediction market questions have the SAME INTENT?
+
+Question 1: "${question1}"
+Question 2: "${question2}"
+
+Analyze carefully and return your assessment.`;
+
+    const response = await makeOpenAICall([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ]);
+
+    if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+      throw new Error('Invalid OpenAI response format');
+    }
+
+    const aiText = response.choices[0].message.content;
+    const result = JSON.parse(aiText);
+
+    return {
+      sameIntent: Boolean(result.sameIntent),
+      reason: result.reason || 'No reason provided'
+    };
+  } catch (error) {
+    console.error('Error checking similar intent:', error);
+    // On error, be conservative and assume not similar
+    return { sameIntent: false, reason: 'Could not determine similarity' };
+  }
+}
+
+/**
+ * Check if market already exists or has similar intent
+ */
+async function checkForDuplicateMarket(question) {
+  try {
+    console.log('Checking for duplicate markets...');
+
+    const existingMarkets = await fetchAllMarkets();
+    const normalizedNewQuestion = normalizeQuestion(question);
+
+    // Step 1: Check for exact match (case-insensitive)
+    for (const market of existingMarkets) {
+      const normalizedExisting = normalizeQuestion(market.question);
+
+      if (normalizedNewQuestion === normalizedExisting) {
+        return {
+          isDuplicate: true,
+          reason: `This market already exists: "${market.question}" (Market ID: ${market.id}, Type: ${market.type})`,
+          existingMarket: market
+        };
+      }
+    }
+
+    // Step 2: Check for similar wording (>90% similarity using simple algorithm)
+    for (const market of existingMarkets) {
+      const similarity = calculateStringSimilarity(normalizedNewQuestion, normalizeQuestion(market.question));
+
+      if (similarity > 0.9) {
+        return {
+          isDuplicate: true,
+          reason: `A very similar market already exists: "${market.question}" (Market ID: ${market.id}, Type: ${market.type}, Similarity: ${(similarity * 100).toFixed(1)}%)`,
+          existingMarket: market
+        };
+      }
+    }
+
+    // Step 3: Use AI to check for same intent with top similar markets
+    // Only check the most similar markets to save API calls
+    const topSimilarMarkets = existingMarkets
+      .map(market => ({
+        market,
+        similarity: calculateStringSimilarity(normalizedNewQuestion, normalizeQuestion(market.question))
+      }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 5); // Check top 5 most similar markets
+
+    for (const { market, similarity } of topSimilarMarkets) {
+      // Only check AI for markets with at least 50% similarity
+      if (similarity < 0.5) continue;
+
+      const intentCheck = await checkSimilarIntent(question, market.question);
+
+      if (intentCheck.sameIntent) {
+        return {
+          isDuplicate: true,
+          reason: `A market with the same intent already exists: "${market.question}" (Market ID: ${market.id}, Type: ${market.type}). ${intentCheck.reason}`,
+          existingMarket: market
+        };
+      }
+    }
+
+    console.log('No duplicate markets found');
+    return {
+      isDuplicate: false,
+      reason: 'No duplicate markets found',
+      existingMarket: null
+    };
+
+  } catch (error) {
+    console.error('Error checking for duplicate markets:', error);
+    // On error, allow market creation to proceed (fail open)
+    return {
+      isDuplicate: false,
+      reason: 'Could not check for duplicates',
+      existingMarket: null
+    };
+  }
+}
+
+/**
+ * Calculate string similarity using Levenshtein distance
+ */
+function calculateStringSimilarity(str1, str2) {
+  const maxLength = Math.max(str1.length, str2.length);
+  if (maxLength === 0) return 1.0;
+
+  const distance = levenshteinDistance(str1, str2);
+  return 1 - (distance / maxLength);
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(str1, str2) {
+  const matrix = [];
+
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        );
+      }
+    }
+  }
+
+  return matrix[str2.length][str1.length];
 }
 
 // Category definitions
@@ -482,10 +744,7 @@ function determineCategoryFromKeywords(question) {
   return 'OTHER';
 }
 
-/**
- * Main handler for Vercel serverless function
- */
-module.exports = async (req, res) => {
+export default async (req, res) => {
   // CORS headers
   const allowedOrigins = [
     'https://sigma-predection.vercel.app',
@@ -600,7 +859,24 @@ module.exports = async (req, res) => {
       });
     }
 
-    console.log('Input validation passed, calling AI validator...');
+    console.log('Input validation passed, checking for duplicate markets...');
+
+    // Check for duplicate markets
+    const duplicateCheck = await checkForDuplicateMarket(question.trim());
+
+    if (duplicateCheck.isDuplicate) {
+      console.log('Duplicate market found:', duplicateCheck.reason);
+      return res.status(400).json({
+        valid: false,
+        reason: duplicateCheck.reason,
+        category: duplicateCheck.existingMarket?.category || 'OTHER',
+        apiError: false,
+        isDuplicate: true,
+        existingMarket: duplicateCheck.existingMarket
+      });
+    }
+
+    console.log('No duplicates found, calling AI validator...');
 
     // Call AI validation
     const validation = await validateWithOpenAI({
