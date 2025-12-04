@@ -1,7 +1,7 @@
-"use client"
-
 // Force all pages to be dynamically rendered (no static generation)
 export const dynamic = 'force-dynamic'
+export const dynamicParams = true
+export const revalidate = 0
 
 import type React from "react"
 import { Inter } from "next/font/google"
