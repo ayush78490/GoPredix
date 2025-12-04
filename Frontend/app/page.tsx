@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect } from "react"
 import { useWeb3Context } from "@/lib/wallet-context"
 import { useRouter } from "next/navigation"

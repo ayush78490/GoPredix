@@ -12,6 +12,9 @@ import LightRays from "@/components/LightRays"
 import TwitterProfileDisplay from "@/components/twitter-profile-display"
 import { UserProfile } from "@/lib/supabase"
 
+// Force dynamic rendering to avoid build-time errors with client-only APIs
+export const dynamic = 'force-dynamic'
+
 interface UserStats {
   address: string
   totalInvestment: string
