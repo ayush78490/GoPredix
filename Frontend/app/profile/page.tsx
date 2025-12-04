@@ -1174,18 +1174,18 @@ export default function ProfilePage() {
                                 {position.status === "Active" && (
                                   <>
                                     <Button
-                                      variant="outline"
+                                      // variant="outline"
                                       size="sm"
                                       onClick={() => handleSetStopLoss(position)}
-                                      className="backdrop-blur-sm"
+                                      className="backdrop-blur-sm text-green-600 border-green-600 hover:bg-green-600/10"
                                     >
                                       Set Stop Loss
                                     </Button>
                                     <Button
-                                      variant="outline"
+                                      // variant="outline"
                                       size="sm"
                                       onClick={() => handleSetTakeProfit(position)}
-                                      className="backdrop-blur-sm"
+                                      className="backdrop-blur-sm text-red-600 border-red-600 hover:bg-red-600/10"
                                     >
                                       Set Take Profit
                                     </Button>
@@ -1303,13 +1303,14 @@ export default function ProfilePage() {
                     <Button
                       onClick={executeSellTokens}
                       disabled={!sellAmount || !minReceive || !!actionLoading}
-                      className="flex-1"
+                      className="flex-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white border-0 shadow-lg shadow-purple-500/50"
                     >
                       Sell {sellTokenType} Tokens
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => setShowSellModal(false)}
+                      className="border-muted-foreground/30 hover:bg-muted/50 hover:border-primary/50"
                     >
                       Cancel
                     </Button>
@@ -1407,7 +1408,7 @@ export default function ProfilePage() {
                   <Button
                     onClick={executeSetStopLoss}
                     disabled={!stopLossPrice || !!actionLoading}
-                    className="flex-1"
+                    className="flex-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white border-0 shadow-lg shadow-purple-500/50"
                   >
                     {actionLoading === `stoploss-${selectedPosition.marketId}` ? (
                       <>
@@ -1422,6 +1423,7 @@ export default function ProfilePage() {
                     variant="outline"
                     onClick={() => setShowStopLossModal(false)}
                     disabled={!!actionLoading}
+                    className="border-muted-foreground/30 hover:bg-muted/50 hover:border-primary/50"
                   >
                     Cancel
                   </Button>
@@ -1472,7 +1474,7 @@ export default function ProfilePage() {
                   <Button
                     onClick={executeSetTakeProfit}
                     disabled={!takeProfitPrice || !!actionLoading}
-                    className="flex-1"
+                    className="flex-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white border-0 shadow-lg shadow-purple-500/50"
                   >
                     {actionLoading === `takeprofit-${selectedPosition.marketId}` ? (
                       <>
@@ -1487,6 +1489,7 @@ export default function ProfilePage() {
                     variant="outline"
                     onClick={() => setShowTakeProfitModal(false)}
                     disabled={!!actionLoading}
+                    className="border-muted-foreground/30 hover:bg-muted/50 hover:border-primary/50"
                   >
                     Cancel
                   </Button>

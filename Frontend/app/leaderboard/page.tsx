@@ -220,7 +220,7 @@ export default function Leaderboard() {
               <Card className="backdrop-blur-sm bg-card/80">
                 <CardContent className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-primary mr-3" />
-                  <p className="text-lg">Loading leaderboard data from blockchain...</p>
+                  <p className="text-lg">Loading leaderboard data from Gopredix...</p>
                 </CardContent>
               </Card>
             ) : !data || data.userStats.length === 0 ? (
