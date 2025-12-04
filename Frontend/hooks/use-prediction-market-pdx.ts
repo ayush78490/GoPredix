@@ -298,14 +298,22 @@ export function usePredictionMarketPDX() {
     if (marketIds.length === 0) return []
 
     try {
-      // Batch fetch all markets in parallel
-      const marketPromises = marketIds.map(id => getPDXMarket(id))
-      const markets = await Promise.allSettled(marketPromises)
-
-      // Filter out failed fetches and return successful ones
+      // Process markets sequentially with delays to avoid rate limiting
+      const markets: PDXMarket[] = []
+      for (let i = 0; i < marketIds.length; i++) {
+        try {
+          const market = await getPDXMarket(marketIds[i])
+          markets.push(market)
+          // Add delay between requests (except for the last one)
+          if (i < marketIds.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100)) // 100ms delay
+          }
+        } catch (error) {
+          console.error(`Error fetching PDX market ${marketIds[i]}:`, error)
+          // Continue with next market even if this one fails
+        }
+      }
       return markets
-        .filter((result): result is PromiseFulfilledResult<PDXMarket> => result.status === 'fulfilled')
-        .map(result => result.value)
     } catch (error) {
       console.error('❌ Error batch fetching markets:', error)
       return []
@@ -360,19 +368,29 @@ export function usePredictionMarketPDX() {
     try {
       const positions = await (helperContract as any).getUserPositions(userAddress)
 
-      const formattedPositions = await Promise.all(
-        positions.map(async (pos: any) => {
+      // Process positions sequentially to avoid rate limiting
+      const formattedPositions: any[] = []
+      for (let i = 0; i < positions.length; i++) {
+        try {
+          const pos = positions[i]
           const market = await getPDXMarket(Number(pos.marketId))
-          return {
+          formattedPositions.push({
             marketId: Number(pos.marketId),
             market,
             yesBalance: ethers.formatEther(pos.yesBalance),
             noBalance: ethers.formatEther(pos.noBalance),
             pdxInvested: ethers.formatEther(pos.pdxInvested),
             paymentToken: "PDX"
+          })
+          // Small delay between market fetches to avoid rate limiting
+          if (i < positions.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100))
           }
-        })
-      )
+        } catch (marketError) {
+          console.error(`Error fetching market for position ${i}:`, marketError)
+          // Continue with other positions even if one fails
+        }
+      }
 
       return formattedPositions
     } catch (error) {
