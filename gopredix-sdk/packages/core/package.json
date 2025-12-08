@@ -1,0 +1,52 @@
+{
+    "name": "@gopredix/core",
+    "version": "1.0.0",
+    "description": "Core SDK for GoPredix Prediction Markets",
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "npm run build:bundle && npm run build:types",
+        "build:bundle": "tsup src/index.ts --format cjs,esm --clean",
+        "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist",
+        "dev": "tsup src/index.ts --format cjs,esm --watch",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "clean": "rm -rf dist"
+    },
+    "keywords": [
+        "gopredix",
+        "prediction-market",
+        "sdk",
+        "blockchain"
+    ],
+    "author": "GoPredix Team",
+    "license": "MIT",
+    "dependencies": {
+        "ethers": "^6.15.0"
+    },
+    "devDependencies": {
+        "tsup": "^8.0.0",
+        "typescript": "^5.3.0",
+        "vitest": "^1.0.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/gopredix/gopredix-sdk"
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "name": "gopredix-nextjs-example",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Next.js example for GoPredix SDK",
+    "scripts": {
+        "build": "echo 'No build needed for example'",
+        "test": "echo 'No tests for example'"
+    }
+}

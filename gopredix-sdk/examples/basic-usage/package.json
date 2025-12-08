@@ -1,0 +1,20 @@
+{
+    "name": "gopredix-basic-example",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Basic usage example for GoPredix SDK",
+    "scripts": {
+        "start": "tsx index.ts",
+        "build": "echo 'No build needed for example'",
+        "test": "echo 'No tests for example'"
+    },
+    "dependencies": {
+        "@gopredix/core": "file:../../packages/core",
+        "ethers": "^6.15.0"
+    },
+    "devDependencies": {
+        "tsx": "^4.7.0",
+        "typescript": "^5.3.0"
+    }
+}

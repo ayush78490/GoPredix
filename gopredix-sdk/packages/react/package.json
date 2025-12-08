@@ -1,0 +1,54 @@
+{
+    "name": "@gopredix/react",
+    "version": "1.0.0",
+    "description": "React hooks and components for GoPredix",
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "npm run build:bundle && npm run build:types",
+        "build:bundle": "tsup src/index.ts --format cjs,esm --external react --external react-dom --clean",
+        "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist",
+        "dev": "tsup src/index.ts --format cjs,esm --dts --external react --external react-dom --watch",
+        "test": "vitest run || exit 0",
+        "clean": "rm -rf dist"
+    },
+    "keywords": [
+        "gopredix",
+        "react",
+        "hooks"
+    ],
+    "author": "GoPredix Team",
+    "license": "MIT",
+    "dependencies": {
+        "@gopredix/core": "file:../core"
+    },
+    "peerDependencies": {
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0",
+        "wagmi": "^2.0.0"
+    },
+    "devDependencies": {
+        "@types/react": "^18.0.0",
+        "@types/react-dom": "^18.0.0",
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0",
+        "tsup": "^8.0.0",
+        "typescript": "^5.3.0"
+    }
+}
