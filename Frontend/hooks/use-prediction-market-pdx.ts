@@ -1,14 +1,14 @@
 import { useState, useCallback, useEffect } from 'react'
 import { ethers } from 'ethers'
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
-import PDX_PREDICTION_MARKET_ABI from '../contracts/pdxabi.json'
-import PDX_HELPER_ABI from '../contracts/pdxhelperabi.json'
+import PDX_PREDICTION_MARKET_ABI from '../contracts/PDXbazar.json'
+import PDX_HELPER_ABI from '../contracts/PDXhelperContract.json'
 import ERC20_ABI from '../contracts/erc20ABI.json'
 
 // Contract addresses
-const PDX_PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x7d46139e1513571f19c9B87cE9A01D21cA9ef665'
-const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || '0x0CCaDd82A453075B8C0193809cC3693ef58E46D1'
-const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS || '0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8'
+const PDX_PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x151fE04C421E197B982A4F62a65Acd6F416af51a'
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || '0x3056c9cAa438596C66dAD04A35D75733C195f1ae'
+const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS || '0xdaD3732b2062AD5da047504623366e5973b1c032'
 
 // Market Status enum
 export enum MarketStatus {

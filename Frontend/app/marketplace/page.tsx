@@ -9,7 +9,8 @@ import LightRays from "@/components/LightRays"
 import { Button } from "@/components/ui/button"
 import { Loader2, Store, PlusCircle } from "lucide-react"
 import { useAllMarkets } from "@/hooks/getAllMarkets"
-import { useMarketMarketplace, MarketListing } from "@/hooks/use-market-marketplace"
+import { useBNBCustodialMarketplace } from "@/hooks/use-bnb-custodial-marketplace"
+import type { Listing as MarketListing } from "@/hooks/use-bnb-custodial-marketplace"
 import MarketplaceCard from "@/components/marketplace-card"
 import SellMarketModal from "@/components/sell-market-modal"
 import { useAccount } from "wagmi"
@@ -18,8 +19,8 @@ import { LogoLoading } from "@/components/ui/logo-loading"
 
 
 export default function MarketplacePage() {
-    const { markets, isLoading: isMarketsLoading } = useAllMarkets()
-    const { getAllListings, buyMarket, cancelListing, isReady } = useMarketMarketplace()
+    const { markets, isLoading: isMarketsLoading, refreshMarkets } = useAllMarkets()
+    const bnbMarketplace = useBNBCustodialMarketplace()
     const { address: account, isConnected } = useAccount()
 
     const [listings, setListings] = useState<MarketListing[]>([])
@@ -29,15 +30,43 @@ export default function MarketplacePage() {
     const [cancellingMarketId, setCancellingMarketId] = useState<number | null>(null)
 
     const fetchListings = async () => {
-        if (!isReady) {
+        if (!bnbMarketplace.isContractReady) {
             return
         }
         setIsLoadingListings(true)
         try {
-            const allListings = await getAllListings()
-            setListings(allListings)
+            // ✅ FIXED: Use marketplaceContract directly to get nextListingId
+            if (!bnbMarketplace.marketplaceContract) {
+                console.warn('⚠️ Marketplace contract not ready')
+                setListings([])
+                return
+            }
+
+            const nextListingId = await bnbMarketplace.marketplaceContract.nextListingId()
+            const totalListings = Number(nextListingId)
+
+            console.log('📊 Total listings to fetch:', totalListings - 1)
+
+            if (totalListings <= 1) {
+                console.log('ℹ️ No listings found')
+                setListings([])
+                return
+            }
+
+            // Fetch all listings from ID 1 to totalListings-1
+            const listingPromises = []
+            for (let i = 1; i < totalListings; i++) {
+                listingPromises.push(bnbMarketplace.getListing(i))
+            }
+
+            const results = await Promise.all(listingPromises)
+            const validListings = results.filter((l): l is MarketListing => l !== null && l.isActive)
+
+            console.log('✅ Fetched listings:', validListings)
+            setListings(validListings)
         } catch (error) {
             console.error("❌ Failed to fetch listings:", error)
+            setListings([])
         } finally {
             setIsLoadingListings(false)
         }
@@ -48,10 +77,7 @@ export default function MarketplacePage() {
 
         setCancellingMarketId(marketId)
         try {
-            const listing = listings.find(l => l.marketId === marketId)
-            if (!listing) throw new Error("Listing not found")
-
-            await cancelListing(marketId, listing.type)
+            await bnbMarketplace.cancelListing(marketId)
             toast({
                 title: "Listing Cancelled",
                 description: "Your market listing has been cancelled.",
@@ -174,19 +200,31 @@ export default function MarketplacePage() {
     }
 
     useEffect(() => {
-        if (isReady) {
+        if (bnbMarketplace.isContractReady) {
             fetchListings()
         }
-    }, [isReady, getAllListings])
+    }, [bnbMarketplace.isContractReady])
 
     const listedMarkets = useMemo(() => {
+        console.log('🔍 [Marketplace Debug] Starting market matching...')
+        console.log('📊 Total listings:', listings.length)
+        console.log('📊 Total markets:', markets.length)
+        console.log('📋 Listings:', listings.map(l => ({ marketId: l.marketId, isActive: l.isActive, isTransferred: l.isTransferred })))
+        console.log('📋 Markets:', markets.map(m => ({ numericId: m.numericId, id: m.id, paymentToken: m.paymentToken })))
+
         const matched = listings.map(listing => {
+            console.log(`\n🔍 Looking for market with numericId: ${listing.marketId} (BNB listing)`)
+
             // Try to find market by numericId
             let market = markets.find(m => m.numericId === listing.marketId)
 
             if (!market) {
+                console.warn(`❌ Market ${listing.marketId} not found in markets array!`)
+                console.log(`   Searched in ${markets.length} markets`)
                 return null
             }
+
+            console.log(`✅ Found market:`, { numericId: market.numericId, paymentToken: market.paymentToken, question: market.question })
 
             return {
                 market: convertToFrontendMarket(market),
@@ -194,7 +232,17 @@ export default function MarketplacePage() {
             }
         }).filter(item => item !== null) as { market: any, listing: MarketListing }[]
 
-        const activeMatched = matched.filter(m => m.listing.isActive) // Show all active listings, even if pending transfer
+        console.log(`\n📊 Matched ${matched.length} markets with listings`)
+
+        const activeMatched = matched.filter(m => {
+            const isActive = m.listing.isActive
+            console.log(`Market ${m.listing.marketId}: isActive=${isActive}, isTransferred=${m.listing.isTransferred}`)
+            return isActive
+        })
+
+        console.log(`\n✅ Final active listings: ${activeMatched.length}`)
+        console.log('═══════════════════════════════════════\n')
+
         return activeMatched
     }, [listings, markets])
 
@@ -218,8 +266,8 @@ export default function MarketplacePage() {
                 throw new Error("You cannot buy your own listing.")
             }
 
-            // buyMarket now takes marketId and type
-            await buyMarket(marketId, listing.type)
+            // Use bnbMarketplace.buyMarket for BNB custodial marketplace
+            await bnbMarketplace.buyMarket(marketId, listing.price)
 
             toast({
                 title: "Success!",
@@ -287,7 +335,7 @@ export default function MarketplacePage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {listedMarkets.map(({ market, listing }) => (
                                         <MarketplaceCard
-                                            key={listing.listingId}
+                                            key={listing.marketId}
                                             market={market}
                                             listing={listing}
                                             onBuy={() => handleBuy(listing.marketId)}
@@ -323,7 +371,12 @@ export default function MarketplacePage() {
             <SellMarketModal
                 isOpen={isSellModalOpen}
                 onClose={() => setIsSellModalOpen(false)}
-                onSuccess={fetchListings}
+                onSuccess={async () => {
+                    await Promise.all([
+                        fetchListings(),
+                        refreshMarkets()
+                    ])
+                }}
             />
         </main>
     )

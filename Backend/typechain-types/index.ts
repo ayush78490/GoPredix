@@ -30,12 +30,18 @@ export type { PredictionMarketWithMultipliers } from "./contracts/Bazar.sol/Pred
 export { PredictionMarketWithMultipliers__factory } from "./factories/contracts/Bazar.sol/PredictionMarketWithMultipliers__factory";
 export type { TradingBot } from "./contracts/Bazar.sol/TradingBot";
 export { TradingBot__factory } from "./factories/contracts/Bazar.sol/TradingBot__factory";
+export type { BNBCustodialMarketplace } from "./contracts/BNBCustodialMarketplace.sol/BNBCustodialMarketplace";
+export { BNBCustodialMarketplace__factory } from "./factories/contracts/BNBCustodialMarketplace.sol/BNBCustodialMarketplace__factory";
 export type { BNBMarketMarketplace } from "./contracts/BNBMarketMarketplace.sol/BNBMarketMarketplace";
 export { BNBMarketMarketplace__factory } from "./factories/contracts/BNBMarketMarketplace.sol/BNBMarketMarketplace__factory";
 export type { IPDX } from "./contracts/BNBMarketMarketplace.sol/IPDX";
 export { IPDX__factory } from "./factories/contracts/BNBMarketMarketplace.sol/IPDX__factory";
+export type { BNBNativeMarketplace } from "./contracts/BNBNativeMarketplace.sol/BNBNativeMarketplace";
+export { BNBNativeMarketplace__factory } from "./factories/contracts/BNBNativeMarketplace.sol/BNBNativeMarketplace__factory";
 export type { CustodialMarketplace } from "./contracts/CustodialMarketplace.sol/CustodialMarketplace";
 export { CustodialMarketplace__factory } from "./factories/contracts/CustodialMarketplace.sol/CustodialMarketplace__factory";
+export type { DisputeResolution } from "./contracts/DisputeResolution";
+export { DisputeResolution__factory } from "./factories/contracts/DisputeResolution__factory";
 export type { GPXToken } from "./contracts/gpx.sol/GPXToken";
 export { GPXToken__factory } from "./factories/contracts/gpx.sol/GPXToken__factory";
 export type { IOutcomeToken } from "./contracts/helperContract.sol/IOutcomeToken";
@@ -54,6 +60,8 @@ export type { PDXPredictionMarket } from "./contracts/PDXbazar.sol/PDXPrediction
 export { PDXPredictionMarket__factory } from "./factories/contracts/PDXbazar.sol/PDXPredictionMarket__factory";
 export type { PDXTradingBot } from "./contracts/PDXbazar.sol/PDXTradingBot";
 export { PDXTradingBot__factory } from "./factories/contracts/PDXbazar.sol/PDXTradingBot__factory";
+export type { PDXDisputeResolution } from "./contracts/PDXDisputeResolution.sol/PDXDisputeResolution";
+export { PDXDisputeResolution__factory } from "./factories/contracts/PDXDisputeResolution.sol/PDXDisputeResolution__factory";
 export type { PDXFaucet } from "./contracts/pdxfaucet.sol/PDXFaucet";
 export { PDXFaucet__factory } from "./factories/contracts/pdxfaucet.sol/PDXFaucet__factory";
 export type { IPDXPredictionMarketCore } from "./contracts/PDXhelperContract.sol/IPDXPredictionMarketCore";

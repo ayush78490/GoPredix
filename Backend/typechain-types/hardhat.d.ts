@@ -62,6 +62,14 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.TradingBot__factory>;
     getContractFactory(
+      name: "BNBCustodialMarketplace",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.BNBCustodialMarketplace__factory>;
+    getContractFactory(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPredictionMarket__factory>;
+    getContractFactory(
       name: "BNBMarketMarketplace",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.BNBMarketMarketplace__factory>;
@@ -69,6 +77,14 @@ declare module "hardhat/types/runtime" {
       name: "IPDX",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IPDX__factory>;
+    getContractFactory(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPredictionMarket__factory>;
+    getContractFactory(
+      name: "BNBNativeMarketplace",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.BNBNativeMarketplace__factory>;
     getContractFactory(
       name: "IPredictionMarket",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -85,6 +101,10 @@ declare module "hardhat/types/runtime" {
       name: "IPredictionMarket",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IPredictionMarket__factory>;
+    getContractFactory(
+      name: "DisputeResolution",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.DisputeResolution__factory>;
     getContractFactory(
       name: "GPXToken",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -133,6 +153,14 @@ declare module "hardhat/types/runtime" {
       name: "PDXTradingBot",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.PDXTradingBot__factory>;
+    getContractFactory(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPDX__factory>;
+    getContractFactory(
+      name: "PDXDisputeResolution",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.PDXDisputeResolution__factory>;
     getContractFactory(
       name: "PDXFaucet",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -215,6 +243,16 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.TradingBot>;
     getContractAt(
+      name: "BNBCustodialMarketplace",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.BNBCustodialMarketplace>;
+    getContractAt(
+      name: "IPredictionMarket",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPredictionMarket>;
+    getContractAt(
       name: "BNBMarketMarketplace",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -224,6 +262,16 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IPDX>;
+    getContractAt(
+      name: "IPredictionMarket",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPredictionMarket>;
+    getContractAt(
+      name: "BNBNativeMarketplace",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.BNBNativeMarketplace>;
     getContractAt(
       name: "IPredictionMarket",
       address: string | ethers.Addressable,
@@ -244,6 +292,11 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IPredictionMarket>;
+    getContractAt(
+      name: "DisputeResolution",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.DisputeResolution>;
     getContractAt(
       name: "GPXToken",
       address: string | ethers.Addressable,
@@ -304,6 +357,16 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.PDXTradingBot>;
+    getContractAt(
+      name: "IPDX",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPDX>;
+    getContractAt(
+      name: "PDXDisputeResolution",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.PDXDisputeResolution>;
     getContractAt(
       name: "PDXFaucet",
       address: string | ethers.Addressable,
@@ -379,6 +442,14 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.TradingBot>;
     deployContract(
+      name: "BNBCustodialMarketplace",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.BNBCustodialMarketplace>;
+    deployContract(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
       name: "BNBMarketMarketplace",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.BNBMarketMarketplace>;
@@ -386,6 +457,14 @@ declare module "hardhat/types/runtime" {
       name: "IPDX",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPredictionMarket",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
+      name: "BNBNativeMarketplace",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.BNBNativeMarketplace>;
     deployContract(
       name: "IPredictionMarket",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -402,6 +481,10 @@ declare module "hardhat/types/runtime" {
       name: "IPredictionMarket",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
+      name: "DisputeResolution",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.DisputeResolution>;
     deployContract(
       name: "GPXToken",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -450,6 +533,14 @@ declare module "hardhat/types/runtime" {
       name: "PDXTradingBot",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PDXTradingBot>;
+    deployContract(
+      name: "IPDX",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "PDXDisputeResolution",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.PDXDisputeResolution>;
     deployContract(
       name: "PDXFaucet",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -532,6 +623,16 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.TradingBot>;
     deployContract(
+      name: "BNBCustodialMarketplace",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.BNBCustodialMarketplace>;
+    deployContract(
+      name: "IPredictionMarket",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
       name: "BNBMarketMarketplace",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -541,6 +642,16 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "IPredictionMarket",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
+      name: "BNBNativeMarketplace",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.BNBNativeMarketplace>;
     deployContract(
       name: "IPredictionMarket",
       args: any[],
@@ -561,6 +672,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IPredictionMarket>;
+    deployContract(
+      name: "DisputeResolution",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.DisputeResolution>;
     deployContract(
       name: "GPXToken",
       args: any[],
@@ -621,6 +737,16 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PDXTradingBot>;
+    deployContract(
+      name: "IPDX",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPDX>;
+    deployContract(
+      name: "PDXDisputeResolution",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.PDXDisputeResolution>;
     deployContract(
       name: "PDXFaucet",
       args: any[],

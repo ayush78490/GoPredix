@@ -1,15 +1,15 @@
 import { useState, useCallback, useEffect } from 'react'
 import { ethers, BrowserProvider, JsonRpcSigner } from 'ethers'
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
-import PREDICTION_MARKET_JSON from '../contracts/abi.json'
-import HELPER_JSON from '../contracts/helperABI.json'
+import PREDICTION_MARKET_JSON from '../contracts/Bazar.json'
+import HELPER_JSON from '../contracts/helperContract.json'
 
 const PREDICTION_MARKET_ABI = (PREDICTION_MARKET_JSON as any).abi || PREDICTION_MARKET_JSON
 const HELPER_ABI = (HELPER_JSON as any).abi || HELPER_JSON
 
 // Contract addresses - BNB only
-const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x52Ca4B7673646B8b922ea00ccef6DD0375B14619'
-const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0xC940106a30742F21daE111d41e8F41d482feda15'
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x90FD905aB1F479399117F6EB6b3e3E58f94e26f1'
+const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0x8E80772760816571a710B6388fCc25aBc0F21841'
 
 
 // Market Status enum
@@ -1045,6 +1045,20 @@ export function usePredictionMarketBNB() {
     return await tx.wait()
   }, [signer, isCorrectNetwork, marketContract])
 
+  const transferMarketOwnership = useCallback(async (marketId: number, newOwner: string) => {
+    if (!signer || !isCorrectNetwork || !marketContract) throw new Error('Wallet not connected or wrong network')
+
+    const marketWithSigner = new ethers.Contract(
+      PREDICTION_MARKET_ADDRESS,
+      PREDICTION_MARKET_ABI,
+      signer
+    )
+
+    const tx = await (marketWithSigner as any).transferMarketOwnership(BigInt(marketId), newOwner)
+    return await tx.wait()
+  }, [signer, isCorrectNetwork, marketContract])
+
+
   const getMarketPriceHistory = useCallback(async (marketId: number): Promise<PricePoint[]> => {
     if (!marketContract) return []
 
@@ -1200,6 +1214,7 @@ export function usePredictionMarketBNB() {
     resolveMarket,
     claimRedemption,
     withdrawPlatformFees,
+    transferMarketOwnership,
 
     // Status checks
     canRequestResolution,

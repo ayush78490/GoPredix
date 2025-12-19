@@ -1,0 +1,19 @@
+[
+    "function createDispute(address marketContract, uint256 marketId, string calldata reason) external payable returns (uint256)",
+    "function voteOnDispute(uint256 disputeId, bool acceptDispute) external payable",
+    "function authorityResolveDispute(uint256 disputeId, bool acceptDispute, string calldata reason) external",
+    "function finalizeDispute(uint256 disputeId) external",
+    "function claimStake(uint256 disputeId) external",
+    "function getMarketDispute(address marketContract, uint256 marketId) external view returns (uint256)",
+    "function getDisputeInfo(uint256 disputeId) external view returns (address marketContract, uint256 marketId, address disputer, string memory reason, uint256 disputeStake, uint8 status, uint8 outcome, uint256 totalAcceptStake, uint256 totalRejectStake, uint256 votingEndTime)",
+    "function getVoteInfo(uint256 disputeId, address voter) external view returns (bool hasVoted, bool vote, uint256 stake, bool claimed)",
+    "function calculatePotentialWinnings(uint256 disputeId, address voter) external view returns (uint256 potentialWinnings, bool isWinning)",
+    "function minimumDisputeStake() external view returns (uint256)",
+    "function minimumVoteStake() external view returns (uint256)",
+    "function votingPeriod() external view returns (uint256)",
+    "function platformFeePercent() external view returns (uint256)",
+    "event DisputeCreated(uint256 indexed disputeId, address indexed marketContract, uint256 indexed marketId, address disputer, string reason, uint256 stake)",
+    "event VoteCast(uint256 indexed disputeId, address indexed voter, bool vote, uint256 stake)",
+    "event DisputeResolved(uint256 indexed disputeId, uint8 outcome, string reason)",
+    "event StakeClaimed(uint256 indexed disputeId, address indexed claimer, uint256 amount, bool isWinner)"
+]

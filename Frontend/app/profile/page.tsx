@@ -21,10 +21,10 @@ import ConnectTwitterButton from "@/components/connect-twitter-button"
 import { LogoLoading } from "@/components/ui/logo-loading"
 
 // Import ABIs
-import BNB_MARKET_ARTIFACT from "@/contracts/abi.json"
-import BNB_HELPER_ARTIFACT from "@/contracts/helperABI.json"
-import PDX_MARKET_ARTIFACT from "@/contracts/pdxabi.json"
-import PDX_HELPER_ARTIFACT from "@/contracts/pdxhelperabi.json"
+import BNB_MARKET_ARTIFACT from "@/contracts/Bazar.json"
+import BNB_HELPER_ARTIFACT from "@/contracts/helperContract.json"
+import PDX_MARKET_ARTIFACT from "@/contracts/PDXbazar.json"
+import PDX_HELPER_ARTIFACT from "@/contracts/PDXhelperContract.json"
 
 // Helper function to extract ABI
 const extractABI = (artifact: any): ethers.InterfaceAbi => {
@@ -38,10 +38,10 @@ const PDX_MARKET_ABI = extractABI(PDX_MARKET_ARTIFACT)
 const PDX_HELPER_ABI = extractABI(PDX_HELPER_ARTIFACT)
 
 // Contract addresses - MUST MATCH the hooks!
-const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x52Ca4B7673646B8b922ea00ccef6DD0375B14619'
-const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0xC940106a30742F21daE111d41e8F41d482feda15'
-const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x7d46139e1513571f19c9B87cE9A01D21cA9ef665'
-const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || '0x0CCaDd82A453075B8C0193809cC3693ef58E46D1'
+const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x90FD905aB1F479399117F6EB6b3e3E58f94e26f1'
+const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0x8E80772760816571a710B6388fCc25aBc0F21841'
+const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x151fE04C421E197B982A4F62a65Acd6F416af51a'
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || '0x3056c9cAa438596C66dAD04A35D75733C195f1ae'
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
 
 interface UserStats {
@@ -484,33 +484,62 @@ export default function ProfilePage() {
       const { bnbMarketContract, pdxMarketContract } = getReadOnlyContracts()
       const createdMarkets: Market[] = []
 
+      // 🔍 DEBUG: Log user address
+      console.log('=== PROFILE PAGE - FETCHING CREATED MARKETS ===')
+      console.log('User address:', address)
+
       // Fetch BNB markets
       try {
         const nextBNBMarketId = await bnbMarketContract.nextMarketId()
         const totalBNBMarkets = Number(nextBNBMarketId)
+        console.log('Total BNB markets to check:', totalBNBMarkets)
 
         for (let i = 0; i < totalBNBMarkets; i++) {
           const market = await getBNBMarket(i)
-          if (market && market.creator.toLowerCase() === address.toLowerCase()) {
-            createdMarkets.push(market)
+          if (market) {
+            console.log(`BNB Market ${i}:`, {
+              creator: market.creator,
+              question: market.question?.substring(0, 50),
+              matches: market.creator.toLowerCase() === address.toLowerCase()
+            })
+
+            if (market.creator.toLowerCase() === address.toLowerCase()) {
+              createdMarkets.push(market)
+              console.log(`✅ Match found! Added BNB market ${i}`)
+            }
           }
         }
       } catch (error) {
+        console.error('Error fetching BNB markets:', error)
       }
 
       // Fetch PDX markets
       try {
         const nextPDXMarketId = await pdxMarketContract.nextMarketId()
         const totalPDXMarkets = Number(nextPDXMarketId)
+        console.log('Total PDX markets to check:', totalPDXMarkets)
 
         for (let i = 0; i < totalPDXMarkets; i++) {
           const market = await getPDXMarket(i)
-          if (market && market.creator.toLowerCase() === address.toLowerCase()) {
-            createdMarkets.push(market)
+          if (market) {
+            console.log(`PDX Market ${i}:`, {
+              creator: market.creator,
+              question: market.question?.substring(0, 50),
+              matches: market.creator.toLowerCase() === address.toLowerCase()
+            })
+
+            if (market.creator.toLowerCase() === address.toLowerCase()) {
+              createdMarkets.push(market)
+              console.log(`✅ Match found! Added PDX market ${i}`)
+            }
           }
         }
       } catch (error) {
+        console.error('Error fetching PDX markets:', error)
       }
+
+      console.log('Total created markets found:', createdMarkets.length)
+      console.log('================================================')
 
       return createdMarkets
 

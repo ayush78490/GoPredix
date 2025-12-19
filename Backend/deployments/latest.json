@@ -11,7 +11,9 @@
     "pdxBazar": "0x151fE04C421E197B982A4F62a65Acd6F416af51a",
     "pdxHelperContract": "0x3056c9cAa438596C66dAD04A35D75733C195f1ae",
     "custodialMarketplace": "0xc92c18CD349c7C60EF1B8c5A83c9000a73E7F4A0",
-    "pdxCustodialMarketplace": "0x6D005d00f8aCA64013B5F8fbf0161Ab80aA42173"
+    "pdxCustodialMarketplace": "0x6D005d00f8aCA64013B5F8fbf0161Ab80aA42173",
+    "disputeResolution": "0x8F05F7e4F78477F0DdC0d29A1B3B90D510227243",
+    "pdxDisputeResolution": "0x436A8ccE130a86c883A55CBA6e3f3337D6da78EB"
   },
   "config": {
     "feeBps": 50,

@@ -129,6 +129,7 @@ export default function Header() {
                 { href: "/markets", label: "Markets" },
                 { href: "/profile", label: "Portfolio" },
                 { href: "/marketplace", label: "Marketplace" },
+                { href: "/disputes", label: "Disputes" },
               ].map((link) => {
                 const isActive = pathname.startsWith(link.href)
 
@@ -254,6 +255,14 @@ export default function Header() {
               className="text-white hover:text-cyan-300 transition-colors py-3 px-4 hover:bg-white/5 rounded-lg"
             >
               Marketplace
+            </Link>
+
+            <Link
+              href="/disputes"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-white hover:text-cyan-300 transition-colors py-3 px-4 hover:bg-white/5 rounded-lg"
+            >
+              Disputes
             </Link>
 
             <Link

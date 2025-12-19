@@ -1,0 +1,24 @@
+{
+  "network": "BSC Testnet",
+  "chainId": 97,
+  "timestamp": "2025-12-17T08:21:44.021Z",
+  "deployer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "contracts": {
+    "predictionMarket": "0xA2867c105ff7725fb134d838E964Cd291B0e7e76",
+    "helperContract": "0x071e0884f1d3114E4f0eA31a74DFa7E4F2bdccfE",
+    "pdxToken": "0xdaD3732b2062AD5da047504623366e5973b1c032",
+    "pdxFaucet": "0xed5dF6F9C2055eb735E55aaEf332f3fD249259D8",
+    "pdxBazar": "0x151fE04C421E197B982A4F62a65Acd6F416af51a",
+    "pdxHelperContract": "0x3056c9cAa438596C66dAD04A35D75733C195f1ae",
+    "custodialMarketplace": "0xc92c18CD349c7C60EF1B8c5A83c9000a73E7F4A0",
+    "pdxCustodialMarketplace": "0x6D005d00f8aCA64013B5F8fbf0161Ab80aA42173",
+    "bnbNativeMarketplace": "0xe334f0B78f5f2Ff153C300386a76d9b3be41Bf66"
+  },
+  "config": {
+    "feeBps": 50,
+    "lpFeeBps": 7000,
+    "marketplaceFeeBps": 200,
+    "resolutionServer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e"
+  },
+  "lastUpdate": "Updated BNB Native Marketplace with new Prediction Market"
+}

@@ -18,7 +18,7 @@ import { useAccount, useWalletClient, useSwitchChain, usePublicClient } from 'wa
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 
 // Import the ABI
-import FAUCET_ABI from "@/contracts/faucetabi.json"
+import FAUCET_ABI from "@/contracts/pdxfaucet.json"
 
 const FAUCET_CONTRACT_ADDRESS = "0xD3561841A6dd046943739B704bcc737aAeE4cd77"
 // Your PDX token address
