@@ -346,17 +346,23 @@ CRITICAL VALIDATION RULES (REJECT if ANY fail):
    - Check news, historical records, and common knowledge
    - Examples to REJECT: "Did Bitcoin reach $100k in 2024?", "Who won the 2020 election?", "Did SpaceX launch in March 2023?"
 
-2. **DATE CONFLICT VALIDATION** (CRITICAL):
+2. **DATE CONFLICT VALIDATION** (IMPORTANT - READ CAREFULLY):
    - Current date: ${currentDate.toISOString()}
    - Market end date: ${marketEndDate.toISOString()}
    - Days until market ends: ${daysUntilEnd}
    
-   STRICT RULES:
-   - If question mentions a specific date/time, it MUST be BEFORE market end date
-   - The event MUST occur or be resolvable BEFORE ${marketEndDate.toDateString()}
-   - If event date is AFTER market end date, REJECT with clear explanation
-   - If event date is SAME as market end date, REJECT (need time to verify outcome)
-   - Event must be resolvable at least 1 day BEFORE market ends
+   RESOLUTION RULES (key insight about "before" questions):
+   - Questions asking "Will X happen BEFORE [future date]?" are resolvable at ANY time up to that date
+   - Example: "Will Bitcoin cross $100k before Dec 31, 2025?" can be resolved on Dec 25, 2025 
+     by checking if Bitcoin has crossed $100k yet (YES if it has, NO if it hasn't)
+   - The market end date determines when we CHECK the outcome, not when the event must occur
+   - Questions asking "Will X happen BY [date]?" or "ON [date]?" require the specified date to be before market end
+   
+   VALIDATION RULES:
+   - Questions with "before [future date]" or "by [future date]" are generally VALID if resolvable on market end date
+   - Only REJECT for date conflicts if the question explicitly requires knowing something that happens AFTER market end
+   - The event's RESOLUTION TIME matters, not necessarily when the event itself occurs
+   - Focus on WHETHER we can determine YES/NO on the market end date, not whether the event completes by then
 
 3. **RESOLVABILITY CHECK** (MANDATORY):
    - Question MUST have a clear, verifiable outcome
@@ -367,10 +373,10 @@ CRITICAL VALIDATION RULES (REJECT if ANY fail):
    - If outcome requires private/insider information, REJECT
 
 4. **FUTURE EVENT VALIDATION**:
-   - Event MUST be about the FUTURE relative to today (${currentDate.toDateString()})
-   - Event MUST occur BEFORE market end date (${marketEndDate.toDateString()})
-   - Outcome must be UNKNOWN at market creation time
-   - If asking about past events, REJECT
+   - Question MUST be about FUTURE or ONGOING events (not completed past events)
+   - The OUTCOME must be UNKNOWN at market creation time
+   - We must be able to CHECK the outcome on or before ${marketEndDate.toDateString()}
+   - If asking about completed past events with known outcomes, REJECT
 
 5. **OBJECTIVE VERIFIABILITY**:
    - Must have clear YES/NO outcome
@@ -394,12 +400,12 @@ CRITICAL VALIDATION RULES (REJECT if ANY fail):
    - No events impossible to verify
    - No events requiring insider knowledge
 
-8. **DATE EXTRACTION AND VERIFICATION**:
+8. **DATE EXTRACTION AND SMART ANALYSIS**:
    - Extract ALL dates mentioned in the question
-   - Verify each date is BEFORE market end date
-   - Check if dates are realistic and possible
-   - Verify the event can happen by that date
-   - Consider typical timelines for such events
+   - Identify the question type: "before [date]", "by [date]", "on [date]", "after [date]"
+   - For "BEFORE" questions: Can we determine if event occurred by checking on market end date?
+   - For "BY" or "ON" questions: Must the specified date be on or before market end date
+   - Consider whether the outcome is CHECKABLE on market end date, not just whether event completes
 
 RESPONSE FORMAT (JSON only):
 {
@@ -426,7 +432,7 @@ RESPONSE FORMAT (JSON only):
   }
 }`;
 
-    const userPrompt = `Analyze this prediction market question with EXTREME SCRUTINY: "${question}"
+    const userPrompt = `Analyze this prediction market question: "${question}"
 
 TIMING CONTEXT:
 - Today's date: ${currentDate.toDateString()} (${currentDate.toISOString()})
@@ -437,19 +443,18 @@ TIMING CONTEXT:
 MANDATORY CHECKS (ALL must pass):
 
 1. **Historical Event Check:**
-   - Has this event ALREADY HAPPENED?
-   - Is the outcome ALREADY KNOWN from news, records, or common knowledge?
-   - Search your knowledge for any information about this event
-   - If yes to either, REJECT immediately
+   - Has this event ALREADY HAPPENED and outcome is KNOWN?
+   - Search your knowledge for any information about this specific event
+   - If the outcome is already determined and publicly known, REJECT immediately
 
-2. **Date Extraction and Validation:**
-   - Extract ALL dates mentioned in the question (explicit or implicit)
-   - For each date found:
-     * Is it BEFORE the market end date (${marketEndDate.toDateString()})?
-     * Is it realistic and achievable?
-     * Can the outcome be verified by that date?
-   - If ANY date is after market end, REJECT
-   - If date is same as market end, REJECT (need verification time)
+2. **Smart Date Analysis (READ CAREFULLY):**
+   - Extract ALL dates mentioned in the question
+   - Identify if question uses "before", "by", "on", or "after" phrasing
+   - KEY INSIGHT: "before [date]" questions are resolvable by checking status on market end date
+   - Example: "Will Bitcoin cross $100k before Dec 31, 2025?" with market ending Dec 25, 2025 is VALID
+     → We can check on Dec 25 if Bitcoin has crossed $100k (YES if crossed, NO if not)
+   - Only REJECT if we genuinely cannot determine the answer on the market end date
+   - Focus on RESOLVABILITY on market end date, not when the event itself must complete
 
 3. **Resolvability Analysis:**
    - HOW will the outcome be determined?
@@ -632,10 +637,8 @@ function analyzeFallback(aiText, question, endTime, currentDate) {
   const datesFound = question.match(dateRegex) || [];
 
   const marketEndDate = new Date(endTime * 1000);
-  let dateConflict = false;
-  let dateConflictReason = '';
 
-  // Check for date conflicts
+  // Check for dates in the past only
   for (const dateStr of datesFound) {
     try {
       const eventDate = new Date(dateStr);
@@ -657,30 +660,12 @@ function analyzeFallback(aiText, question, endTime, currentDate) {
         };
       }
 
-      // Check if event is after market end
-      if (eventDate > marketEndDate) {
-        dateConflict = true;
-        dateConflictReason = `Event date (${eventDate.toDateString()}) is after market end date (${marketEndDate.toDateString()})`;
-      }
+      // Note: We do NOT automatically reject if event date > market end date
+      // because "before [date]" questions are valid - they can be resolved by
+      // checking if the event occurred on the market end date
     } catch (e) {
       // Ignore date parsing errors
     }
-  }
-
-  if (dateConflict) {
-    return {
-      valid: false,
-      reason: dateConflictReason,
-      category: determineCategoryFromKeywords(question),
-      eventAnalysis: {
-        alreadyHappened: false,
-        outcomeKnown: false,
-        dateConflict: true,
-        dateConflictReason: dateConflictReason,
-        datesFound: datesFound
-      },
-      apiError: false
-    };
   }
 
   // Analyze sentiment for validation
