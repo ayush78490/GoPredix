@@ -32,5 +32,8 @@
       "src": "/",
       "dest": "/api/validateMarket.js"
     }
-  ]
+  ],
+  "installCommand": "npm install",
+  "buildCommand": "echo 'No build needed for serverless functions'",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD ./"
 }
