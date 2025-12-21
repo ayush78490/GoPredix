@@ -7,6 +7,7 @@ const BlockchainResolutionService = require('./services/resolutionService');
 const PREDICTION_MARKET_ABI = [
     'function nextMarketId() view returns (uint256)',
     'function markets(uint256) view returns (address creator, string question, string category, uint256 endTime, uint8 status, uint8 outcome, address yesToken, address noToken, uint256 yesPool, uint256 noPool, uint256 lpTotalSupply, uint256 totalBacking, uint256 platformFees, uint256 resolutionRequestedAt, address resolutionRequester, string resolutionReason, uint256 resolutionConfidence, uint256 disputeDeadline, address disputer, string disputeReason)',
+    'function requestResolution(uint256 id, string calldata reason) external',
     'function resolveMarket(uint256 id, uint8 outcomeIndex, string reason, uint256 confidence) external',
     'event ResolutionRequested(uint256 indexed id, address requester, uint256 requestedAt)',
     'event MarketResolved(uint256 indexed id, uint8 outcome, string reason, uint256 confidence, address resolvedBy)'
@@ -19,7 +20,7 @@ async function startResolutionServices() {
         // Validate environment variables
         const requiredEnvVars = [
             'BSC_TESTNET_RPC_URL',
-            'RESOLUTION_SERVER_PRIVATE_KEY',
+            'RESOLVER_PRIVATE_KEY',
             'BNB_PREDICTION_MARKET_ADDRESS',
             'PDX_PREDICTION_MARKET_ADDRESS'
         ];
@@ -39,9 +40,12 @@ async function startResolutionServices() {
 
         // Initialize BNB Market Resolution Service
         console.log('📊 Initializing BNB Market Resolution Service...');
+        const bnbKey = process.env.RESOLVER_PRIVATE_KEY?.startsWith('0x')
+            ? process.env.RESOLVER_PRIVATE_KEY
+            : `0x${process.env.RESOLVER_PRIVATE_KEY}`;
         const bnbService = new BlockchainResolutionService(
             provider,
-            process.env.RESOLUTION_SERVER_PRIVATE_KEY,
+            bnbKey,
             process.env.BNB_PREDICTION_MARKET_ADDRESS,
             PREDICTION_MARKET_ABI
         );
@@ -50,9 +54,12 @@ async function startResolutionServices() {
 
         // Initialize PDX Market Resolution Service
         console.log('📊 Initializing PDX Market Resolution Service...');
+        const pdxKey = process.env.RESOLVER_PRIVATE_KEY?.startsWith('0x')
+            ? process.env.RESOLVER_PRIVATE_KEY
+            : `0x${process.env.RESOLVER_PRIVATE_KEY}`;
         const pdxService = new BlockchainResolutionService(
             provider,
-            process.env.RESOLUTION_SERVER_PRIVATE_KEY,
+            pdxKey,
             process.env.PDX_PREDICTION_MARKET_ADDRESS,
             PREDICTION_MARKET_ABI
         );

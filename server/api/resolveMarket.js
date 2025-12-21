@@ -1,6 +1,5 @@
 const OpenAI = require('openai');
 
-// Initialize OpenAI client
 // Initialize OpenAI client lazily
 let openai;
 
@@ -17,6 +16,73 @@ function getOpenAI() {
 }
 
 /**
+ * Fetch real-time cryptocurrency price data from CoinGecko
+ */
+async function getCryptoPriceData(symbol, timeRange) {
+    try {
+        // Map common symbols to CoinGecko IDs
+        const symbolMap = {
+            'btc': 'bitcoin',
+            'bitcoin': 'bitcoin',
+            'eth': 'ethereum',
+            'ethereum': 'ethereum',
+            'bnb': 'binancecoin',
+            'sol': 'solana',
+            'ada': 'cardano',
+            'doge': 'dogecoin'
+        };
+
+        const coinId = symbolMap[symbol.toLowerCase()] || symbol.toLowerCase();
+
+        // Get current price
+        const currentPriceUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true&include_last_updated_at=true`;
+        const currentResponse = await fetch(currentPriceUrl);
+
+        if (!currentResponse.ok) {
+            throw new Error(`CoinGecko API error: ${currentResponse.status}`);
+        }
+
+        const currentData = await currentResponse.json();
+
+        if (!currentData[coinId]) {
+            throw new Error(`Cryptocurrency ${symbol} not found`);
+        }
+
+        const result = {
+            symbol: symbol.toUpperCase(),
+            coinId: coinId,
+            currentPrice: currentData[coinId].usd,
+            change24h: currentData[coinId].usd_24h_change,
+            lastUpdated: new Date(currentData[coinId].last_updated_at * 1000).toISOString(),
+            historicalData: null
+        };
+
+        // If timeRange is provided, get historical data
+        if (timeRange) {
+            const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : 30;
+            const histUrl = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}&interval=hourly`;
+            const histResponse = await fetch(histUrl);
+
+            if (histResponse.ok) {
+                const histData = await histResponse.json();
+                result.historicalData = {
+                    prices: histData.prices,
+                    timeRange: timeRange,
+                    highPrice: Math.max(...histData.prices.map(p => p[1])),
+                    lowPrice: Math.min(...histData.prices.map(p => p[1])),
+                    avgPrice: histData.prices.reduce((sum, p) => sum + p[1], 0) / histData.prices.length
+                };
+            }
+        }
+
+        return result;
+    } catch (error) {
+        console.error('CoinGecko API error:', error);
+        return null;
+    }
+}
+
+/**
  * AI-powered market resolution endpoint
  * Determines the outcome of a prediction market question
  */
@@ -26,6 +92,31 @@ async function resolveMarketWithAI({ question, endTime, marketId }) {
 
         const currentDate = new Date();
         const marketEndDate = new Date(endTime * 1000);
+
+        // Check if question is about cryptocurrency prices
+        let cryptoData = null;
+        const cryptoRegex = /(btc|bitcoin|eth|ethereum|bnb|sol|solana|ada|cardano|doge|dogecoin)/i;
+        const priceRegex = /(\$[\d,]+|price|above|below|between)/i;
+
+        if (cryptoRegex.test(question) && priceRegex.test(question)) {
+            const match = question.match(cryptoRegex);
+            if (match) {
+                const symbol = match[1];
+                console.log(`📊 Detected crypto price question for ${symbol.toUpperCase()}`);
+
+                // Determine time range based on question
+                const timeRange = question.match(/hour/i) ? '24h' : question.match(/day|daily/i) ? '7d' : '24h';
+
+                cryptoData = await getCryptoPriceData(symbol, timeRange);
+
+                if (cryptoData) {
+                    console.log(`💰 Current ${symbol.toUpperCase()} price: $${cryptoData.currentPrice}`);
+                    if (cryptoData.historicalData) {
+                        console.log(`📈 24h High: $${cryptoData.historicalData.highPrice.toFixed(2)}, Low: $${cryptoData.historicalData.lowPrice.toFixed(2)}`);
+                    }
+                }
+            }
+        }
 
         // System prompt for resolution
         const systemPrompt = `You are an AI oracle that resolves prediction market questions with EXTREME ACCURACY.
@@ -55,15 +146,34 @@ RESPONSE FORMAT (JSON only):
   "resolvedAt": "ISO timestamp"
 }`;
 
+        // Add crypto price data to prompt if available
+        let dataSection = '';
+        if (cryptoData) {
+            dataSection = `\n\nREAL-TIME CRYPTOCURRENCY DATA (from CoinGecko API):
+Symbol: ${cryptoData.symbol}
+Current Price: $${cryptoData.currentPrice.toFixed(2)}
+24h Change: ${cryptoData.change24h?.toFixed(2)}%
+Last Updated: ${cryptoData.lastUpdated}`;
+
+            if (cryptoData.historicalData) {
+                dataSection += `\n\nHISTORICAL DATA (${cryptoData.historicalData.timeRange}):
+Highest Price: $${cryptoData.historicalData.highPrice.toFixed(2)}
+Lowest Price: $${cryptoData.historicalData.lowPrice.toFixed(2)}
+Average Price: $${cryptoData.historicalData.avgPrice.toFixed(2)}
+
+Use this real-time data to accurately determine if the price conditions in the question were met.`;
+            }
+        }
+
         const userPrompt = `Resolve this prediction market question:
 
 Question: "${question}"
 Market End Date: ${marketEndDate.toDateString()}
-Current Date: ${currentDate.toDateString()}
+Current Date: ${currentDate.toDateString()}${dataSection}
 
 ANALYSIS REQUIRED:
 1. What is the question asking?
-2. What evidence exists about this event/outcome?
+2. What evidence exists about this event/outcome? ${cryptoData ? '(Use the REAL-TIME DATA provided above)' : ''}
 3. Did the event happen by the market end date?
 4. What is the clear outcome: YES or NO?
 5. How confident are you (0-100%)?
