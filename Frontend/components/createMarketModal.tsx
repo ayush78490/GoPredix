@@ -12,6 +12,8 @@ import { useAccount, useChainId, useWalletClient } from "wagmi"
 
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
+import { useBNBPrice } from "@/hooks/use-bnb-price"
+import { usdToBnb, formatUsd, formatBnb } from "@/lib/currency-utils"
 
 const TWITTER_HANDLE = "your_twitter_handle"
 const BSC_TESTNET_CHAIN_ID = 97
@@ -73,6 +75,10 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
 
   // Contract is ready only if wallet can transact
   const isFullyReady = isContractReady && canTransact
+
+  // Get BNB price for USD conversion (only used for BNB markets)
+  const { price: bnbPrice, isLoading: isPriceLoading } = useBNBPrice()
+  const showUsdInputs = paymentToken === "BNB" && bnbPrice !== null
 
   // Calculate liquidity preview
   const totalLiquidity = parseFloat(initialYes || "0") + parseFloat(initialNo || "0")
@@ -403,11 +409,15 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       let marketId: number
 
       if (paymentToken === "BNB") {
+        // Convert USD to BNB if showing USD inputs
+        const bnbYes = showUsdInputs && bnbPrice ? usdToBnb(initialYes, bnbPrice) : initialYes
+        const bnbNo = showUsdInputs && bnbPrice ? usdToBnb(initialNo, bnbPrice) : initialNo
+
         marketId = await bnbHook.createMarket({
           question,
           endTime: endTimeUnix,
-          initialYes,
-          initialNo,
+          initialYes: bnbYes,
+          initialNo: bnbNo,
         })
       } else {
         // Check PDX balance before creating market
@@ -461,9 +471,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
     }
   }
 
-  // Set minimum date to tomorrow
+  // Set minimum date to today (1 hour minimum is enforced in validation)
   const minDate = new Date()
-  minDate.setDate(minDate.getDate() + 1)
   const minDateString = minDate.toISOString().split("T")[0]
 
   // Clear validation when question changes
@@ -530,7 +539,7 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
             )}
             {paymentToken === "BNB" && (
               <div className="mt-3 p-3 bg-yellow-950/20 border border-yellow-600/50 rounded-lg text-sm text-yellow-300">
-                ℹ️ Market will be funded with BNB from your wallet
+                💵 Enter amounts in USD - automatically converted to BNB
               </div>
             )}
           </div>
@@ -644,37 +653,43 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
           {/* Initial Liquidity Section */}
           <div>
             <label className="text-sm font-medium mb-2 block">
-              Initial Liquidity ({paymentToken})
+              Initial Liquidity ({showUsdInputs ? 'USD' : paymentToken})
             </label>
+            {showUsdInputs && isPriceLoading && (
+              <div className="mb-2 text-xs text-muted-foreground flex items-center gap-1">
+                <LogoLoading size={12} />
+                Loading BNB price...
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">YES Pool</label>
                 <Input
                   type="number"
-                  placeholder="0.1"
+                  placeholder={showUsdInputs ? "10" : "0.1"}
                   value={initialYes}
                   onChange={(e) => {
                     setInitialYes(e.target.value)
                     setValidationResult(null)
                   }}
-                  step="0.01"
-                  min="0.001"
-                  disabled={isProcessing}
+                  step={showUsdInputs ? "1" : "0.01"}
+                  min={showUsdInputs ? "1" : "0.001"}
+                  disabled={isProcessing || (showUsdInputs && isPriceLoading)}
                 />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">NO Pool</label>
                 <Input
                   type="number"
-                  placeholder="0.1"
+                  placeholder={showUsdInputs ? "10" : "0.1"}
                   value={initialNo}
                   onChange={(e) => {
                     setInitialNo(e.target.value)
                     setValidationResult(null)
                   }}
-                  step="0.01"
-                  min="0.001"
-                  disabled={isProcessing}
+                  step={showUsdInputs ? "1" : "0.01"}
+                  min={showUsdInputs ? "1" : "0.001"}
+                  disabled={isProcessing || (showUsdInputs && isPriceLoading)}
                 />
               </div>
             </div>
@@ -684,8 +699,16 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               <div className="mt-4 p-4 bg-muted rounded-lg space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total Liquidity:</span>
-                  <span className="font-semibold">{totalLiquidity.toFixed(4)} {paymentToken}</span>
+                  <span className="font-semibold">
+                    {showUsdInputs ? formatUsd(totalLiquidity) : `${totalLiquidity.toFixed(4)} ${paymentToken}`}
+                  </span>
                 </div>
+                {showUsdInputs && bnbPrice && (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>BNB Equivalent:</span>
+                    <span>{formatBnb(usdToBnb(totalLiquidity.toString(), bnbPrice))}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Initial YES Price:</span>
                   <span className="font-semibold text-green-500">{yesPercent.toFixed(1)}%</span>

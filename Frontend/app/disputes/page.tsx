@@ -42,10 +42,14 @@ export default function DisputesPage() {
         const disputes = []
         const resolved = []
         const inactiveMarkets = [] // All inactive markets
+        const closedMarkets = [] // Markets that are closed but not yet resolved
+
+        const now = Math.floor(Date.now() / 1000) // Current time in seconds
 
         // DEBUG: Log all markets
         console.log('=== DISPUTES PAGE DEBUG ===')
         console.log('Total markets loaded:', markets.length)
+        console.log('Current timestamp:', now)
 
         // Count by payment token
         const bnbMarkets = markets.filter(m => m.paymentToken === 'BNB')
@@ -63,33 +67,25 @@ export default function DisputesPage() {
         }
         console.log('Market Status Breakdown:', statusCounts)
 
-        // Log PDX markets specifically
-        console.log('\n--- PDX Markets Details ---')
-        pdxMarkets.forEach((m, i) => {
-            console.log(`PDX Market ${i}:`, {
-                id: m.id,
-                numericId: m.numericId,
-                question: m.question?.substring(0, 50),
-                status: m.status,
-                outcome: m.outcome,
-                paymentToken: m.paymentToken
-            })
-        })
-
-        // Log resolved markets
-        const resolvedPDX = pdxMarkets.filter(m => m.status === 3)
-        const resolvedBNB = bnbMarkets.filter(m => m.status === 3)
-        console.log('\n--- Resolved Markets ---')
-        console.log('Resolved PDX markets:', resolvedPDX.length)
-        console.log('Resolved BNB markets:', resolvedBNB.length)
+        // Count time-based ended markets
+        const endedByTime = markets.filter(m => m.status === 0 && m.endTime <= now).length
+        console.log('Markets ended by time (status=0, endTime passed):', endedByTime)
 
         for (const market of markets) {
-            // Collect ALL inactive markets (status !== 0)
-            if (market.status !== 0) {
+            // Collect ALL inactive markets (status !== 0 OR endTime passed)
+            const isEnded = market.status !== 0 || market.endTime <= now
+            if (isEnded) {
                 inactiveMarkets.push(market)
             }
 
-            // Check for resolved markets (status 3)
+            // Check for CLOSED markets: status 0 but endTime has passed, OR status 1
+            const isClosed = (market.status === 0 && market.endTime <= now) || market.status === 1
+            if (isClosed && market.status !== 3) { // Not already resolved
+                console.log(`Found closed market: ${market.id} (${market.paymentToken}) - Status ${market.status}, EndTime: ${market.endTime}, Now: ${now}`)
+                closedMarkets.push(market)
+            }
+
+            // Check for RESOLVED markets (status 3) - Check for disputes
             if (market.status === 3) {
                 console.log(`Processing resolved market: ${market.id} (${market.paymentToken})`)
 
@@ -127,11 +123,12 @@ export default function DisputesPage() {
         console.log('\n--- Final Results ---')
         console.log('Active disputes found:', disputes.length)
         console.log('Resolved markets (disputable):', resolved.length)
+        console.log('Closed markets (awaiting resolution):', closedMarkets.length)
         console.log('Total inactive markets:', inactiveMarkets.length)
         console.log('=========================\n')
 
         setActiveDisputes(disputes)
-        setResolvedMarkets(resolved)
+        setResolvedMarkets([...closedMarkets, ...resolved]) // Include both closed and resolved
         setInactiveMarkets(inactiveMarkets) // Store inactive markets
         setLoading(false)
     }
@@ -244,8 +241,22 @@ export default function DisputesPage() {
                                                     <div>
                                                         <p className="text-sm text-muted-foreground">Market Question:</p>
                                                         <h3 className="font-semibold text-foreground line-clamp-2">{market.question}</h3>
-                                                        <p className="text-xs text-muted-foreground mt-1">
-                                                            Resolved as: <span className="text-primary font-medium">{getOutcomeText(market.outcome)}</span>
+                                                    </div>
+
+                                                    {/* AI Resolution - What's being disputed */}
+                                                    <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-lg p-3">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-sm">🤖</span>
+                                                            <p className="text-xs text-indigo-300 font-medium">AI Resolved As:</p>
+                                                        </div>
+                                                        <p className={`text-lg font-bold text-center ${market.outcome === 1 ? 'text-green-400' :
+                                                            market.outcome === 2 ? 'text-red-400' :
+                                                                'text-yellow-400'
+                                                            }`}>
+                                                            {getOutcomeText(market.outcome)}
+                                                        </p>
+                                                        <p className="text-xs text-center text-muted-foreground mt-1 italic">
+                                                            Disputed as incorrect
                                                         </p>
                                                     </div>
 
@@ -332,12 +343,15 @@ export default function DisputesPage() {
                             <div>
                                 <h2 className="text-2xl font-bold mb-4 text-white flex items-center gap-2">
                                     <AlertCircle className="w-6 h-6 text-blue-500" />
-                                    Resolved Markets - Create Dispute ({resolvedMarkets.length})
+                                    Markets Ready for Action ({resolvedMarkets.length})
                                 </h2>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    Closed markets awaiting resolution requests • Resolved markets ready for dispute creation
+                                </p>
 
                                 {resolvedMarkets.length === 0 ? (
                                     <Card className="p-8 text-center bg-card/50 backdrop-blur-sm">
-                                        <p className="text-muted-foreground">No resolved markets without disputes</p>
+                                        <p className="text-muted-foreground">No markets ready for action</p>
                                     </Card>
                                 ) : (
                                     <div className="grid md:grid-cols-3 gap-4">
@@ -345,20 +359,51 @@ export default function DisputesPage() {
                                             <Card key={market.id} className="p-4 bg-card/80 backdrop-blur-sm hover:bg-card/90 transition-colors">
                                                 <div className="space-y-3">
                                                     {/* Token Badge */}
-                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${market.paymentToken === 'PDX'
-                                                        ? 'bg-purple-500/20 text-purple-400'
-                                                        : 'bg-yellow-500/20 text-yellow-400'
-                                                        }`}>
-                                                        <Coins className="w-3 h-3" />
-                                                        {market.paymentToken}
-                                                    </span>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${market.paymentToken === 'PDX'
+                                                            ? 'bg-purple-500/20 text-purple-400'
+                                                            : 'bg-yellow-500/20 text-yellow-400'
+                                                            }`}>
+                                                            <Coins className="w-3 h-3" />
+                                                            {market.paymentToken}
+                                                        </span>
+
+                                                        {/* Status badge */}
+                                                        <span className={`text-xs px-2 py-0.5 rounded ${market.status === 1
+                                                            ? 'bg-orange-500/20 text-orange-400'
+                                                            : 'bg-blue-500/20 text-blue-400'
+                                                            }`}>
+                                                            {market.status === 1 ? 'Closed' : 'Resolved'}
+                                                        </span>
+                                                    </div>
 
                                                     <div>
                                                         <h3 className="font-medium text-foreground text-sm line-clamp-2">{market.question}</h3>
-                                                        <p className="text-xs text-muted-foreground mt-1">
-                                                            Resolved as: <span className="text-primary">{getOutcomeText(market.outcome)}</span>
-                                                        </p>
                                                     </div>
+
+                                                    {/* AI Resolution Display - Prominent */}
+                                                    {market.status === 3 ? (
+                                                        <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-lg p-4 space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xl">🤖</span>
+                                                                <p className="text-xs font-medium text-indigo-300">AI Resolution Decision:</p>
+                                                            </div>
+                                                            <p className={`text-2xl font-bold text-center ${market.outcome === 1 ? 'text-green-400' :
+                                                                market.outcome === 2 ? 'text-red-400' :
+                                                                    'text-yellow-400'
+                                                                }`}>
+                                                                {getOutcomeText(market.outcome)}
+                                                            </p>
+                                                            <p className="text-xs text-center text-muted-foreground italic">
+                                                                Validators: Vote to dispute if you think this is wrong
+                                                            </p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                                                            <p className="text-xs text-orange-400">⏳ Awaiting AI Resolution</p>
+                                                            <p className="text-sm text-muted-foreground mt-1">Request resolution to enable disputes</p>
+                                                        </div>
+                                                    )}
 
                                                     <Button
                                                         onClick={() => handleCreateDispute(market)}
@@ -369,7 +414,7 @@ export default function DisputesPage() {
                                                             : ''
                                                             }`}
                                                     >
-                                                        Create Dispute ({market.paymentToken === 'PDX' ? '10 PDX' : '0.01 BNB'})
+                                                        {market.status === 1 ? 'Request Resolution' : `Create Dispute (${market.paymentToken === 'PDX' ? '10 PDX' : '0.01 BNB'})`}
                                                     </Button>
                                                 </div>
                                             </Card>
@@ -390,6 +435,7 @@ export default function DisputesPage() {
                     <VoteModal
                         disputeId={selectedDispute.dispute.disputeId}
                         marketQuestion={selectedDispute.market.question}
+                        aiResolution={getOutcomeText(selectedDispute.market.outcome)}
                         disputeReason={selectedDispute.dispute.reason}
                         acceptStake={selectedDispute.dispute.totalAcceptStake}
                         rejectStake={selectedDispute.dispute.totalRejectStake}

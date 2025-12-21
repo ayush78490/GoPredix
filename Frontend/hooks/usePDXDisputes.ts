@@ -4,9 +4,9 @@ import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import PDX_DISPUTE_ABI from '../contracts/PDXDisputeResolution.json'
 import PDX_ABI from '../contracts/PDXbazar.json'
 
-const PDX_DISPUTE_ADDRESS = process.env.NEXT_PUBLIC_PDX_DISPUTE_RESOLUTION_ADDRESS || '0x436A8ccE130a86c883A55CBA6e3f3337D6da78EB'
-const PDX_PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x151fE04C421E197B982A4F62a65Acd6F416af51a'
-const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS || '0xdaD3732b2062AD5da047504623366e5973b1c032'
+const PDX_DISPUTE_ADDRESS = process.env.NEXT_PUBLIC_PDX_DISPUTE_RESOLUTION_ADDRESS as `0x${string}`
+const PDX_PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS as `0x${string}`
+const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS as `0x${string}`
 
 export enum DisputeStatus {
     None = 0,

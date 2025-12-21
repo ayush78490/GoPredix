@@ -8,8 +8,8 @@ const PREDICTION_MARKET_ABI = (PREDICTION_MARKET_JSON as any).abi || PREDICTION_
 const HELPER_ABI = (HELPER_JSON as any).abi || HELPER_JSON
 
 // Contract addresses - BNB only
-const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x90FD905aB1F479399117F6EB6b3e3E58f94e26f1'
-const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0x8E80772760816571a710B6388fCc25aBc0F21841'
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS as `0x${string}`
+const HELPER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS as `0x${string}`
 
 
 // Market Status enum
@@ -1059,35 +1059,46 @@ export function usePredictionMarketBNB() {
   }, [signer, isCorrectNetwork, marketContract])
 
 
+
   const getMarketPriceHistory = useCallback(async (marketId: number): Promise<PricePoint[]> => {
-    if (!marketContract) return []
+    if (!marketContract || !helperContract) return []
 
     try {
-
       const points: PricePoint[] = []
 
-      // ✅ Try to get creation date from Supabase (avoids expensive block scanning)
+      // ✅ Get current market state to use as the latest price
+      let currentYesPrice = 50
+      try {
+        const currentPrices = await getCurrentMultipliers(marketId)
+        currentYesPrice = currentPrices.yesPrice
+      } catch (e) {
+        console.warn('Could not fetch current price, using 50%')
+      }
+
+      // ✅ Get creation timestamp
+      let creationTimestamp = Date.now() - 86400000 // Default: 24h ago
       try {
         const response = await fetch(`/api/markets/get-creation-date?marketId=${marketId}&paymentToken=BNB`)
         if (response.ok) {
           const result = await response.json()
           if (result.success && result.data?.created_at) {
-            const createdAt = new Date(result.data.created_at).getTime()
-            points.push({
-              timestamp: createdAt,
-              price: 50 // Markets start at 50%
-            })
-          } else {
+            creationTimestamp = new Date(result.data.created_at).getTime()
           }
         }
       } catch (fetchError) {
+        console.warn('Could not fetch creation date')
       }
+
+      // Add starting point at creation time
+      points.push({
+        timestamp: creationTimestamp,
+        price: 50
+      })
 
       const provider = marketContract.runner?.provider
       if (!provider) throw new Error("No provider")
 
       const currentBlock = await provider.getBlockNumber()
-      // ✅ Reduced scan range to 500K blocks (from 2M) to minimize RPC calls
       const startBlock = Math.max(0, currentBlock - 500000)
 
       // Get Buy events
@@ -1096,6 +1107,7 @@ export function usePredictionMarketBNB() {
       try {
         buyEvents = await marketContract.queryFilter(buyFilter, startBlock, currentBlock)
       } catch (e) {
+        console.warn('Could not fetch buy events:', e)
       }
 
       // Get Sell events
@@ -1104,72 +1116,105 @@ export function usePredictionMarketBNB() {
       try {
         sellEvents = await marketContract.queryFilter(sellFilter, startBlock, currentBlock)
       } catch (e) {
+        console.warn('Could not fetch sell events:', e)
       }
 
-      // Process Buy events
-      for (const event of buyEvents) {
+      // Combine and sort all events by block number and transaction index
+      const allEvents = [...buyEvents, ...sellEvents].sort((a, b) => {
+        if (a.blockNumber !== b.blockNumber) {
+          return a.blockNumber - b.blockNumber
+        }
+        return a.transactionIndex - b.transactionIndex
+      })
+
+      console.log(`Found ${allEvents.length} trade events for market ${marketId}`)
+
+      // Track pool state to calculate accurate prices after each trade
+      let yesPool = 0
+      let noPool = 0
+
+      // Try to get initial pool sizes
+      try {
+        const market = await (helperContract as any).getMarket(BigInt(marketId))
+        yesPool = Number(ethers.formatEther(market.yesPool || 0))
+        noPool = Number(ethers.formatEther(market.noPool || 0))
+      } catch (e) {
+        console.warn('Could not fetch initial pool state')
+      }
+
+      // Process each trade event
+      for (const event of allEvents) {
         try {
           const block = await event.getBlock()
-          const { buyYes, bnbIn, tokenOut } = (event as any).args
+          const isBuy = event.fragment?.name === 'BuyWithBNB'
 
-          const pricePerToken = Number(ethers.formatEther(bnbIn)) / Number(ethers.formatEther(tokenOut))
+          if (isBuy) {
+            const { buyYes, bnbIn, tokenOut } = (event as any).args
+            const bnbAmount = Number(ethers.formatEther(bnbIn))
+            const tokenAmount = Number(ethers.formatEther(tokenOut))
 
-          let yesPrice = 0
-          if (buyYes) {
-            yesPrice = pricePerToken * 100
+            // After the trade, calculate new price based on pool ratio
+            // This is an approximation since we don't have historical pool state
+            if (buyYes) {
+              // Buying YES increases YES pool, decreases NO pool
+              yesPool += bnbAmount
+            } else {
+              // Buying NO increases NO pool, decreases YES pool  
+              noPool += bnbAmount
+            }
           } else {
-            yesPrice = 100 - (pricePerToken * 100)
+            const { sellYes, tokenIn, bnbOut } = (event as any).args
+            const bnbAmount = Number(ethers.formatEther(bnbOut))
+
+            if (sellYes) {
+              yesPool -= bnbAmount
+            } else {
+              noPool -= bnbAmount
+            }
+          }
+
+          // Calculate price from pool ratio
+          const totalPool = yesPool + noPool
+          let yesPrice = 50
+          if (totalPool > 0) {
+            yesPrice = (yesPool / totalPool) * 100
+            yesPrice = Math.min(95, Math.max(5, yesPrice))
           }
 
           points.push({
             timestamp: block.timestamp * 1000,
-            price: Math.max(0, Math.min(100, yesPrice))
+            price: yesPrice
           })
         } catch (e) {
+          console.warn('Failed to process event:', e)
         }
       }
 
-      // Process Sell events
-      for (const event of sellEvents) {
-        try {
-          const block = await event.getBlock()
-          const { sellYes, tokenIn, bnbOut } = (event as any).args
-
-          const pricePerToken = Number(ethers.formatEther(bnbOut)) / Number(ethers.formatEther(tokenIn))
-
-          let yesPrice = 0
-          if (sellYes) {
-            yesPrice = pricePerToken * 100
-          } else {
-            yesPrice = 100 - (pricePerToken * 100)
-          }
-
-          points.push({
-            timestamp: block.timestamp * 1000,
-            price: Math.max(0, Math.min(100, yesPrice))
-          })
-        } catch (e) {
-        }
-      }
-
+      // Sort by timestamp
       points.sort((a, b) => a.timestamp - b.timestamp)
 
-      // Add current time point
-      if (points.length > 0) {
-        const lastPoint = points[points.length - 1]
-        points.push({
-          timestamp: Date.now(),
-          price: lastPoint.price
-        })
-      }
+      // Add current price point at current time
+      points.push({
+        timestamp: Date.now(),
+        price: currentYesPrice
+      })
 
+      console.log(`Generated ${points.length} data points for chart`)
+
+      // If only 2 points (start + current), keep them to show flat line
+      // Don't create artificial diagonal trend
       return points
 
     } catch (error) {
       console.error('Error fetching price history:', error)
-      return []
+      // Return flat line at 50% as fallback
+      return [
+        { timestamp: Date.now() - 86400000, price: 50 },
+        { timestamp: Date.now(), price: 50 }
+      ]
     }
-  }, [marketContract])
+  }, [marketContract, helperContract, getCurrentMultipliers])
+
 
   return {
     // Market management

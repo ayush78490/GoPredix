@@ -563,26 +563,41 @@ export default function MarketPage() {
               {/* Mobile Header Skeleton - Visible only on mobile, Order 1 */}
               <div className="lg:hidden order-1 space-y-4">
                 <div className="flex gap-3">
-                  <div className="w-20 h-6 bg-gray-700 rounded-full animate-pulse"></div>
-                  <div className="w-24 h-6 bg-gray-700 rounded-full animate-pulse"></div>
+                  <div className="w-20 h-6 bg-gray-700/50 rounded-full animate-pulse"></div>
+                  <div className="w-24 h-6 bg-gray-700/50 rounded-full animate-pulse"></div>
                 </div>
-                <div className="w-full h-8 bg-gray-700 rounded-lg animate-pulse"></div>
-                <div className="w-32 h-4 bg-gray-700 rounded-lg animate-pulse"></div>
+                <div className="w-full h-10 bg-gray-700/50 rounded-lg animate-pulse"></div>
+                <div className="w-40 h-4 bg-gray-700/50 rounded-lg animate-pulse"></div>
               </div>
 
               {/* Trade Card Skeleton - Mobile Order 2, Desktop Right Col */}
               <div className="lg:col-span-1 lg:order-2 order-2">
-                <Card className="p-6 space-y-6 backdrop-blur-sm bg-card/80 h-96">
-                  <div className="flex flex-col items-center justify-center h-full gap-4">
-                    <LogoLoading size={48} />
-                    <p className="text-muted-foreground text-center">
-                      {market ? 'Loading trading data...' : 'Loading market...'}
-                    </p>
-                    {retryCount > 0 && (
-                      <p className="text-sm text-yellow-400 text-center">
-                        Attempt {retryCount} of 5...
+                <Card className="p-6 space-y-6 backdrop-blur-sm bg-card/80">
+                  <div className="space-y-4">
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="w-32 h-6 bg-gray-700/50 rounded animate-pulse"></div>
+                      <div className="w-16 h-6 bg-gray-700/50 rounded-full animate-pulse"></div>
+                    </div>
+
+                    {/* YES/NO cards */}
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                      <div className="h-24 bg-green-950/20 border border-green-900/30 rounded-lg animate-pulse"></div>
+                      <div className="h-24 bg-red-950/20 border border-red-900/30 rounded-lg animate-pulse"></div>
+                    </div>
+
+                    {/* Loading text */}
+                    <div className="flex flex-col items-center justify-center gap-3 mt-6 py-8">
+                      <LogoLoading size={32} />
+                      <p className="text-sm text-muted-foreground text-center">
+                        {market ? 'Loading trading interface...' : 'Loading market...'}
                       </p>
-                    )}
+                      {retryCount > 0 && (
+                        <p className="text-xs text-yellow-400/80 text-center">
+                          Attempt {retryCount} of 5...
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </Card>
               </div>
@@ -590,34 +605,41 @@ export default function MarketPage() {
               {/* Chart & Details Skeleton - Mobile Order 3, Desktop Left Col */}
               <div className="lg:col-span-2 lg:order-1 order-3 space-y-6">
 
-                {/* Chart Skeleton - Mobile First (inside col), Desktop Second */}
-                <div className="order-1 lg:order-2 w-full bg-card rounded-lg p-4 backdrop-blur-sm h-80">
-                  <div className="h-full flex flex-col items-center justify-center gap-4">
-                    <LogoLoading size={48} />
-                    <p className="text-muted-foreground">Loading market chart...</p>
-                  </div>
-                </div>
-
-                {/* Details Skeleton - Mobile Second (inside col), Desktop First */}
+                {/* Details Skeleton - Desktop First, Mobile Second */}
                 <div className="order-2 lg:order-1 space-y-6">
                   {/* Desktop Header Skeleton - Hidden on Mobile */}
                   <div className="hidden lg:flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-20 h-6 bg-gray-700 rounded-full animate-pulse"></div>
-                      <div className="w-48 h-8 bg-gray-700 rounded-lg animate-pulse"></div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-20 h-6 bg-gray-700/50 rounded-full animate-pulse"></div>
+                        <div className="w-24 h-6 bg-gray-700/50 rounded-full animate-pulse"></div>
+                      </div>
+                      <div className="w-96 h-8 bg-gray-700/50 rounded-lg animate-pulse"></div>
+                      <div className="w-48 h-4 bg-gray-700/50 rounded animate-pulse"></div>
                     </div>
-                    <div className="w-24 h-6 bg-gray-700 rounded-lg animate-pulse"></div>
                   </div>
 
-                  <div className="w-full h-20 bg-gray-700 rounded-lg animate-pulse"></div>
+                  {/* Description skeleton */}
+                  <div className="space-y-2">
+                    <div className="w-full h-4 bg-gray-700/50 rounded animate-pulse"></div>
+                    <div className="w-4/5 h-4 bg-gray-700/50 rounded animate-pulse"></div>
+                  </div>
 
-                  <div className="w-full h-16 bg-gray-700 rounded-lg animate-pulse"></div>
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-20 bg-gray-700/30 rounded-lg animate-pulse border border-gray-700/50"></div>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="order-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-20 bg-gray-700 rounded-lg animate-pulse"></div>
-                  ))}
+                {/* Chart Skeleton - Desktop Second, Mobile First */}
+                <div className="order-1 lg:order-2 w-full bg-card rounded-lg p-6 backdrop-blur-sm border border-gray-700/30">
+                  <div className="mb-4 w-40 h-6 bg-gray-700/50 rounded animate-pulse"></div>
+                  <div className="h-72 flex flex-col items-center justify-center gap-4 bg-gray-900/20 rounded-lg">
+                    <LogoLoading size={40} />
+                    <p className="text-sm text-muted-foreground">Loading price chart...</p>
+                  </div>
                 </div>
               </div>
             </div>

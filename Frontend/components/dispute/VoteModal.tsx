@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast'
 interface VoteModalProps {
     disputeId: number
     marketQuestion: string
+    aiResolution: string  // AI's original decision (YES/NO)
     disputeReason: string
     acceptStake: string
     rejectStake: string
@@ -19,6 +20,7 @@ interface VoteModalProps {
 export function VoteModal({
     disputeId,
     marketQuestion,
+    aiResolution,
     disputeReason,
     acceptStake,
     rejectStake,
@@ -77,9 +79,29 @@ export function VoteModal({
                             <p className="text-sm text-muted-foreground">Market Question:</p>
                             <p className="font-medium text-foreground mt-1">{marketQuestion}</p>
                         </div>
+
+                        {/* AI Resolution - Prominent Display */}
+                        <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-lg p-4 space-y-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">🤖</span>
+                                <p className="text-sm font-medium text-indigo-300">AI Resolved This Market As:</p>
+                            </div>
+                            <div className="flex justify-center">
+                                <span className={`px-4 py-2 rounded-lg text-xl font-bold ${aiResolution === 'YES'
+                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                        : aiResolution === 'NO'
+                                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                            : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                    }`}>
+                                    {aiResolution}
+                                </span>
+                            </div>
+                        </div>
+
                         <div>
                             <p className="text-sm text-muted-foreground">Dispute Reason:</p>
                             <p className="text-sm text-foreground mt-1 italic">"{disputeReason}"</p>
+                            <p className="text-xs text-red-400 mt-2">↑ Disputer claims AI's {aiResolution} resolution is INCORRECT</p>
                         </div>
                     </div>
 
@@ -118,8 +140,8 @@ export function VoteModal({
                             <button
                                 onClick={() => setVoteType('accept')}
                                 className={`p-4 rounded-lg border-2 transition-all ${voteType === 'accept'
-                                        ? 'border-green-500 bg-green-500/10'
-                                        : 'border-border hover:border-green-500/50'
+                                    ? 'border-green-500 bg-green-500/10'
+                                    : 'border-border hover:border-green-500/50'
                                     }`}
                             >
                                 <div className="flex flex-col items-center gap-2">
@@ -136,8 +158,8 @@ export function VoteModal({
                             <button
                                 onClick={() => setVoteType('reject')}
                                 className={`p-4 rounded-lg border-2 transition-all ${voteType === 'reject'
-                                        ? 'border-red-500 bg-red-500/10'
-                                        : 'border-border hover:border-red-500/50'
+                                    ? 'border-red-500 bg-red-500/10'
+                                    : 'border-border hover:border-red-500/50'
                                     }`}
                             >
                                 <div className="flex flex-col items-center gap-2">

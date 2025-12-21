@@ -3,8 +3,8 @@ import { ethers } from 'ethers'
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import DISPUTE_ABI from '../contracts/DisputeResolution.json'
 
-const DISPUTE_ADDRESS = process.env.NEXT_PUBLIC_DISPUTE_RESOLUTION_ADDRESS || '0x8F05F7e4F78477F0DdC0d29A1B3B90D510227243'
-const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x90FD905aB1F479399117F6EB6b3e3E58f94e26f1'
+const DISPUTE_ADDRESS = process.env.NEXT_PUBLIC_DISPUTE_RESOLUTION_ADDRESS as `0x${string}`
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS as `0x${string}`
 
 export enum DisputeStatus {
     None = 0,

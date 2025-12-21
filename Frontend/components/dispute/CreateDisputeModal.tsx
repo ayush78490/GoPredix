@@ -68,8 +68,8 @@ export function CreateDisputeModal({
                     <div className="flex items-center gap-3">
                         <h2 className="text-2xl font-bold text-foreground">Create Dispute</h2>
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${paymentToken === 'PDX'
-                                ? 'bg-purple-500/20 text-purple-400'
-                                : 'bg-yellow-500/20 text-yellow-400'
+                            ? 'bg-purple-500/20 text-purple-400'
+                            : 'bg-yellow-500/20 text-yellow-400'
                             }`}>
                             <Coins className="w-3 h-3" />
                             {paymentToken}
@@ -86,14 +86,49 @@ export function CreateDisputeModal({
                 {/* Content */}
                 <div className="p-6 space-y-6">
                     {/* Market Info */}
-                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-3">
                         <p className="text-sm text-muted-foreground">Market Question:</p>
                         <p className="font-medium text-foreground">{marketQuestion}</p>
-                        <div className="flex items-center gap-2 mt-3">
-                            <span className="text-sm text-muted-foreground">Current Resolution:</span>
-                            <span className="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm font-medium">
-                                {resolution}
-                            </span>
+                        <div className="space-y-2 mt-3 pt-3 border-t border-border">
+                            {resolution === 'UNDECIDED' ? (
+                                <>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-muted-foreground">Market Status:</span>
+                                        <span className="px-3 py-1 bg-orange-500/20 text-orange-400 rounded-full text-sm font-medium">
+                                            Closed - Awaiting Resolution
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground italic">
+                                        ℹ️ This market has ended but hasn't been resolved yet. You can request resolution instead of creating a dispute.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-lg p-4 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">🤖</span>
+                                            <span className="text-sm font-medium text-indigo-300">AI Resolved This Market As:</span>
+                                        </div>
+                                        <div className="flex justify-center">
+                                            <span className={`px-4 py-2 rounded-lg text-xl font-bold ${resolution === 'YES'
+                                                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                                }`}>
+                                                {resolution}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mt-2">
+                                        <p className="text-sm text-red-400 font-medium">⚠️ By creating this dispute, you claim:</p>
+                                        <p className="text-sm text-red-300 mt-1">
+                                            "The AI's <strong>{resolution}</strong> resolution is <strong>INCORRECT</strong>"
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-2 italic">
+                                            Other validators will vote to either ACCEPT (agree with you) or REJECT (agree with AI) your dispute.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -174,11 +209,11 @@ export function CreateDisputeModal({
                         onClick={handleSubmit}
                         disabled={isLoading || !reason.trim() || parseFloat(stakeAmount) < minStakeValue}
                         className={`font-semibold ${paymentToken === 'PDX'
-                                ? 'bg-purple-500 hover:bg-purple-600 text-white'
-                                : 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                            ? 'bg-purple-500 hover:bg-purple-600 text-white'
+                            : 'bg-yellow-500 hover:bg-yellow-600 text-black'
                             }`}
                     >
-                        {isLoading ? 'Creating...' : `Create Dispute - ${stakeAmount} ${paymentToken}`}
+                        {isLoading ? 'Processing...' : resolution === 'UNDECIDED' ? 'Request Resolution' : `Create Dispute - ${stakeAmount} ${paymentToken}`}
                     </Button>
                 </div>
             </div>
