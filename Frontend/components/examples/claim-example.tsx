@@ -24,8 +24,8 @@ interface ExampleClaimPageProps {
 
 export default function ExampleClaimPage({ markets }: ExampleClaimPageProps) {
     // Example contract addresses - replace with your actual addresses
-    const BNB_CONTRACT = process.env.NEXT_PUBLIC_BNB_PREDICTION_MARKET as `0x${string}`;
-    const PDX_CONTRACT = process.env.NEXT_PUBLIC_PDX_PREDICTION_MARKET as `0x${string}`;
+    const BNB_CONTRACT = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS as `0x${string}`;
+    const PDX_CONTRACT = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS as `0x${string}`;
 
     return (
         <div className="container mx-auto px-4 py-8 space-y-8">

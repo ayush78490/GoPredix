@@ -159,11 +159,33 @@ export default function MarketsPage() {
   } = useAllMarkets()
 
   const formattedMarkets = useMemo(() => {
-    return markets.map(m => convertToFrontendMarket(m))
+    const formatted = markets.map(m => convertToFrontendMarket(m))
+
+    // 🔍 DEBUG: Log markets and creator info
+    console.log('=== MARKETS PAGE DEBUG ===')
+    console.log('Total markets fetched:', formatted.length)
+    formatted.forEach((market, idx) => {
+      console.log(`Market ${idx}:`, {
+        id: market.id,
+        paymentToken: market.paymentToken,
+        creator: market.creator,
+        question: market.question?.substring(0, 50),
+        status: market.status,
+        isActive: market.isActive
+      })
+    })
+    console.log('==========================')
+
+    return formatted
   }, [markets])
 
   const filteredMarkets = useMemo(() => {
     return formattedMarkets.filter((market) => {
+      // ✅ ONLY show active markets on Markets page
+      if (market.isActive !== true) {
+        return false
+      }
+
       const cat = (market.category || "general").toLowerCase()
       const matchesCategory =
         selectedCategory.toLowerCase() === "all markets" || cat === selectedCategory.toLowerCase()

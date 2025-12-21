@@ -1,14 +1,14 @@
 import { useState, useCallback, useEffect } from 'react'
 import { ethers } from 'ethers'
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
-import PDX_PREDICTION_MARKET_ABI from '../contracts/pdxabi.json'
-import PDX_HELPER_ABI from '../contracts/pdxhelperabi.json'
+import PDX_PREDICTION_MARKET_ABI from '../contracts/PDXbazar.json'
+import PDX_HELPER_ABI from '../contracts/PDXhelperContract.json'
 import ERC20_ABI from '../contracts/erc20ABI.json'
 
 // Contract addresses
-const PDX_PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x7d46139e1513571f19c9B87cE9A01D21cA9ef665'
-const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || '0x0CCaDd82A453075B8C0193809cC3693ef58E46D1'
-const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS || '0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8'
+const PDX_PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS as `0x${string}`
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS as `0x${string}`
+const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS as `0x${string}`
 
 // Market Status enum
 export enum MarketStatus {
@@ -1029,116 +1029,141 @@ export function usePredictionMarketPDX() {
   }, [account, pdxTokenContract, getProvider])
 
   const getMarketPriceHistory = useCallback(async (marketId: number): Promise<PricePoint[]> => {
-    if (!marketContract) return []
+    if (!marketContract || !helperContract) return []
 
     try {
-
       const points: PricePoint[] = []
 
-      // ✅ Try to get creation date from Supabase (avoids expensive block scanning)
+      // Get current market state
+      let currentYesPrice = 50
+      try {
+        const currentPrices = await getCurrentMultipliers(marketId)
+        currentYesPrice = currentPrices.yesPrice
+      } catch (e) {
+        console.warn('Could not fetch current price, using 50%')
+      }
+
+      // Get creation timestamp
+      let creationTimestamp = Date.now() - 86400000
       try {
         const response = await fetch(`/api/markets/get-creation-date?marketId=${marketId}&paymentToken=PDX`)
         if (response.ok) {
           const result = await response.json()
           if (result.success && result.data?.created_at) {
-            const createdAt = new Date(result.data.created_at).getTime()
-            points.push({
-              timestamp: createdAt,
-              price: 50 // Markets start at 50%
-            })
-          } else {
+            creationTimestamp = new Date(result.data.created_at).getTime()
           }
         }
       } catch (fetchError) {
+        console.warn('Could not fetch creation date')
       }
+
+      points.push({
+        timestamp: creationTimestamp,
+        price: 50
+      })
 
       const provider = marketContract.runner?.provider
       if (!provider) throw new Error("No provider")
 
       const currentBlock = await provider.getBlockNumber()
-      // ✅ Reduced scan range to 500K blocks (from 2M) to minimize RPC calls
       const startBlock = Math.max(0, currentBlock - 500000)
 
-      // Get Buy events
       const buyFilter = marketContract.filters.BuyWithPDX(BigInt(marketId))
       let buyEvents: any[] = []
       try {
         buyEvents = await marketContract.queryFilter(buyFilter, startBlock, currentBlock)
       } catch (e) {
+        console.warn('Could not fetch PDX buy events:', e)
       }
 
-      // Get Sell events
       const sellFilter = marketContract.filters.SellForPDX(BigInt(marketId))
       let sellEvents: any[] = []
       try {
         sellEvents = await marketContract.queryFilter(sellFilter, startBlock, currentBlock)
       } catch (e) {
+        console.warn('Could not fetch PDX sell events:', e)
       }
 
-      // Process Buy events
-      for (const event of buyEvents) {
-        try {
-          const block = await event.getBlock()
-          const { buyYes, pdxIn, tokenOut } = (event as any).args
-
-          const pricePerToken = Number(ethers.formatEther(pdxIn)) / Number(ethers.formatEther(tokenOut))
-
-          let yesPrice = 0
-          if (buyYes) {
-            yesPrice = pricePerToken * 100
-          } else {
-            yesPrice = 100 - (pricePerToken * 100)
-          }
-
-          points.push({
-            timestamp: block.timestamp * 1000,
-            price: Math.max(0, Math.min(100, yesPrice))
-          })
-        } catch (e) {
+      const allEvents = [...buyEvents, ...sellEvents].sort((a, b) => {
+        if (a.blockNumber !== b.blockNumber) {
+          return a.blockNumber - b.blockNumber
         }
+        return a.transactionIndex - b.transactionIndex
+      })
+
+      console.log(`Found ${allEvents.length} PDX trade events for market ${marketId}`)
+
+      let yesPool = 0
+      let noPool = 0
+
+      try {
+        const market = await (helperContract as any).getMarket(BigInt(marketId))
+        yesPool = Number(ethers.formatEther(market.yesPool || 0))
+        noPool = Number(ethers.formatEther(market.noPool || 0))
+      } catch (e) {
+        console.warn('Could not fetch initial PDX pool state')
       }
 
-      // Process Sell events
-      for (const event of sellEvents) {
+      for (const event of allEvents) {
         try {
           const block = await event.getBlock()
-          const { sellYes, tokenIn, pdxOut } = (event as any).args
+          const isBuy = event.fragment?.name === 'BuyWithPDX'
 
-          const pricePerToken = Number(ethers.formatEther(pdxOut)) / Number(ethers.formatEther(tokenIn))
+          if (isBuy) {
+            const { buyYes, pdxIn } = (event as any).args
+            const pdxAmount = Number(ethers.formatEther(pdxIn))
 
-          let yesPrice = 0
-          if (sellYes) {
-            yesPrice = pricePerToken * 100
+            if (buyYes) {
+              yesPool += pdxAmount
+            } else {
+              noPool += pdxAmount
+            }
           } else {
-            yesPrice = 100 - (pricePerToken * 100)
+            const { sellYes, pdxOut } = (event as any).args
+            const pdxAmount = Number(ethers.formatEther(pdxOut))
+
+            if (sellYes) {
+              yesPool -= pdxAmount
+            } else {
+              noPool -= pdxAmount
+            }
+          }
+
+          const totalPool = yesPool + noPool
+          let yesPrice = 50
+          if (totalPool > 0) {
+            yesPrice = (yesPool / totalPool) * 100
+            yesPrice = Math.min(95, Math.max(5, yesPrice))
           }
 
           points.push({
             timestamp: block.timestamp * 1000,
-            price: Math.max(0, Math.min(100, yesPrice))
+            price: yesPrice
           })
         } catch (e) {
+          console.warn('Failed to process PDX event:', e)
         }
       }
 
       points.sort((a, b) => a.timestamp - b.timestamp)
 
-      // Add current time point
-      if (points.length > 0) {
-        const lastPoint = points[points.length - 1]
-        points.push({
-          timestamp: Date.now(),
-          price: lastPoint.price
-        })
-      }
+      points.push({
+        timestamp: Date.now(),
+        price: currentYesPrice
+      })
+
+      console.log(`Generated ${points.length} PDX data points for chart`)
 
       return points
 
     } catch (error) {
-      console.error('Error fetching price history:', error)
-      return []
+      console.error('Error fetching PDX price history:', error)
+      return [
+        { timestamp: Date.now() - 86400000, price: 50 },
+        { timestamp: Date.now(), price: 50 }
+      ]
     }
-  }, [marketContract])
+  }, [marketContract, helperContract, getCurrentMultipliers])
 
   // ==================== STOP-LOSS & TAKE-PROFIT ORDERS ====================
 

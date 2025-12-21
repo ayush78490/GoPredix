@@ -7,6 +7,8 @@ import { MarketStatus, Outcome } from "@/hooks/use-predection-market"
 import { useState } from "react"
 import CustomAlertDialog from "@/components/customAlert"
 import { useAccount, useChainId } from "wagmi"
+import { useBNBPrice } from "@/hooks/use-bnb-price"
+import { formatBnbAsUsd } from "@/lib/currency-utils"
 
 interface FrontendMarket {
   id: string
@@ -49,29 +51,33 @@ interface MarketCardProps {
   onClick?: () => void
 }
 
-export default function MarketCard({ 
-  market, 
-  disabled = false, 
-  isLoading = false, 
+export default function MarketCard({
+  market,
+  disabled = false,
+  isLoading = false,
   onClick
 }: MarketCardProps) {
   const [showAlert, setShowAlert] = useState(false)
-  
+
   // Get wallet connection status from wagmi
   const { isConnected } = useAccount()
   const chainId = useChainId()
-  
+
   // Check if connected to BSC Testnet (chainId 97)
   const isCorrectNetwork = chainId === 97
   const canTransact = isConnected && isCorrectNetwork
-  
+
   const marketTitle = market.title || market.question || `Market ${market.id}`
   const marketDescription = market.description || market.question || "Prediction market"
   const marketCategory = market.category || "General"
   const marketCreator = market.creator || "0x0000000000000000000000000000000000000000"
   const marketEndTime = market.endTime || Math.floor(Date.now() / 1000)
-  
+
   const tokenSymbol = market.paymentToken === "PDX" ? "PDX" : "BNB"
+
+  // Get BNB price for USD conversion
+  const { price: bnbPrice } = useBNBPrice()
+  const showUsd = market.paymentToken !== "PDX" && bnbPrice !== null
 
   const yesOdds = market.yesOdds !== undefined ? market.yesOdds : market.yesPrice || 50
   const noOdds = market.noOdds !== undefined ? market.noOdds : market.noPrice || 50
@@ -128,13 +134,13 @@ export default function MarketCard({
 
   const getPaymentTokenBadge = (token: string) => {
     const tokenConfig: Record<string, any> = {
-      "BNB": { 
-        label: "BNB", 
+      "BNB": {
+        label: showUsd ? "USD (BNB)" : "BNB",
         color: "bg-yellow-500/20 border-yellow-600/50 text-yellow-400",
-        icon: "🔶"
+        icon: showUsd ? "💵" : "🔶"
       },
-      "PDX": { 
-        label: "PDX", 
+      "PDX": {
+        label: "PDX",
         color: "bg-purple-500/20 border-purple-600/50 text-purple-400",
         icon: "💜"
       }
@@ -191,7 +197,7 @@ export default function MarketCard({
       }
       return
     }
-    
+
     if (onClick) {
       e.preventDefault()
       onClick()
@@ -218,17 +224,16 @@ export default function MarketCard({
     <div className="relative">
       <Link
         href={
-          shouldDisableTrading && isMarketActive 
-            ? "#" 
+          shouldDisableTrading && isMarketActive
+            ? "#"
             : `/markets/${market.slug || `market-${market.id}`}`
         }
         onClick={handleClick}
         className="block"
       >
         <Card
-          className={`overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50 ${
-            !isMarketActive ? "" : ""
-          } ${shouldDisableTrading && isMarketActive ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={`overflow-hidden hover:shadow-lg hover:shadow-blue-500/50 hover:scale-[103%] transition-all cursor-pointer h-full border-2 hover:border-white/50 ${!isMarketActive ? "" : ""
+            } ${shouldDisableTrading && isMarketActive ? "opacity-50 cursor-not-allowed" : ""}`}
         >
           {/* Loading Overlay */}
           {isLoading && (
@@ -253,9 +258,9 @@ export default function MarketCard({
               <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
                 {marketCategory}
               </div>
-              
+
               {getPaymentTokenBadge(tokenSymbol)}
-              
+
               {getStatusBadge(market.status, isMarketActive)}
             </div>
 
@@ -287,22 +292,41 @@ export default function MarketCard({
             )}
 
             {market.status === 3 && (
-              <div className="mb-3 p-2 bg-muted rounded-lg">
-                <div
-                  className={`text-sm font-semibold ${getOutcomeColor(
-                    market.outcome || 0
-                  )}`}
-                >
-                  {getOutcomeText(market.outcome || 0)}
-                </div>
-                {market.resolutionReason && (
-                  <div className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                    {market.resolutionReason}
+              <div className="mb-3">
+                {/* AI Resolution Display - Prominent */}
+                <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🤖</span>
+                    <p className="text-xs font-medium text-indigo-300">AI Resolved As:</p>
                   </div>
-                )}
-                {market.resolutionConfidence > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    Confidence: {market.resolutionConfidence}%
+                  <div className="flex justify-center">
+                    <span className={`px-3 py-1.5 rounded-lg text-lg font-bold ${market.outcome === 1
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : market.outcome === 2
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                      }`}>
+                      {market.outcome === 1 ? 'YES' : market.outcome === 2 ? 'NO' : 'UNDECIDED'}
+                    </span>
+                  </div>
+                  {market.resolutionReason && (
+                    <div className="text-xs text-muted-foreground text-center line-clamp-2 italic">
+                      "{market.resolutionReason}"
+                    </div>
+                  )}
+                  {market.resolutionConfidence > 0 && (
+                    <div className="text-xs text-indigo-300 text-center">
+                      Confidence: {market.resolutionConfidence}%
+                    </div>
+                  )}
+                </div>
+
+                {/* Dispute Info if market ended recently */}
+                {market.disputeDeadline && market.disputeDeadline > Math.floor(Date.now() / 1000) && (
+                  <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <p className="text-xs text-yellow-400 text-center">
+                      ⚠️ Dispute period active - Visit Disputes page to challenge
+                    </p>
                   </div>
                 )}
               </div>
@@ -312,57 +336,51 @@ export default function MarketCard({
             <div className="grid grid-cols-2 gap-3 mb-4">
               {/* YES */}
               <div
-                className={`rounded-lg p-3 border ${
-                  isMarketActive
-                    ? "bg-green-950/20 border-green-800/30"
-                    : "bg-gray-100 border-gray-300"
-                }`}
+                className={`rounded-lg p-3 border ${isMarketActive
+                  ? "bg-green-950/20 border-green-800/30"
+                  : "bg-gray-100 border-gray-300"
+                  }`}
               >
                 <div className="text-xs text-muted-foreground mb-1">YES</div>
                 <div
-                  className={`text-xl font-bold ${
-                    isMarketActive ? "text-green-500" : "text-gray-500"
-                  }`}
+                  className={`text-xl font-bold ${isMarketActive ? "text-green-500" : "text-gray-500"
+                    }`}
                 >
                   {yesOdds.toFixed(1)}%
                 </div>
                 <div
-                  className={`text-xs mt-1 ${
-                    isMarketActive ? "text-green-400" : "text-gray-500"
-                  }`}
+                  className={`text-xs mt-1 ${isMarketActive ? "text-green-400" : "text-gray-500"
+                    }`}
                 >
                   {yesMultiplier}x return
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  Pool: {yesPool.toFixed(2)} {tokenSymbol}
+                  Pool: {showUsd ? formatBnbAsUsd(yesPool.toString(), bnbPrice!) : `${yesPool.toFixed(2)} ${tokenSymbol}`}
                 </div>
               </div>
 
               {/* NO */}
               <div
-                className={`rounded-lg p-3 border ${
-                  isMarketActive
-                    ? "bg-red-950/20 border-red-800/30"
-                    : "bg-gray-100 border-gray-300"
-                }`}
+                className={`rounded-lg p-3 border ${isMarketActive
+                  ? "bg-red-950/20 border-red-800/30"
+                  : "bg-gray-100 border-gray-300"
+                  }`}
               >
                 <div className="text-xs text-muted-foreground mb-1">NO</div>
                 <div
-                  className={`text-xl font-bold ${
-                    isMarketActive ? "text-red-500" : "text-gray-500"
-                  }`}
+                  className={`text-xl font-bold ${isMarketActive ? "text-red-500" : "text-gray-500"
+                    }`}
                 >
                   {noOdds.toFixed(1)}%
                 </div>
                 <div
-                  className={`text-xs mt-1 ${
-                    isMarketActive ? "text-red-400" : "text-gray-500"
-                  }`}
+                  className={`text-xs mt-1 ${isMarketActive ? "text-red-400" : "text-gray-500"
+                    }`}
                 >
                   {noMultiplier}x return
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  Pool: {noPool.toFixed(2)} {tokenSymbol}
+                  Pool: {showUsd ? formatBnbAsUsd(noPool.toString(), bnbPrice!) : `${noPool.toFixed(2)} ${tokenSymbol}`}
                 </div>
               </div>
             </div>
@@ -398,7 +416,9 @@ export default function MarketCard({
             <div className="mt-2 text-xs text-muted-foreground">
               <div className="flex items-center justify-between">
                 <span>Total Liquidity:</span>
-                <span className="font-semibold">{totalBacking.toFixed(2)} {tokenSymbol}</span>
+                <span className="font-semibold">
+                  {showUsd ? formatBnbAsUsd(totalBacking.toString(), bnbPrice!) : `${totalBacking.toFixed(2)} ${tokenSymbol}`}
+                </span>
               </div>
             </div>
 
@@ -428,17 +448,17 @@ export default function MarketCard({
 
             <div className="mt-3 text-center">
               <p className="text-xs text-muted-foreground">
-                {isLoading 
-                  ? "Loading market..." 
+                {isLoading
+                  ? "Loading market..."
                   : !isMarketActive
-                  ? "Market inactive"
-                  : !canTransact
-                  ? "Connect wallet to trade"
-                  : market.status === 0
-                  ? "Click to trade"
-                  : market.status === 3
-                  ? "Click to view results"
-                  : "Click to view details"}
+                    ? "Market inactive"
+                    : !canTransact
+                      ? "Connect wallet to trade"
+                      : market.status === 0
+                        ? "Click to trade"
+                        : market.status === 3
+                          ? "Click to view results"
+                          : "Click to view details"}
               </p>
             </div>
           </div>

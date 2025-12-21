@@ -6,18 +6,24 @@ import { Trophy, Sparkles, Loader2 } from 'lucide-react';
 import { useClaimWinnings, MarketStatus } from '@/hooks/useClaimWinnings';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
+import { useBNBPrice } from '@/hooks/use-bnb-price';
+import { formatBnbAsUsd } from '@/lib/currency-utils';
 
 interface ClaimWinningsBannerProps {
     marketId: number;
     contractAddress: `0x${string}`;
+    paymentToken?: string;
 }
 
 /**
  * Compact banner that appears at the top of market detail page
  * when user has claimable winnings
  */
-export function ClaimWinningsBanner({ marketId, contractAddress }: ClaimWinningsBannerProps) {
+export function ClaimWinningsBanner({ marketId, contractAddress, paymentToken }: ClaimWinningsBannerProps) {
     const { claimableInfo, claimWinnings, isLoading, isSuccess } = useClaimWinnings(marketId, contractAddress);
+    const { price: bnbPrice } = useBNBPrice();
+
+    const showUsd = paymentToken !== "PDX" && bnbPrice !== null;
 
     // Don't show if not resolved or no claimable amount
     if (!claimableInfo ||
@@ -51,7 +57,9 @@ export function ClaimWinningsBanner({ marketId, contractAddress }: ClaimWinnings
                                     </h3>
                                 </div>
                                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    You have <span className="font-bold text-yellow-700 dark:text-yellow-500">{claimableAmountEth.toFixed(4)} BNB</span> waiting to be claimed
+                                    You have <span className="font-bold text-yellow-700 dark:text-yellow-500">
+                                        {showUsd ? formatBnbAsUsd(claimableAmountEth.toString(), bnbPrice!) : `${claimableAmountEth.toFixed(4)} BNB`}
+                                    </span> waiting to be claimed
                                 </p>
                             </div>
                         </div>
@@ -71,7 +79,7 @@ export function ClaimWinningsBanner({ marketId, contractAddress }: ClaimWinnings
                             ) : (
                                 <span className="flex items-center gap-2">
                                     <Trophy className="w-5 h-5" />
-                                    Claim {claimableAmountEth.toFixed(4)} BNB
+                                    Claim {showUsd ? formatBnbAsUsd(claimableAmountEth.toString(), bnbPrice!) : `${claimableAmountEth.toFixed(4)} BNB`}
                                 </span>
                             )}
                         </Button>

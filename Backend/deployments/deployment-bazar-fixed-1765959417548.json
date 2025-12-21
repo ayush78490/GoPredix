@@ -1,0 +1,16 @@
+{
+  "network": "BSC Testnet",
+  "chainId": 97,
+  "timestamp": "2025-12-17T08:16:57.548Z",
+  "deployer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "contracts": {
+    "predictionMarket": "0xA2867c105ff7725fb134d838E964Cd291B0e7e76",
+    "helperContract": "0x071e0884f1d3114E4f0eA31a74DFa7E4F2bdccfE"
+  },
+  "config": {
+    "feeBps": 50,
+    "lpFeeBps": 7000,
+    "resolutionServer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e"
+  },
+  "lastUpdate": "Updated BNB Prediction Market with Marketplace Approval"
+}

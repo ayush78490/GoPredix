@@ -8,6 +8,8 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
+import { useBNBPrice } from "@/hooks/use-bnb-price"
+import { bnbToUsd, usdToBnb, formatUsd } from "@/lib/currency-utils"
 import { ethers } from "ethers"
 import { useAccount, useChainId, useWalletClient } from "wagmi"
 
@@ -55,6 +57,10 @@ export default function TradeModal({
 
   const currentHook = paymentToken === "BNB" ? bnbHook : pdxHook
   const isContractReady = currentHook?.isContractReady === true && canTransact
+
+  // Get BNB price for USD conversion
+  const { price: bnbPrice, isLoading: isPriceLoading } = useBNBPrice()
+  const showUsdInputs = paymentToken === "BNB" && bnbPrice !== null
 
   const numAmount = parseFloat(amount) || 0
   const hasAmount = numAmount >= 0.001
@@ -168,12 +174,14 @@ export default function TradeModal({
 
       const marketId = validateMarketId(market.numericId)
       let result
+      // Convert USD to BNB for calculation if needed
+      const bnbAmountForCalc = showUsdInputs && bnbPrice ? usdToBnb(amount, bnbPrice) : amount
 
       if (paymentToken === "BNB") {
         if (outcome === "YES") {
-          result = await bnbHook.getBuyYesMultiplier(marketId, amount)
+          result = await bnbHook.getBuyYesMultiplier(marketId, bnbAmountForCalc)
         } else {
-          result = await bnbHook.getBuyNoMultiplier(marketId, amount)
+          result = await bnbHook.getBuyNoMultiplier(marketId, bnbAmountForCalc)
         }
       } else {
         if (outcome === "YES") {
@@ -281,14 +289,16 @@ export default function TradeModal({
       throw new Error("Slippage calculation error. Please try again.")
     }
 
-    const valueWei: bigint = ethers.parseEther(amount)
+    // Convert USD to BNB if using USD inputs
+    const bnbAmount = showUsdInputs && bnbPrice ? usdToBnb(amount, bnbPrice) : amount
+    const valueWei: bigint = ethers.parseEther(bnbAmount)
     await ensureSufficientBNBBalance(valueWei)
 
 
     if (outcome === "YES") {
-      return await bnbHook.buyYesWithBNB(marketId, minOut, amount)
+      return await bnbHook.buyYesWithBNB(marketId, minOut, bnbAmount)
     } else {
-      return await bnbHook.buyNoWithBNB(marketId, minOut, amount)
+      return await bnbHook.buyNoWithBNB(marketId, minOut, bnbAmount)
     }
   }
 
@@ -577,7 +587,10 @@ export default function TradeModal({
     return value.toFixed(4)
   }
 
-  const getTokenSymbol = () => paymentToken === "BNB" ? "🔶 BNB" : "PDX"
+  const getTokenSymbol = () => {
+    if (paymentToken === "BNB" && showUsdInputs) return "💵 USD"
+    return paymentToken === "BNB" ? "🔶 BNB" : "PDX"
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6">
@@ -641,16 +654,24 @@ export default function TradeModal({
 
             <div>
               <label className="block text-sm font-medium mb-2">Amount ({getTokenSymbol()})</label>
+              {showUsdInputs && isPriceLoading && (
+                <div className="mb-2 text-xs text-muted-foreground flex items-center gap-1">
+                  <LogoLoading size={12} />
+                  Loading price...
+                </div>
+              )}
               <Input
                 type="number"
-                min="0.001"
-                step="0.001"
+                min={showUsdInputs ? "1" : "0.001"}
+                step={showUsdInputs ? "1" : "0.001"}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.001"
-                disabled={isProcessing || !isContractReady}
+                placeholder={showUsdInputs ? "10" : "0.001"}
+                disabled={isProcessing || !isContractReady || (showUsdInputs && isPriceLoading)}
               />
-              <p className="text-xs text-muted-foreground mt-1">Minimum: 0.001 {paymentToken}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Minimum: {showUsdInputs ? "$1" : `0.001 ${paymentToken}`}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -695,13 +716,15 @@ export default function TradeModal({
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Your Investment:</span>
-                          <span className="font-bold text-lg">{formatTokenAmount(numAmount)} {paymentToken}</span>
+                          <span className="font-bold text-lg">
+                            {showUsdInputs ? formatUsd(numAmount) : `${formatTokenAmount(numAmount)} ${paymentToken}`}
+                          </span>
                         </div>
 
                         <div className="flex justify-between items-center pt-2 border-t border-blue-200 dark:border-blue-800">
                           <span className="text-sm font-medium">Expected Payout:</span>
                           <span className="font-bold text-xl text-green-600 dark:text-green-400">
-                            {formatTokenAmount(expectedPayout)} {paymentToken}
+                            {showUsdInputs ? formatUsd(bnbToUsd(expectedPayout, bnbPrice!)) : `${formatTokenAmount(expectedPayout)} ${paymentToken}`}
                           </span>
                         </div>
 
@@ -715,7 +738,9 @@ export default function TradeModal({
                         {feeEstimated && parseFloat(feeEstimated) > 0 && (
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-muted-foreground">Platform Fee:</span>
-                            <span className="font-medium">{formatTokenAmount(parseFloat(feeEstimated))} {paymentToken}</span>
+                            <span className="font-medium">
+                              {showUsdInputs ? formatUsd(bnbToUsd(parseFloat(feeEstimated), bnbPrice!)) : `${formatTokenAmount(parseFloat(feeEstimated))} ${paymentToken}`}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -733,7 +758,7 @@ export default function TradeModal({
                         <div className="flex justify-between items-center text-sm">
                           <span className="text-yellow-800 dark:text-yellow-300">Minimum You'll Receive:</span>
                           <span className="font-bold text-yellow-900 dark:text-yellow-200">
-                            {formatTokenAmount(minPayout)} {paymentToken}
+                            {showUsdInputs ? formatUsd(bnbToUsd(minPayout!, bnbPrice!)) : `${formatTokenAmount(minPayout)} ${paymentToken}`}
                           </span>
                         </div>
 

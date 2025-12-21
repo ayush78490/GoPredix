@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useAccount } from "wagmi"
 import { useAllMarkets } from "@/hooks/getAllMarkets"
 import { useMarketMarketplace } from "@/hooks/use-market-marketplace"
+import { useBNBCustodialMarketplace } from "@/hooks/use-bnb-custodial-marketplace"
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { Loader2, DollarSign, CheckCircle2, ArrowRight } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
@@ -20,13 +21,33 @@ interface SellMarketModalProps {
 export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMarketModalProps) {
     const { address } = useAccount()
     const { markets, refreshMarkets } = useAllMarkets()
-    const { listMarket, transferOwnership, confirmTransfer, isMarketListed, isOwnershipTransferred } = useMarketMarketplace()
+
+    // PDX Custodial Marketplace (3-step process)
+    const {
+        listMarket: listMarketPDX,
+        transferOwnership: transferOwnershipPDX,
+        confirmTransfer: confirmTransferPDX,
+        isMarketListed: isMarketListedPDX,
+        isOwnershipTransferred: isOwnershipTransferredPDX
+    } = useMarketMarketplace()
+
+    // BNB Custodial Marketplace (3-step process)
+    const {
+        listMarket: listMarketBNB,
+        confirmTransfer: confirmTransferBNB,
+        isMarketListed: isMarketListedBNB,
+        isOwnershipTransferred: isOwnershipTransferredBNB,
+        isContractReady: isBNBMarketplaceReady,
+        marketplaceAddress: bnbMarketplaceAddress
+    } = useBNBCustodialMarketplace()
+
     const bnbHook = usePredictionMarketBNB()
 
     const [selectedMarketId, setSelectedMarketId] = useState<number | null>(null)
     const [price, setPrice] = useState("")
     const [isProcessing, setIsProcessing] = useState(false)
-    const [step, setStep] = useState<1 | 2 | 3>(1) // 1: List, 2: Transfer, 3: Confirm
+    const [step, setStep] = useState<1 | 2 | 3>(1) // 1: List, 2: Transfer (PDX only), 3: Confirm
+    const [selectedMarketplaceType, setSelectedMarketplaceType] = useState<'PDX' | 'BNB'>('PDX') // User's choice of marketplace
 
     const userMarkets = useMemo(() => {
 
@@ -48,10 +69,15 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
         markets.find(m => m.numericId === selectedMarketId),
         [markets, selectedMarketId])
 
-    const marketType = selectedMarket?.paymentToken === 'PDX' ? 'PDX' : 'BNB'
+    const marketPaymentToken = selectedMarket?.paymentToken === 'PDX' ? 'PDX' : 'BNB'
+
+    // Determine currency symbol for pricing
+    const currencySymbol = selectedMarketplaceType === 'BNB' ? 'BNB' : 'PDX'
+    const maxSteps = 3 // Both marketplaces now use 3-step process
 
     useEffect(() => {
-    }, [selectedMarketId, step, marketType])
+        console.log('📊 [Sell Modal] Market:', selectedMarketId, 'Step:', step, 'Marketplace:', selectedMarketplaceType)
+    }, [selectedMarketId, step, selectedMarketplaceType])
 
     // Refresh markets when modal opens - REMOVED as per user request to avoid cache filling
     // useEffect(() => {
@@ -67,63 +93,66 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
         setIsProcessing(true)
 
         try {
-            if (step === 1) {
+            // Select the correct marketplace functions based on type
+            const listMarket = selectedMarketplaceType === 'BNB' ? listMarketBNB : listMarketPDX
+            const transferOwnership = selectedMarketplaceType === 'PDX' ? transferOwnershipPDX : null
+            const confirmTransfer = selectedMarketplaceType === 'BNB' ? confirmTransferBNB : confirmTransferPDX
+            const isMarketListed = selectedMarketplaceType === 'BNB' ? isMarketListedBNB : isMarketListedPDX
+            const isOwnershipTransferred = selectedMarketplaceType === 'BNB' ? isOwnershipTransferredBNB : isOwnershipTransferredPDX
 
-                // Pre-flight checks
-                const isListed = await isMarketListed(selectedMarketId, marketType)
-                if (isListed) {
-                    toast({
-                        title: "Market Already Listed",
-                        description: "Resuming transfer process...",
-                    })
-                    setStep(2)
-                    return // Exit step 1 logic
+            // ✅ NEW: Execute all 3 steps automatically in sequence
+
+            // STEP 1: List the market (if not already listed)
+            const isListed = await isMarketListed(selectedMarketId)
+            if (!isListed) {
+                toast({
+                    title: "Step 1/3: Listing Market",
+                    description: `Creating listing on ${selectedMarketplaceType} marketplace...`,
+                })
+                await listMarket(selectedMarketId, price)
+            }
+
+            // STEP 2: Transfer ownership (if not already transferred)
+            const isTransferred = await isOwnershipTransferred(selectedMarketId)
+            if (!isTransferred) {
+                toast({
+                    title: "Step 2/3: Transferring Ownership",
+                    description: "Transferring market ownership to marketplace...",
+                })
+
+                if (selectedMarketplaceType === 'PDX') {
+                    if (transferOwnership) {
+                        await transferOwnership(selectedMarketId, 'PDX')
+                    }
+                } else {
+                    // BNB: Use BNB prediction market hook to transfer to BNB marketplace
+                    if (bnbHook.transferMarketOwnership && bnbMarketplaceAddress) {
+                        await bnbHook.transferMarketOwnership(selectedMarketId, bnbMarketplaceAddress)
+                    } else {
+                        throw new Error('BNB market transfer not available')
+                    }
                 }
-
-                await listMarket(selectedMarketId, price, marketType)
-
-                toast({
-                    title: "Step 1 Complete",
-                    description: "Market listed. Now transfer ownership.",
-                })
-                setStep(2)
             }
-            else if (step === 2) {
 
-                // Check if already transferred
-                const isTransferred = await isOwnershipTransferred(selectedMarketId, marketType)
-                if (isTransferred) {
-                    toast({
-                        title: "Already Transferred",
-                        description: "Ownership already transferred. Proceeding to confirmation.",
-                    })
-                    setStep(3)
-                    return
-                }
+            // STEP 3: Confirm transfer to activate the listing
+            toast({
+                title: "Step 3/3: Activating Listing",
+                description: "Confirming transfer and activating marketplace listing...",
+            })
+            await confirmTransfer(selectedMarketId)
 
-                await transferOwnership(selectedMarketId, marketType)
+            // ✅ All done!
+            toast({
+                title: "Market Listed Successfully! 🎉",
+                description: `Your market is now live on the ${selectedMarketplaceType} marketplace.`,
+            })
+            onSuccess()
+            onClose()
 
-                toast({
-                    title: "Step 2 Complete",
-                    description: "Ownership transferred. Now confirm to activate.",
-                })
-                setStep(3)
-            }
-            else if (step === 3) {
-                await confirmTransfer(selectedMarketId, marketType)
-
-                toast({
-                    title: "Market Listed Successfully! 🎉",
-                    description: `Your market is now active and for sale.`,
-                })
-                onSuccess()
-                onClose()
-
-                // Reset
-                setSelectedMarketId(null)
-                setPrice("")
-                setStep(1)
-            }
+            // Reset
+            setSelectedMarketId(null)
+            setPrice("")
+            setStep(1)
 
         } catch (error: any) {
             console.error('❌ Error:', error)
@@ -138,18 +167,12 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
     }
 
     const getButtonText = () => {
-        if (isProcessing) return <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
-        if (step === 1) return "List Market"
-        if (step === 2) return "Transfer Ownership"
-        if (step === 3) return "Confirm Transfer"
-        return "List Market"
+        if (isProcessing) return <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Listing Market...</>
+        return "List Market for Sale"
     }
 
     const getStepDescription = () => {
-        if (step === 1) return "Step 1/3: Create listing on marketplace."
-        if (step === 2) return "Step 2/3: Transfer ownership to marketplace."
-        if (step === 3) return "Step 3/3: Confirm transfer to activate."
-        return ""
+        return "List your market on the marketplace. All steps will be executed automatically."
     }
 
     return (
@@ -164,6 +187,8 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 1 ? 'bg-blue-500 text-white' : 'bg-gray-700'}`}>1</div>
                                 <ArrowRight className="w-4 h-4 text-muted-foreground" />
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 2 ? 'bg-blue-500 text-white' : 'bg-gray-700'}`}>2</div>
+                                <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 3 ? 'bg-blue-500 text-white' : 'bg-gray-700'}`}>3</div>
                                 <span className="ml-2 text-blue-200">{getStepDescription()}</span>
                             </div>
                         </div>
@@ -215,19 +240,43 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                     )}
 
                     {selectedMarketId !== null && step === 1 && (
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Asking Price (PDX)</label>
-                            <div className="relative">
-                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <Input
-                                    type="number"
-                                    placeholder="Price in PDX"
-                                    value={price}
-                                    onChange={(e) => setPrice(e.target.value)}
-                                    className="pl-9 bg-white/5 border-white/10"
-                                />
+                        <>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Select Marketplace</label>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant={selectedMarketplaceType === 'PDX' ? 'default' : 'outline'}
+                                        onClick={() => setSelectedMarketplaceType('PDX')}
+                                        className="flex-1"
+                                    >
+                                        PDX Marketplace
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={selectedMarketplaceType === 'BNB' ? 'default' : 'outline'}
+                                        onClick={() => setSelectedMarketplaceType('BNB')}
+                                        className="flex-1"
+                                        disabled={!isBNBMarketplaceReady}
+                                    >
+                                        BNB Marketplace {!isBNBMarketplaceReady && '(Not Ready)'}
+                                    </Button>
+                                </div>
                             </div>
-                        </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Asking Price ({currencySymbol})</label>
+                                <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <Input
+                                        type="number"
+                                        placeholder={`Price in ${currencySymbol}`}
+                                        value={price}
+                                        onChange={(e) => setPrice(e.target.value)}
+                                        className="pl-9 bg-white/5 border-white/10"
+                                    />
+                                </div>
+                            </div>
+                        </>
                     )}
 
                     {step > 1 && (
@@ -236,7 +285,7 @@ export default function SellMarketModal({ isOpen, onClose, onSuccess }: SellMark
                             <h3 className="text-lg font-bold text-green-400">Listing in Progress</h3>
                             <p className="text-sm text-muted-foreground">
                                 Market ID: {selectedMarketId} <br />
-                                Price: {price} PDX
+                                Price: {price} {currencySymbol}
                             </p>
                         </div>
                     )}

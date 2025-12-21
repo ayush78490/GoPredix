@@ -76,15 +76,39 @@ class BlockchainResolutionService {
             if (marketCount === 0) return;
 
             console.log(`🔍 Checking ${marketCount} markets for resolution requests...`);
+            const currentTime = Math.floor(Date.now() / 1000);
 
             for (let i = 0; i < marketCount; i++) {
                 try {
                     const market = await this.contract.markets(BigInt(i));
                     const status = Number(market.status);
+                    const endTime = Number(market.endTime);
 
-                    // Status 2 = ResolutionRequested
-                    if (status === 2) {
-                        console.log(`📢 Found resolution request for market ${i}`);
+                    // Check if market is closed but not yet resolution requested
+                    // Status 0 = Open, Status 1 = Closed
+                    if ((status === 0 || status === 1) && currentTime >= endTime) {
+                        console.log(`📢 Market ${i} has ended. Requesting resolution...`);
+
+                        try {
+                            // Call requestResolution on the contract
+                            const tx = await this.contract.requestResolution(
+                                BigInt(i),
+                                'Automatic resolution request by monitoring service'
+                            );
+
+                            console.log(`⏳ Waiting for requestResolution transaction: ${tx.hash}`);
+                            await tx.wait();
+                            console.log(`✅ Resolution requested for market ${i}`);
+
+                            // Add delay to avoid rate limiting
+                            await new Promise(resolve => setTimeout(resolve, 3000));
+                        } catch (reqError) {
+                            console.error(`❌ Failed to request resolution for market ${i}:`, reqError.message);
+                        }
+                    }
+                    // Status 2 = ResolutionRequested - now resolve it
+                    else if (status === 2) {
+                        console.log(`📢 Found resolution request for market ${i}. Calling AI...`);
                         await this.resolveMarket(i);
 
                         // Add delay to avoid rate limiting
@@ -196,8 +220,8 @@ class BlockchainResolutionService {
      */
     async callAIResolution(marketData) {
         try {
-            // Use the deployed API endpoint
-            const apiUrl = process.env.RESOLUTION_API_URL || 'https://sigma-predection.vercel.app/api/resolveMarket';
+            // Use local API for testing
+            const apiUrl = process.env.RESOLUTION_API_URL || 'http://localhost:3001/api/resolveMarket';
 
             const response = await fetch(apiUrl, {
                 method: 'POST',

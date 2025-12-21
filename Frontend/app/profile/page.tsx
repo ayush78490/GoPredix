@@ -21,10 +21,10 @@ import ConnectTwitterButton from "@/components/connect-twitter-button"
 import { LogoLoading } from "@/components/ui/logo-loading"
 
 // Import ABIs
-import BNB_MARKET_ARTIFACT from "@/contracts/abi.json"
-import BNB_HELPER_ARTIFACT from "@/contracts/helperABI.json"
-import PDX_MARKET_ARTIFACT from "@/contracts/pdxabi.json"
-import PDX_HELPER_ARTIFACT from "@/contracts/pdxhelperabi.json"
+import BNB_MARKET_ARTIFACT from "@/contracts/Bazar.json"
+import BNB_HELPER_ARTIFACT from "@/contracts/helperContract.json"
+import PDX_MARKET_ARTIFACT from "@/contracts/PDXbazar.json"
+import PDX_HELPER_ARTIFACT from "@/contracts/PDXhelperContract.json"
 
 // Helper function to extract ABI
 const extractABI = (artifact: any): ethers.InterfaceAbi => {
@@ -38,10 +38,10 @@ const PDX_MARKET_ABI = extractABI(PDX_MARKET_ARTIFACT)
 const PDX_HELPER_ABI = extractABI(PDX_HELPER_ARTIFACT)
 
 // Contract addresses - MUST MATCH the hooks!
-const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS || '0x52Ca4B7673646B8b922ea00ccef6DD0375B14619'
-const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS || '0xC940106a30742F21daE111d41e8F41d482feda15'
-const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS || '0x7d46139e1513571f19c9B87cE9A01D21cA9ef665'
-const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS || '0x0CCaDd82A453075B8C0193809cC3693ef58E46D1'
+const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS!
+const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS!
+const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS!
+const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS!
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
 
 interface UserStats {
@@ -255,18 +255,22 @@ export default function ProfilePage() {
 
   // Helper functions
   const getMarketStatusText = (status: number, endTime: number): "Active" | "Resolved" | "Cancelled" => {
-    const resolutionDate = new Date(endTime * 1000)
-    const now = new Date()
+    const now = Math.floor(Date.now() / 1000) // Use seconds for consistency
 
-    if (status === 0 && resolutionDate > now) return "Active"
-    else if (status === 1 || status === 2) return "Resolved"
-    else return "Resolved"
+    // Status 0 = Open (but check if time has passed)
+    if (status === 0) {
+      return endTime > now ? "Active" : "Resolved" // Closed if time passed
+    }
+    // Status 1 = Closed, Status 2 = Resolution Requested, Status 3 = Resolved, Status 4 = Disputed
+    else if (status >= 1) {
+      return "Resolved"
+    }
+    return "Cancelled"
   }
 
   const isMarketActive = (status: number, endTime: number): boolean => {
-    const resolutionDate = new Date(endTime * 1000)
-    const now = new Date()
-    return status === 0 && resolutionDate > now
+    const now = Math.floor(Date.now() / 1000)
+    return status === 0 && endTime > now
   }
 
   const calculatePrices = (yesPool: string, noPool: string) => {
@@ -484,33 +488,62 @@ export default function ProfilePage() {
       const { bnbMarketContract, pdxMarketContract } = getReadOnlyContracts()
       const createdMarkets: Market[] = []
 
+      // 🔍 DEBUG: Log user address
+      console.log('=== PROFILE PAGE - FETCHING CREATED MARKETS ===')
+      console.log('User address:', address)
+
       // Fetch BNB markets
       try {
         const nextBNBMarketId = await bnbMarketContract.nextMarketId()
         const totalBNBMarkets = Number(nextBNBMarketId)
+        console.log('Total BNB markets to check:', totalBNBMarkets)
 
         for (let i = 0; i < totalBNBMarkets; i++) {
           const market = await getBNBMarket(i)
-          if (market && market.creator.toLowerCase() === address.toLowerCase()) {
-            createdMarkets.push(market)
+          if (market) {
+            console.log(`BNB Market ${i}:`, {
+              creator: market.creator,
+              question: market.question?.substring(0, 50),
+              matches: market.creator.toLowerCase() === address.toLowerCase()
+            })
+
+            if (market.creator.toLowerCase() === address.toLowerCase()) {
+              createdMarkets.push(market)
+              console.log(`✅ Match found! Added BNB market ${i}`)
+            }
           }
         }
       } catch (error) {
+        console.error('Error fetching BNB markets:', error)
       }
 
       // Fetch PDX markets
       try {
         const nextPDXMarketId = await pdxMarketContract.nextMarketId()
         const totalPDXMarkets = Number(nextPDXMarketId)
+        console.log('Total PDX markets to check:', totalPDXMarkets)
 
         for (let i = 0; i < totalPDXMarkets; i++) {
           const market = await getPDXMarket(i)
-          if (market && market.creator.toLowerCase() === address.toLowerCase()) {
-            createdMarkets.push(market)
+          if (market) {
+            console.log(`PDX Market ${i}:`, {
+              creator: market.creator,
+              question: market.question?.substring(0, 50),
+              matches: market.creator.toLowerCase() === address.toLowerCase()
+            })
+
+            if (market.creator.toLowerCase() === address.toLowerCase()) {
+              createdMarkets.push(market)
+              console.log(`✅ Match found! Added PDX market ${i}`)
+            }
           }
         }
       } catch (error) {
+        console.error('Error fetching PDX markets:', error)
       }
+
+      console.log('Total created markets found:', createdMarkets.length)
+      console.log('================================================')
 
       return createdMarkets
 
@@ -1147,7 +1180,8 @@ export default function ProfilePage() {
                                   View Market
                                 </Button>
 
-                                {position.yesTokens > 0 && (
+                                {/* Show Sell buttons only for active markets */}
+                                {position.status === "Active" && position.yesTokens > 0 && (
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -1159,7 +1193,7 @@ export default function ProfilePage() {
                                   </Button>
                                 )}
 
-                                {position.noTokens > 0 && (
+                                {position.status === "Active" && position.noTokens > 0 && (
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -1171,10 +1205,23 @@ export default function ProfilePage() {
                                   </Button>
                                 )}
 
+                                {/* Show Claim button for resolved markets (status 3) */}
+                                {position.marketStatus === 3 && (position.yesTokens > 0 || position.noTokens > 0) && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => router.push(`/claim/${position.marketId}`)}
+                                    className="backdrop-blur-sm bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
+                                  >
+                                    🏆 View Claim Status
+                                  </Button>
+                                )}
+
+                                {/* Show strategy buttons only for active markets */}
                                 {position.status === "Active" && (
                                   <>
                                     <Button
-                                      // variant="outline"
+                                      variant="outline"
                                       size="sm"
                                       onClick={() => handleSetStopLoss(position)}
                                       className="backdrop-blur-sm text-green-600 border-green-600 hover:bg-green-600/10"
@@ -1182,7 +1229,7 @@ export default function ProfilePage() {
                                       Set Stop Loss
                                     </Button>
                                     <Button
-                                      // variant="outline"
+                                      variant="outline"
                                       size="sm"
                                       onClick={() => handleSetTakeProfit(position)}
                                       className="backdrop-blur-sm text-red-600 border-red-600 hover:bg-red-600/10"
