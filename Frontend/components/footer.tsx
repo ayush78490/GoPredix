@@ -26,7 +26,7 @@ export default function Footer() {
                 </a>
               </Button>
               <Button variant="outline" size="icon" asChild>
-                <a href="https://discord.gg/predix" target="_blank" rel="noopener noreferrer">
+                <a href="https://discord.gg/JG7TZ6EFg" target="_blank" rel="noopener noreferrer">
                   <SiDiscord className="w-4 h-4" />
                 </a>
               </Button>
