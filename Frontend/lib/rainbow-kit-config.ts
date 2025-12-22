@@ -17,7 +17,9 @@ const customBscTestnet = {
 
 export const config = getDefaultConfig({
   appName: 'GoPredix',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID',
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || (() => {
+    throw new Error('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not defined. Please add it to your .env file.');
+  })(),
   chains: [
     customBscTestnet,
     bsc,
