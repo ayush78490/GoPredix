@@ -83,11 +83,14 @@ export function useWeb3() {
       if (rpcProvider) {
         setProvider(rpcProvider)
         setChainId(CHAIN_CONFIG.chainId)
+        setIsInitialized(true) // Set initialized immediately with RPC provider
       } else {
         console.error("❌ Failed to create RPC provider")
+        setIsInitialized(true) // Still set to true even if RPC fails
       }
     } catch (error) {
       console.error("❌ Error in RPC initialization:", error)
+      setIsInitialized(true) // Still set to true even on error
     }
   }, []) // Empty dependency array - runs ONLY once on mount
 
@@ -125,7 +128,6 @@ export function useWeb3() {
       setAccount(address)
       setChainId(Number(network.chainId))
       setLastConnectedAccount(address)
-      setIsInitialized(true)
 
       // Check if we're on the correct network
       if (Number(network.chainId) !== CHAIN_CONFIG.chainId) {
@@ -196,13 +198,11 @@ export function useWeb3() {
   useEffect(() => {
     const initializeWallet = async () => {
       if (hasUserDisconnected()) {
-        setIsInitialized(true)
         return
       }
 
       const ethereumProvider = getEthereumProvider()
       if (!ethereumProvider) {
-        setIsInitialized(true)
         return
       }
 
@@ -227,8 +227,6 @@ export function useWeb3() {
         }
       } catch (error) {
         console.error("❌ Error initializing wallet:", error)
-      } finally {
-        setIsInitialized(true)
       }
     }
 
