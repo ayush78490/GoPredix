@@ -9,22 +9,25 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Trophy, Medal, ArrowLeft, Wallet, Loader2, TrendingUp, Users, BarChart3, ExternalLink, AlertTriangle, Twitter } from "lucide-react"
+import { Trophy, Medal, ArrowLeft, Wallet, Loader2, TrendingUp, Users, BarChart3, ExternalLink, AlertTriangle, Twitter, Coins } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { ethers } from "ethers"
 import LightRays from "@/components/LightRays"
 import { useAccount, useWalletClient, useChainId } from "wagmi"
 import { usePredictionMarketBNB } from "@/hooks/use-predection-market"
 import { usePredictionMarketPDX } from "@/hooks/use-prediction-market-pdx"
+import { useClaimWinnings } from "@/hooks/useClaimWinnings"
 import TwitterShareModal from "@/components/twitter-share-modal"
 import ConnectTwitterButton from "@/components/connect-twitter-button"
 import { LogoLoading } from "@/components/ui/logo-loading"
+import { ClaimSuccessDialog } from "@/components/claim/ClaimSuccessDialog"
 
 // Import ABIs
 import BNB_MARKET_ARTIFACT from "@/contracts/Bazar.json"
 import BNB_HELPER_ARTIFACT from "@/contracts/helperContract.json"
 import PDX_MARKET_ARTIFACT from "@/contracts/PDXbazar.json"
 import PDX_HELPER_ARTIFACT from "@/contracts/PDXhelperContract.json"
+import DISPUTE_RESOLUTION_ARTIFACT from "@/contracts/DisputeResolution.json"
 
 // Helper function to extract ABI
 const extractABI = (artifact: any): ethers.InterfaceAbi => {
@@ -36,12 +39,14 @@ const BNB_MARKET_ABI = extractABI(BNB_MARKET_ARTIFACT)
 const BNB_HELPER_ABI = extractABI(BNB_HELPER_ARTIFACT)
 const PDX_MARKET_ABI = extractABI(PDX_MARKET_ARTIFACT)
 const PDX_HELPER_ABI = extractABI(PDX_HELPER_ARTIFACT)
+const DISPUTE_RESOLUTION_ABI = extractABI(DISPUTE_RESOLUTION_ARTIFACT)
 
 // Contract addresses - MUST MATCH the hooks!
 const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS!
 const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS!
 const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS!
 const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS!
+const DISPUTE_ADDRESS = process.env.NEXT_PUBLIC_DISPUTE_RESOLUTION_ADDRESS!
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
 
 interface UserStats {
@@ -75,6 +80,14 @@ interface MarketPosition {
   marketStatus: number
   endTime: number
   paymentToken: "BNB" | "PDX"
+  // Dispute-related fields
+  disputeId?: number
+  disputeStatus?: number
+  disputeOutcome?: number
+  canCreateDispute: boolean
+  canVoteOnDispute: boolean
+  canClaimDisputeStake: boolean
+  disputeDeadline?: number
 }
 
 interface Market {
@@ -97,6 +110,11 @@ interface Market {
   resolutionReason: string
   resolutionConfidence: number
   paymentToken: "BNB" | "PDX"
+  // LP Earnings Data
+  lpBalance?: string
+  lpValue?: string
+  lpEarnings?: string
+  lpEarningsPercent?: number
 }
 
 export default function ProfilePage() {
@@ -123,10 +141,19 @@ export default function ProfilePage() {
   const [createdMarkets, setCreatedMarkets] = useState<Market[]>([])
   const [showTwitterModal, setShowTwitterModal] = useState(false)
   const [selectedMarketForTweet, setSelectedMarketForTweet] = useState<Market | null>(null)
+  const [showRemoveLiquidityModal, setShowRemoveLiquidityModal] = useState(false)
+  const [selectedMarketForLP, setSelectedMarketForLP] = useState<Market | null>(null)
+  const [lpRemovalAmount, setLpRemovalAmount] = useState("")
 
   // Transaction State
   const [txStep, setTxStep] = useState<'idle' | 'approving' | 'selling' | 'success' | 'error'>('idle')
   const [txMessage, setTxMessage] = useState('')
+
+  // Claim Success Dialog State
+  const [showClaimSuccess, setShowClaimSuccess] = useState(false)
+  const [claimTxHash, setClaimTxHash] = useState<string>("")
+  const [claimAmount, setClaimAmount] = useState<string>("")
+  const [claimTimestamp, setClaimTimestamp] = useState<number>(0)
 
   // Hooks
   const bnbHook = usePredictionMarketBNB()
@@ -155,11 +182,15 @@ export default function ProfilePage() {
       const pdxMarketContract = new ethers.Contract(PDX_MARKET_ADDRESS, PDX_MARKET_ABI, provider)
       const pdxHelperContract = new ethers.Contract(PDX_HELPER_ADDRESS, PDX_HELPER_ABI, provider)
 
+      // Dispute Contract
+      const disputeContract = DISPUTE_ADDRESS ? new ethers.Contract(DISPUTE_ADDRESS, DISPUTE_RESOLUTION_ABI, provider) : null
+
       return {
         bnbMarketContract,
         bnbHelperContract,
         pdxMarketContract,
         pdxHelperContract,
+        disputeContract,
         provider
       }
     } catch (error) {
@@ -167,6 +198,46 @@ export default function ProfilePage() {
       throw error
     }
   }, [])
+
+  // Get dispute information for a market
+  const getDisputeInfo = useCallback(async (
+    marketContract: string,
+    marketId: number
+  ): Promise<{
+    disputeId: number
+    status: number
+    outcome: number
+    hasDispute: boolean
+  } | null> => {
+    try {
+      if (!DISPUTE_ADDRESS) {
+        return null
+      }
+
+      const { disputeContract } = getReadOnlyContracts()
+      if (!disputeContract) {
+        return null
+      }
+
+      const disputeId = await disputeContract.getMarketDispute(marketContract, marketId)
+
+      if (Number(disputeId) === 0) {
+        return null // No dispute
+      }
+
+      const disputeInfo = await disputeContract.getDisputeInfo(disputeId)
+
+      return {
+        disputeId: Number(disputeId),
+        status: Number(disputeInfo.status),
+        outcome: Number(disputeInfo.outcome),
+        hasDispute: true
+      }
+    } catch (error) {
+      console.error(`Error fetching dispute info for market ${marketId}:`, error)
+      return null
+    }
+  }, [getReadOnlyContracts])
 
   // Get individual BNB market
   const getBNBMarket = useCallback(async (marketId: number): Promise<Market | null> => {
@@ -452,35 +523,68 @@ export default function ProfilePage() {
       const pdxPositions = await getUserPDXPositions(address)
       const allPositions = [...bnbPositions, ...pdxPositions]
 
-      return allPositions.map(position => {
-        const prices = calculatePrices(position.market.yesPool, position.market.noPool)
+      const enhancedPositions = await Promise.all(
+        allPositions.map(async (position) => {
+          const prices = calculatePrices(position.market.yesPool, position.market.noPool)
 
-        return {
-          marketId: position.market.id,
-          question: position.market.question,
-          category: position.market.category || "General",
-          yesTokens: parseFloat(position.yesBalance),
-          noTokens: parseFloat(position.noBalance),
-          currentValue: parseFloat(position.yesBalance) * prices.yesPrice / 100 +
-            parseFloat(position.noBalance) * prices.noPrice / 100,
-          investedAmount: parseFloat(position.bnbInvested || position.pdxInvested || "0"),
-          potentialPnl: (parseFloat(position.yesBalance) * prices.yesPrice / 100 +
-            parseFloat(position.noBalance) * prices.noPrice / 100) -
-            parseFloat(position.bnbInvested || position.pdxInvested || "0"),
-          status: getMarketStatusText(position.market.status, position.market.endTime),
-          marketStatus: position.market.status,
-          endTime: position.market.endTime,
-          yesPrice: prices.yesPrice,
-          noPrice: prices.noPrice,
-          paymentToken: position.paymentToken
-        }
-      })
+          // Fetch dispute info for this market
+          const marketContractAddress = position.paymentToken === "BNB" ? BNB_MARKET_ADDRESS : PDX_MARKET_ADDRESS
+          const disputeInfo = await getDisputeInfo(marketContractAddress, position.market.id)
+
+          // Check if user can create dispute
+          const now = Math.floor(Date.now() / 1000)
+          const canCreateDispute =
+            position.market.status === 3 && // Resolved
+            position.market.disputeDeadline > now && // Within dispute window
+            !disputeInfo?.hasDispute || false // No existing dispute
+
+          // Check if user can vote on dispute
+          const canVoteOnDispute =
+            (disputeInfo?.hasDispute &&
+              disputeInfo.status === 1) || false // Active dispute
+
+          // Check if user can claim dispute stake
+          const canClaimDisputeStake =
+            (disputeInfo?.hasDispute &&
+              disputeInfo.status === 3) || false // Dispute resolved
+
+          return {
+            marketId: position.market.id,
+            question: position.market.question,
+            category: position.market.category || "General",
+            yesTokens: parseFloat(position.yesBalance),
+            noTokens: parseFloat(position.noBalance),
+            currentValue: parseFloat(position.yesBalance) * prices.yesPrice / 100 +
+              parseFloat(position.noBalance) * prices.noPrice / 100,
+            investedAmount: parseFloat(position.bnbInvested || position.pdxInvested || "0"),
+            potentialPnl: (parseFloat(position.yesBalance) * prices.yesPrice / 100 +
+              parseFloat(position.noBalance) * prices.noPrice / 100) -
+              parseFloat(position.bnbInvested || position.pdxInvested || "0"),
+            status: getMarketStatusText(position.market.status, position.market.endTime),
+            marketStatus: position.market.status,
+            endTime: position.market.endTime,
+            yesPrice: prices.yesPrice,
+            noPrice: prices.noPrice,
+            paymentToken: position.paymentToken,
+            // Dispute-related fields
+            disputeId: disputeInfo?.disputeId,
+            disputeStatus: disputeInfo?.status,
+            disputeOutcome: disputeInfo?.outcome,
+            canCreateDispute,
+            canVoteOnDispute,
+            canClaimDisputeStake,
+            disputeDeadline: position.market.disputeDeadline
+          }
+        })
+      )
+
+      return enhancedPositions
 
     } catch (error) {
       console.error(`Error fetching positions for ${address}:`, error)
       return []
     }
-  }, [getUserBNBPositions, getUserPDXPositions])
+  }, [getUserBNBPositions, getUserPDXPositions, getDisputeInfo])
 
   // Get markets created by user
   const getUserCreatedMarkets = useCallback(async (address: string): Promise<Market[]> => {
@@ -508,6 +612,42 @@ export default function ProfilePage() {
             })
 
             if (market.creator.toLowerCase() === address.toLowerCase()) {
+              // Fetch LP balance and calculate earnings
+              console.log(`🔍 Checking LP balance for BNB market ${i}`)
+
+              try {
+                const { bnbMarketContract } = getReadOnlyContracts()
+                const lpBalanceRaw = await bnbMarketContract.lpBalances(i, address)
+                const lpBalance = ethers.formatEther(lpBalanceRaw)
+                console.log(`  - LP Balance:`, lpBalance)
+                const lpBalanceNum = parseFloat(lpBalance)
+
+                if (lpBalanceNum > 0) {
+                  console.log(`✅ Market ${i} has LP tokens!`)
+                  // Calculate LP value
+                  const lpTotalSupply = parseFloat(market.lpTotalSupply)
+                  const poolValue = parseFloat(market.yesPool) + parseFloat(market.noPool)
+                  const lpValue = lpTotalSupply > 0 ? (lpBalanceNum / lpTotalSupply) * poolValue : 0
+
+                  // Calculate earnings (assume creator provided initial liquidity)
+                  const initialValue = parseFloat(market.totalBacking)
+                  const earnings = lpValue - initialValue
+                  const earningsPercent = initialValue > 0 ? (earnings / initialValue) * 100 : 0
+
+                  console.log(`  - LP Value: ${lpValue.toFixed(6)} BNB`)
+                  console.log(`  - Earnings: ${earnings.toFixed(6)} BNB (${earningsPercent.toFixed(2)}%)`)
+
+                  market.lpBalance = lpBalance
+                  market.lpValue = lpValue.toFixed(6)
+                  market.lpEarnings = earnings.toFixed(6)
+                  market.lpEarningsPercent = earningsPercent
+                } else {
+                  console.log(`ℹ️ Market ${i} has zero LP balance`)
+                }
+              } catch (lpError) {
+                console.error(`❌ Error fetching LP data for BNB market ${i}:`, lpError)
+              }
+
               createdMarkets.push(market)
               console.log(`✅ Match found! Added BNB market ${i}`)
             }
@@ -809,8 +949,6 @@ export default function ProfilePage() {
       //     isYes,
       //     tokenAmount.toString(),
       //     parseFloat(takeProfitPrice)
-      //   )
-      // } else {
       //   await pdxHook.createTakeProfitOrder(
       //     selectedPosition.marketId,
       //     isYes,
@@ -825,6 +963,68 @@ export default function ProfilePage() {
     } catch (err: any) {
       console.error("Error setting take profit:", err)
       setError(err.message || "Failed to set take profit")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // ==================== CLAIM WINNINGS HANDLER ====================
+
+  const handleClaimWinnings = async (position: MarketPosition) => {
+    setActionLoading(`claim-${position.marketId}`)
+    setError(null)
+
+    try {
+      let txReceipt
+      if (position.paymentToken === "BNB") {
+        txReceipt = await bnbHook.claimRedemption(position.marketId)
+      } else {
+        txReceipt = await pdxHook.claimPDXRedemption(position.marketId)
+      }
+
+      // Show success dialog with transaction details
+      if (txReceipt) {
+        setClaimTxHash(txReceipt.hash || txReceipt.transactionHash)
+        setClaimAmount(`${position.currentValue.toFixed(4)} ${position.paymentToken}`)
+        setClaimTimestamp(Math.floor(Date.now() / 1000))
+        setShowClaimSuccess(true)
+      }
+
+      // Refresh data after claim
+      await refreshData()
+
+    } catch (err: any) {
+      console.error("Error claiming winnings:", err)
+      setError(err.message || "Failed to claim winnings")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // ==================== REMOVE LIQUIDITY HANDLER ====================
+
+  const handleRemoveLiquidity = async () => {
+    if (!selectedMarketForLP || !lpRemovalAmount) return
+
+    setActionLoading(`remove-lp-${selectedMarketForLP.paymentToken}-${selectedMarketForLP.id}`)
+    setError(null)
+
+    try {
+      if (selectedMarketForLP.paymentToken === "BNB") {
+        await bnbHook.removeLiquidity(selectedMarketForLP.id, lpRemovalAmount)
+      } else {
+        await pdxHook.removePDXLiquidity(selectedMarketForLP.id, lpRemovalAmount)
+      }
+
+      // Close modal and refresh data
+      setShowRemoveLiquidityModal(false)
+      setSelectedMarketForLP(null)
+      setLpRemovalAmount("")
+      await refreshData()
+
+    } catch (err: any) {
+      console.error("Error removing liquidity:", err)
+      setError(err.message || "Failed to remove liquidity")
     } finally {
       setActionLoading(null)
     }
@@ -1119,6 +1319,29 @@ export default function ProfilePage() {
                                         >
                                           {position.status}
                                         </Badge>
+
+                                        {/* Dispute Status Badges */}
+                                        {position.disputeStatus !== undefined && (
+                                          <Badge
+                                            variant="destructive"
+                                            className="backdrop-blur-sm bg-yellow-600 hover:bg-yellow-700"
+                                          >
+                                            {position.disputeStatus === 1 && "⚠️ Disputed"}
+                                            {position.disputeStatus === 2 && "⏳ Finalizing"}
+                                            {position.disputeStatus === 3 && "✅ Dispute Resolved"}
+                                            {position.disputeStatus === 4 && "❌ Dispute Rejected"}
+                                          </Badge>
+                                        )}
+
+                                        {/* Can Create Dispute Badge */}
+                                        {position.canCreateDispute && (
+                                          <Badge
+                                            variant="outline"
+                                            className="backdrop-blur-sm border-yellow-600 text-yellow-600"
+                                          >
+                                            ⏰ Can Dispute
+                                          </Badge>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -1205,15 +1428,71 @@ export default function ProfilePage() {
                                   </Button>
                                 )}
 
-                                {/* Show Claim button for resolved markets (status 3) */}
-                                {position.marketStatus === 3 && (position.yesTokens > 0 || position.noTokens > 0) && (
+                                {/* Show Claim button for resolved/ended markets where user has tokens */}
+                                {position.status === "Resolved" && (position.yesTokens > 0 || position.noTokens > 0) && (
                                   <Button
                                     type="button"
                                     size="sm"
-                                    onClick={() => router.push(`/claim/${position.marketId}`)}
+                                    onClick={() => handleClaimWinnings(position)}
+                                    disabled={actionLoading === `claim-${position.marketId}`}
                                     className="backdrop-blur-sm bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
                                   >
-                                    🏆 View Claim Status
+                                    {actionLoading === `claim-${position.marketId}` ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Claiming...
+                                      </>
+                                    ) : (
+                                      "🏆 Claim Winnings"
+                                    )}
+                                  </Button>
+                                )}
+
+                                {/* Create Dispute Button */}
+                                {position.canCreateDispute && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => router.push(`/disputes?create=${position.marketId}`)}
+                                    className="backdrop-blur-sm bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white border-0"
+                                  >
+                                    ⚖️ Create Dispute
+                                  </Button>
+                                )}
+
+                                {/* Vote on Dispute Button */}
+                                {position.canVoteOnDispute && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => router.push(`/disputes?vote=${position.disputeId}`)}
+                                    className="backdrop-blur-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0"
+                                  >
+                                    🗳️ Vote on Dispute
+                                  </Button>
+                                )}
+
+                                {/* Claim Dispute Stakes Button */}
+                                {position.canClaimDisputeStake && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => router.push(`/disputes?claim=${position.disputeId}`)}
+                                    className="backdrop-blur-sm bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0"
+                                  >
+                                    💰 Claim Dispute Stakes
+                                  </Button>
+                                )}
+
+                                {/* View Dispute Button - If dispute exists */}
+                                {position.disputeId && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => router.push(`/disputes?id=${position.disputeId}`)}
+                                    className="backdrop-blur-sm border-yellow-600 text-yellow-600 hover:bg-yellow-600/10"
+                                  >
+                                    ⚖️ View Dispute
                                   </Button>
                                 )}
 
@@ -1599,8 +1878,53 @@ export default function ProfilePage() {
                               <span className="text-red-400 font-semibold">NO: {prices.noPrice}%</span>
                             </div>
                           </div>
+                          {/* LP Earnings Display */}
+                          {market.lpBalance && parseFloat(market.lpBalance) > 0 && (
+                            <div className="mt-3 p-4 bg-gradient-to-r from-green-950/30 to-emerald-950/30 border border-green-600/30 rounded-lg">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Coins className="w-4 h-4 text-green-400" />
+                                <div className="text-sm font-semibold text-green-400">LP Position</div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3 text-xs">
+                                <div className="space-y-1">
+                                  <div className="text-muted-foreground">LP Tokens</div>
+                                  <div className="font-semibold text-white">{parseFloat(market.lpBalance).toFixed(4)}</div>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="text-muted-foreground">Current Value</div>
+                                  <div className="font-semibold text-white">{market.lpValue} {market.paymentToken}</div>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="text-muted-foreground">Earnings</div>
+                                  <div className={`font-semibold ${parseFloat(market.lpEarnings || "0") >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {parseFloat(market.lpEarnings || "0") >= 0 ? '+' : ''}{market.lpEarnings} {market.paymentToken}
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="text-muted-foreground">ROI</div>
+                                  <div className={`font-semibold ${(market.lpEarningsPercent || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {(market.lpEarningsPercent || 0) >= 0 ? '+' : ''}{(market.lpEarningsPercent || 0).toFixed(2)}%
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <div className="flex gap-2">
+                          {market.lpBalance && parseFloat(market.lpBalance) > 0 && (
+                            <Button
+                              onClick={() => {
+                                setSelectedMarketForLP(market)
+                                setLpRemovalAmount(market.lpBalance || "")
+                                setShowRemoveLiquidityModal(true)
+                              }}
+                              variant="outline"
+                              className="gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/50"
+                            >
+                              <Coins className="w-4 h-4" />
+                              Remove Liquidity
+                            </Button>
+                          )}
                           <Button
                             onClick={() => handleShareOnTwitter(market)}
                             variant="outline"
@@ -1626,6 +1950,112 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* Remove Liquidity Modal */}
+        {showRemoveLiquidityModal && selectedMarketForLP && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setShowRemoveLiquidityModal(false)} />
+            <Card className="relative w-full max-w-md backdrop-blur-sm bg-card/95">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Coins className="w-5 h-5 text-emerald-400" />
+                  Remove Liquidity & Claim Fees
+                </CardTitle>
+                <CardDescription>
+                  {selectedMarketForLP.question}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* LP Balance Info */}
+                <div className="p-4 bg-gradient-to-r from-emerald-950/30 to-green-950/30 border border-emerald-600/30 rounded-lg">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-muted-foreground mb-1">Your LP Tokens</div>
+                      <div className="font-semibold text-white">{parseFloat(selectedMarketForLP.lpBalance || '0').toFixed(4)}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground mb-1">Current Value</div>
+                      <div className="font-semibold text-white">{selectedMarketForLP.lpValue} {selectedMarketForLP.paymentToken}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground mb-1">Earnings</div>
+                      <div className="font-semibold text-green-400">{selectedMarketForLP.lpEarnings} {selectedMarketForLP.paymentToken}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground mb-1">ROI</div>
+                      <div className={`font-semibold ${(selectedMarketForLP.lpEarningsPercent || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {(selectedMarketForLP.lpEarningsPercent || 0) >= 0 ? '+' : ''}{(selectedMarketForLP.lpEarningsPercent || 0).toFixed(2)}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LP Amount Input */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    LP Tokens to Remove
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={lpRemovalAmount}
+                      onChange={(e) => setLpRemovalAmount(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md bg-background pr-16"
+                      placeholder="0.0"
+                      step="0.0001"
+                      max={selectedMarketForLP.lpBalance}
+                    />
+                    <Button
+                      onClick={() => setLpRemovalAmount(selectedMarketForLP.lpBalance || "")}
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 text-xs"
+                    >
+                      MAX
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Available: {parseFloat(selectedMarketForLP.lpBalance || '0').toFixed(4)} LP
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/50 rounded-md">
+                    <p className="text-sm text-destructive">{error}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleRemoveLiquidity}
+                    disabled={!lpRemovalAmount || parseFloat(lpRemovalAmount) <= 0 || !!actionLoading}
+                    className="flex-1 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white border-0"
+                  >
+                    {actionLoading === `remove-lp-${selectedMarketForLP.paymentToken}-${selectedMarketForLP.id}` ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Removing...
+                      </>
+                    ) : (
+                      "💰 Claim Fees"
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowRemoveLiquidityModal(false)
+                      setSelectedMarketForLP(null)
+                      setLpRemovalAmount("")
+                    }}
+                    variant="outline"
+                    disabled={!!actionLoading}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Twitter Share Modal */}
         {showTwitterModal && selectedMarketForTweet && (
           <TwitterShareModal
@@ -1636,6 +2066,16 @@ export default function ProfilePage() {
             }}
           />
         )}
+
+        {/* Claim Success Dialog */}
+        <ClaimSuccessDialog
+          isOpen={showClaimSuccess}
+          onClose={() => setShowClaimSuccess(false)}
+          txHash={claimTxHash}
+          amount={claimAmount}
+          timestamp={claimTimestamp}
+          autoCloseMs={3000}
+        />
 
         <Footer />
       </div>

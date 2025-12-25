@@ -14,8 +14,8 @@ async function main() {
     const LP_FEE_BPS = 7000; // 70% of fees go to LPs
     const RESOLUTION_SERVER = deployer.address; // Use deployer as resolution server for now
 
-    const deployedContracts = {};
-    const abiExports = {};
+    const deployedContracts: Record<string, string> = {};
+    const abiExports: Record<string, string> = {};
 
     // ==================== STEP 1: Deploy BNB Prediction Market ====================
     console.log('📦 Step 1: Deploying BNB Prediction Market...');

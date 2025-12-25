@@ -15,6 +15,8 @@ import { useRouter } from "next/navigation"
 import { useAccount, useChainId, useConfig, useSwitchChain } from "wagmi"
 import { LogoLoading } from "@/components/ui/logo-loading"
 
+import { ClaimTransactionTable } from "@/components/claim/ClaimTransactionTable"
+
 const CATEGORIES = [
   "All Markets", "Politics", "Finance", "Crypto", "Sports", "Tech", "Economy", "General"
 ]
@@ -270,7 +272,8 @@ export default function MarketsPage() {
       <div className="relative z-10 bg-black/80 min-h-screen">
         <Header />
 
-        <div className="max-w-7xl mx-auto px-4 py-8 ">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          {/* Header Section */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 mt-[10vh]">
             <div>
               <h1 className="text-4xl font-bold mb-2 text-white">All Markets</h1>
@@ -396,72 +399,83 @@ export default function MarketsPage() {
             </div>
           </div>
 
-          {isLoading && (
-            <div className="flex justify-center items-center py-20 backdrop-blur-sm bg-card/80 rounded-lg">
-              <LogoLoading size={64} />
-            </div>
-          )}
-
-          {error && !isLoading && (
-            <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6 backdrop-blur-sm">
-              <p className="text-destructive font-medium"> Error loading markets</p>
-              <p className="text-destructive/80 text-sm mt-1">something went wrong</p>
-              <Button onClick={refreshMarkets} variant="outline" size="sm" className="mt-2 bg-card/80">
-                Try Again
-              </Button>
-            </div>
-          )}
-
-          {!isLoading && !error && (
-            <>
-              {filteredMarkets.length > 0 ? (
-                <>
-                  <div className="mb-4 text-sm text-muted-foreground">
-                    Showing {filteredMarkets.length} of {stats.totalMarkets} markets
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredMarkets.map((market) => {
-                      const marketKey = `${market.paymentToken}-${market.id}`;
-                      const isLoadingMarket = loadingMarketId === marketKey;
-
-                      return (
-                        <MarketCard
-                          key={marketKey}
-                          market={market}
-                          disabled={!isConnected || !isCorrectNetwork || isLoadingMarket}
-                          isLoading={isLoadingMarket}
-                          onClick={() => handleMarketClick(market)}
-                        />
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-16 bg-card/50 rounded-lg backdrop-blur-sm">
-                  <p className="text-muted-foreground text-lg mb-2">
-                    {stats.totalMarkets === 0
-                      ? " No markets yet. Be the first to create one!"
-                      : " No markets match your filters."}
-                  </p>
-                  {stats.totalMarkets > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedCategory("All Markets")
-                        setSearchQuery("")
-                        setSelectedPaymentToken(null)
-                        setSelectedStatus(null)
-                      }}
-                      className="mt-4 bg-card/80"
-                    >
-                      Clear All Filters
-                    </Button>
-                  )}
+          {/* Two Column Layout: Markets + Transaction Table */}
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
+            {/* Left Column: Markets */}
+            <div>
+              {isLoading && (
+                <div className="flex justify-center items-center py-20 backdrop-blur-sm bg-card/80 rounded-lg">
+                  <LogoLoading size={64} />
                 </div>
               )}
-            </>
-          )}
+
+              {error && !isLoading && (
+                <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6 backdrop-blur-sm">
+                  <p className="text-destructive font-medium"> Error loading markets</p>
+                  <p className="text-destructive/80 text-sm mt-1">something went wrong</p>
+                  <Button onClick={refreshMarkets} variant="outline" size="sm" className="mt-2 bg-card/80">
+                    Try Again
+                  </Button>
+                </div>
+              )}
+
+              {!isLoading && !error && (
+                <>
+                  {filteredMarkets.length > 0 ? (
+                    <>
+                      <div className="mb-4 text-sm text-muted-foreground">
+                        Showing {filteredMarkets.length} of {stats.totalMarkets} markets
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4">
+                        {filteredMarkets.map((market) => {
+                          const marketKey = `${market.paymentToken}-${market.id}`;
+                          const isLoadingMarket = loadingMarketId === marketKey;
+
+                          return (
+                            <MarketCard
+                              key={marketKey}
+                              market={market}
+                              disabled={!isConnected || !isCorrectNetwork || isLoadingMarket}
+                              isLoading={isLoadingMarket}
+                              onClick={() => handleMarketClick(market)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-16 bg-card/50 rounded-lg backdrop-blur-sm">
+                      <p className="text-muted-foreground text-lg mb-2">
+                        {stats.totalMarkets === 0
+                          ? " No markets yet. Be the first to create one!"
+                          : " No markets match your filters."}
+                      </p>
+                      {stats.totalMarkets > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedCategory("All Markets")
+                            setSearchQuery("")
+                            setSelectedPaymentToken(null)
+                            setSelectedStatus(null)
+                          }}
+                          className="mt-4 bg-card/80"
+                        >
+                          Clear All Filters
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Right Column: Recent Claims */}
+            <div className="xl:sticky xl:top-24 xl:self-start">
+              <ClaimTransactionTable />
+            </div>
+          </div>
         </div>
 
         <Footer />

@@ -13,19 +13,39 @@ const BNB_HELPER_ADDRESS = process.env.NEXT_PUBLIC_HELPER_CONTRACT_ADDRESS
 const PDX_HELPER_ADDRESS = process.env.NEXT_PUBLIC_PDX_HELPER_ADDRESS
 
 // Minimal ABIs for what we need
+interface UserStats {
+    address: string
+    totalInvestment: string
+    bnbInvestment: string
+    pdxInvestment: string
+    totalVolume: number
+    totalPositions: number
+    totalProfit: string
+    realizedProfit: string
+    unrealizedProfit: string
+    profitPercent: number
+}
+
 const BNB_MARKET_ABI = [
     'function nextMarketId() view returns (uint256)',
     'function markets(uint256) view returns (address creator, string question, string category, uint256 endTime, uint8 status, uint8 outcome, uint256 yesPool, uint256 noPool, uint256 totalBacking)',
+    'function userInvestments(uint256 marketId, address user) view returns (uint256 totalInvested, uint256 yesBalance, uint256 noBalance)',
+    'event RedemptionClaimed(uint256 indexed marketId, address indexed user, uint256 amount)',
 ]
 
 const PDX_MARKET_ABI = [
     'function nextMarketId() view returns (uint256)',
     'function markets(uint256) view returns (address creator, string question, string category, uint256 endTime, uint8 status, uint8 outcome, address yesToken, address noToken, uint256 yesPool, uint256 noPool, uint256 totalBacking)',
     'function userInvestments(uint256 marketId, address user) view returns (uint256 totalInvested, uint256 yesBalance, uint256 noBalance)',
+    'event RedemptionClaimed(uint256 indexed marketId, address indexed user, uint256 amount)',
 ]
 
 const HELPER_ABI = [
     'function getUserTotalInvestment(address user) view returns (uint256)',
+]
+
+const OUTCOME_TOKEN_ABI = [
+    'function balanceOf(address) view returns (uint256)',
 ]
 
 // Helper to delay between RPC calls
@@ -65,10 +85,11 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        const bnbContract = new ethers.Contract(BNB_MARKET_ADDRESS, BNB_MARKET_ABI, bnbProvider)
-        const pdxContract = new ethers.Contract(PDX_MARKET_ADDRESS, PDX_MARKET_ABI, pdxProvider)
-        const bnbHelperContract = new ethers.Contract(BNB_HELPER_ADDRESS, HELPER_ABI, bnbProvider)
-        const pdxHelperContract = new ethers.Contract(PDX_HELPER_ADDRESS, HELPER_ABI, pdxProvider)
+        // TypeScript assertions: these are guaranteed to be defined after the check above
+        const bnbContract = new ethers.Contract(BNB_MARKET_ADDRESS!, BNB_MARKET_ABI, bnbProvider)
+        const pdxContract = new ethers.Contract(PDX_MARKET_ADDRESS!, PDX_MARKET_ABI, pdxProvider)
+        const bnbHelperContract = new ethers.Contract(BNB_HELPER_ADDRESS!, HELPER_ABI, bnbProvider)
+        const pdxHelperContract = new ethers.Contract(PDX_HELPER_ADDRESS!, HELPER_ABI, pdxProvider)
 
         // Get total market counts
         const [bnbNextId, pdxNextId] = await Promise.all([
@@ -153,7 +174,7 @@ export async function GET(request: NextRequest) {
 
         // Now calculate stats for each trader (limit to top 15)
         const tradersList = Array.from(traders).slice(0, 15)
-        const userStats = []
+        const userStats: UserStats[] = []
 
         for (const trader of tradersList) {
             try {
@@ -161,6 +182,8 @@ export async function GET(request: NextRequest) {
                 let pdxInvestment = '0'
                 let totalVolume = 0
                 let totalPositions = 0
+                let realizedProfit = 0
+                let unrealizedProfit = 0
 
                 // Get BNB investment using helper contract
                 try {
@@ -184,7 +207,78 @@ export async function GET(request: NextRequest) {
                     console.error(`Error getting PDX investment for ${trader}:`, err)
                 }
 
+                // Calculate realized profits from RedemptionClaimed events
+                try {
+                    const currentBlock = await bnbProvider.getBlockNumber()
+                    const fromBlock = Math.max(0, currentBlock - 100000)
+
+                    // BNB claims
+                    const bnbClaimFilter = bnbContract.filters.RedemptionClaimed(null, trader)
+                    const bnbClaims = await bnbContract.queryFilter(bnbClaimFilter, fromBlock, 'latest')
+                    for (const claim of bnbClaims) {
+                        if ('args' in claim) {
+                            realizedProfit += parseFloat(ethers.formatEther(claim.args[2]))
+                        }
+                    }
+
+                    // PDX claims
+                    const pdxClaimFilter = pdxContract.filters.RedemptionClaimed(null, trader)
+                    const pdxClaims = await pdxContract.queryFilter(pdxClaimFilter, fromBlock, 'latest')
+                    for (const claim of pdxClaims) {
+                        if ('args' in claim) {
+                            realizedProfit += parseFloat(ethers.formatEther(claim.args[2]))
+                        }
+                    }
+                } catch (err) {
+                    console.error(`Error fetching claims for ${trader}:`, err)
+                }
+
+                // Calculate unrealized profits from current positions
+                try {
+                    for (const market of allMarkets) {
+                        try {
+                            const contract = market.paymentToken === 'BNB' ? bnbContract : pdxContract
+                            const investment = await contract.userInvestments(market.id, trader)
+
+                            const totalInvested = parseFloat(ethers.formatEther(investment[0]))
+                            const yesBalance = parseFloat(ethers.formatEther(investment[1]))
+                            const noBalance = parseFloat(ethers.formatEther(investment[2]))
+
+                            if (totalInvested > 0) {
+                                totalPositions++
+
+                                // Calculate current value based on market status
+                                if (market.status === 3) { // Resolved
+                                    // For resolved markets, value is based on outcome
+                                    if (market.outcome === 1) { // YES won
+                                        unrealizedProfit += yesBalance - totalInvested
+                                    } else if (market.outcome === 2) { // NO won
+                                        unrealizedProfit += noBalance - totalInvested
+                                    }
+                                } else { // Active or other status
+                                    // Calculate current market value
+                                    const prices = calculatePrices(market.yesPool, market.noPool)
+                                    const yesValue = yesBalance * (prices.yesPrice / 100)
+                                    const noValue = noBalance * (prices.noPrice / 100)
+                                    const currentValue = yesValue + noValue
+                                    unrealizedProfit += currentValue - totalInvested
+                                }
+                            }
+
+                            await delay(50)
+                        } catch (err) {
+                            // Skip this market
+                        }
+                    }
+                } catch (err) {
+                    console.error(`Error calculating unrealized profit for ${trader}:`, err)
+                }
+
                 const totalInvestment = (parseFloat(bnbInvestment) + parseFloat(pdxInvestment)).toFixed(4)
+                const totalProfit = realizedProfit + unrealizedProfit
+                const profitPercent = parseFloat(totalInvestment) > 0
+                    ? (totalProfit / parseFloat(totalInvestment)) * 100
+                    : 0
 
                 userStats.push({
                     address: trader,
@@ -192,7 +286,11 @@ export async function GET(request: NextRequest) {
                     bnbInvestment: parseFloat(bnbInvestment).toFixed(4),
                     pdxInvestment: parseFloat(pdxInvestment).toFixed(4),
                     totalVolume,
-                    totalPositions: totalVolume > 0 ? 1 : 0 // Simplified: if user has any investment, they have positions
+                    totalPositions,
+                    totalProfit: totalProfit.toFixed(4),
+                    realizedProfit: realizedProfit.toFixed(4),
+                    unrealizedProfit: unrealizedProfit.toFixed(4),
+                    profitPercent: parseFloat(profitPercent.toFixed(2))
                 })
 
                 // Delay between traders

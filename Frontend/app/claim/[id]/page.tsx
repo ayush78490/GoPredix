@@ -263,7 +263,7 @@ export default function ClaimStatusPage() {
                 />
             </div>
 
-            <div className="relative z-10 bg-black/80 min-h-screen">
+            <div className="relative z-10 bg-black/80 min-h-screen py-20">
                 <Header />
 
                 <div className="max-w-4xl mx-auto px-4 py-8">
@@ -496,7 +496,7 @@ export default function ClaimStatusPage() {
                                 </div>
                             ) : market.status < 3 ? (
                                 <div className="text-center">
-                                    <Button disabled className="w-full py-6 text-lg">
+                                    <Button disabled className="w-full py-6 text-white bg-transparent">
                                         <Clock className="w-5 h-5 mr-2" />
                                         Awaiting AI Resolution
                                     </Button>

@@ -7,7 +7,6 @@ export * as bnbNativeMarketplaceSol from "./BNBNativeMarketplace.sol";
 export * as bazarSol from "./Bazar.sol";
 export * as custodialMarketplaceSol from "./CustodialMarketplace.sol";
 export * as marketMarketplaceSol from "./MarketMarketplace.sol";
-export * as pdxDisputeResolutionSol from "./PDXDisputeResolution.sol";
 export * as pdXbazarSol from "./PDXbazar.sol";
 export * as pdXhelperContractSol from "./PDXhelperContract.sol";
 export * as gpxSol from "./gpx.sol";

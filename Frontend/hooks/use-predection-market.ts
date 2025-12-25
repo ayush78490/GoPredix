@@ -399,7 +399,7 @@ export function usePredictionMarketBNB() {
         platformFees: ethers.formatEther(marketData.platformFees),
         resolutionRequestedAt: Number(marketData.resolutionRequestedAt),
         resolutionRequester: marketData.resolutionRequester,
-        resolutionReason: marketData.resolutionReason ? ethers.decodeBytes32String(marketData.resolutionReason) : "",
+        resolutionReason: marketData.resolutionReason || "",
         resolutionConfidence: Number(marketData.resolutionConfidence),
         disputeDeadline: Number(marketData.disputeDeadline),
         disputer: marketData.disputer,
@@ -815,6 +815,21 @@ export function usePredictionMarketBNB() {
   }, [signer, isCorrectNetwork, marketContract])
 
   // ==================== LIQUIDITY FUNCTIONS ====================
+
+  const getLPBalance = useCallback(async (
+    marketId: number,
+    userAddress: string
+  ): Promise<string> => {
+    if (!marketContract) throw new Error('Market contract not available')
+
+    try {
+      const lpBalance = await (marketContract as any).lpBalances(BigInt(marketId), userAddress)
+      return ethers.formatEther(lpBalance)
+    } catch (error) {
+      console.error('❌ Error fetching LP balance:', error)
+      return "0"
+    }
+  }, [marketContract])
 
   const addLiquidity = useCallback(async (
     marketId: number,
@@ -1242,6 +1257,7 @@ export function usePredictionMarketBNB() {
     sellNoForBNB,
 
     // Liquidity management
+    getLPBalance,
     addLiquidity,
     removeLiquidity,
 

@@ -1,0 +1,14 @@
+name = "auto-resolution-worker"
+main = "src/cloudflare-worker/auto-resolution-worker.ts"
+compatibility_date = "2024-01-01"
+
+# Cron trigger - runs every 5 minutes
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Environment variables (set via wrangler secret put)
+# RESOLVER_PRIVATE_KEY - Private key for resolver wallet
+# RPC_URL - BSC Testnet RPC URL
+# RESOLUTION_API_URL - URL to AI resolution API (e.g., https://your-api.vercel.app/api/resolveMarket)
+# BNB_MARKET_ADDRESS - BNB market contract address
+# PDX_MARKET_ADDRESS - PDX market contract address

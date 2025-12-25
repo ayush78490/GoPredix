@@ -22,6 +22,10 @@ interface UserStats {
   pdxInvestment: string
   totalVolume: number
   totalPositions: number
+  totalProfit: string
+  realizedProfit: string
+  unrealizedProfit: string
+  profitPercent: number
 }
 
 interface Market {
@@ -50,6 +54,7 @@ export default function Leaderboard() {
   const [data, setData] = useState<LeaderboardData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<'investment' | 'profit'>('profit')
 
   // Main data fetching - single API call
   const fetchLeaderboardData = useCallback(async () => {
@@ -142,12 +147,30 @@ export default function Leaderboard() {
               <div>
                 <h1 className="text-3xl md:text-4xl font-bold mb-2">Investor Leaderboard</h1>
                 <p className="text-muted-foreground backdrop-blur-sm bg-card/80 p-2 rounded-lg inline-block">
-                  Top investors ranked by total investment
+                  Top investors ranked by {sortBy === 'investment' ? 'total investment' : 'total profit'}
                 </p>
               </div>
             </div>
 
             <div className="flex gap-2">
+              <div className="flex gap-1 backdrop-blur-sm bg-card/80 rounded-lg p-1">
+                <Button
+                  onClick={() => setSortBy('profit')}
+                  variant={sortBy === 'profit' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="text-xs"
+                >
+                  💰 By Profit
+                </Button>
+                <Button
+                  onClick={() => setSortBy('investment')}
+                  variant={sortBy === 'investment' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="text-xs"
+                >
+                  📊 By Investment
+                </Button>
+              </div>
               <Button
                 onClick={refreshData}
                 disabled={isLoading}
@@ -202,13 +225,13 @@ export default function Leaderboard() {
             </Card>
             <Card className="backdrop-blur-sm bg-card/80 hover:border-white/50">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Investment</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Profit</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center">
                   <TrendingUp className="w-8 h-8 text-primary mr-2" />
-                  <div className="text-2xl font-bold text-blue-600">
-                    ${data?.userStats.reduce((sum, user) => sum + parseFloat(user.totalInvestment), 0).toLocaleString() || 0}
+                  <div className={`text-2xl font-bold ${data && data.userStats.reduce((sum, user) => sum + parseFloat(user.totalProfit), 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    ${data?.userStats.reduce((sum, user) => sum + parseFloat(user.totalProfit), 0).toFixed(2) || '0.00'}
                   </div>
                 </div>
               </CardContent>
@@ -230,67 +253,85 @@ export default function Leaderboard() {
                 </CardContent>
               </Card>
             ) : (
-              data.userStats.map((user, index) => (
-                <Card key={user.address} className="backdrop-blur-sm bg-card/80 hover:border-primary/50 transition-all">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className={`flex items-center justify-center w-10 h-10 rounded-full ${getRankColor(index)} bg-card/50 backdrop-blur-sm`}>
-                          {getRankIcon(index)}
+              [...(data?.userStats || [])]
+                .sort((a, b) => {
+                  if (sortBy === 'profit') {
+                    return parseFloat(b.totalProfit) - parseFloat(a.totalProfit)
+                  }
+                  return parseFloat(b.totalInvestment) - parseFloat(a.totalInvestment)
+                })
+                .map((user, index) => (
+                  <Card key={user.address} className="backdrop-blur-sm bg-card/80 hover:border-primary/50 transition-all">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${getRankColor(index)} bg-card/50 backdrop-blur-sm`}>
+                            {getRankIcon(index)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              {data.profiles[user.address.toLowerCase()] ? (
+                                <TwitterProfileDisplay
+                                  username={data.profiles[user.address.toLowerCase()].twitter_username}
+                                  name={data.profiles[user.address.toLowerCase()].twitter_name}
+                                  avatarUrl={data.profiles[user.address.toLowerCase()].twitter_avatar_url}
+                                />
+                              ) : (
+                                <CardTitle className="text-sm font-mono">{formatAddress(user.address)}</CardTitle>
+                              )}
+                              <a
+                                href={`https://testnet.bscscan.com/address/${user.address}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:text-primary/80"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            </div>
+                            <CardDescription className="text-xs">
+                              {user.totalPositions} Positions • ${parseFloat(user.totalInvestment).toFixed(2)} Invested •
+                              <span className={parseFloat(user.totalProfit) >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                ${parseFloat(user.totalProfit).toFixed(2)} Profit ({user.profitPercent >= 0 ? '+' : ''}{user.profitPercent}%)
+                              </span>
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Badge variant="outline" className="backdrop-blur-sm bg-amber-500/10 text-amber-500 border-amber-500/50">
+                            🔶 ${parseFloat(user.bnbInvestment).toFixed(2)} BNB
+                          </Badge>
+                          <Badge variant="outline" className="backdrop-blur-sm bg-purple-500/10 text-purple-500 border-purple-500/50">
+                            💎 ${parseFloat(user.pdxInvestment).toFixed(2)} PDX
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Total Investment</p>
+                          <p className="text-lg font-bold text-blue-600">${parseFloat(user.totalInvestment).toFixed(2)}</p>
                         </div>
                         <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            {data.profiles[user.address.toLowerCase()] ? (
-                              <TwitterProfileDisplay
-                                username={data.profiles[user.address.toLowerCase()].twitter_username}
-                                name={data.profiles[user.address.toLowerCase()].twitter_name}
-                                avatarUrl={data.profiles[user.address.toLowerCase()].twitter_avatar_url}
-                              />
-                            ) : (
-                              <CardTitle className="text-sm font-mono">{formatAddress(user.address)}</CardTitle>
-                            )}
-                            <a
-                              href={`https://testnet.bscscan.com/address/${user.address}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:text-primary/80"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          </div>
-                          <CardDescription className="text-xs">
-                            {user.totalPositions} Positions • ${parseFloat(user.totalInvestment).toFixed(2)} Total Investment
-                          </CardDescription>
+                          <p className="text-xs text-muted-foreground">Total Profit</p>
+                          <p className={`text-lg font-bold ${parseFloat(user.totalProfit) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {parseFloat(user.totalProfit) >= 0 ? '+' : ''}${parseFloat(user.totalProfit).toFixed(2)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">ROI</p>
+                          <p className={`text-lg font-bold ${user.profitPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {user.profitPercent >= 0 ? '+' : ''}{user.profitPercent}%
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Positions</p>
+                          <p className="text-lg font-bold">{user.totalPositions}</p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Badge variant="outline" className="backdrop-blur-sm bg-amber-500/10 text-amber-500 border-amber-500/50">
-                          🔶 ${parseFloat(user.bnbInvestment).toFixed(2)} BNB
-                        </Badge>
-                        <Badge variant="outline" className="backdrop-blur-sm bg-purple-500/10 text-purple-500 border-purple-500/50">
-                          💎 ${parseFloat(user.pdxInvestment).toFixed(2)} PDX
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Total Investment</p>
-                        <p className="text-lg font-bold text-blue-600">${parseFloat(user.totalInvestment).toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Total Volume</p>
-                        <p className="text-lg font-bold">${user.totalVolume.toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Positions</p>
-                        <p className="text-lg font-bold">{user.totalPositions}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                ))
             )}
           </div>
         </div>

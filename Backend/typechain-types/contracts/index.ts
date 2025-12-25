@@ -13,8 +13,6 @@ import type * as custodialMarketplaceSol from "./CustodialMarketplace.sol";
 export type { custodialMarketplaceSol };
 import type * as marketMarketplaceSol from "./MarketMarketplace.sol";
 export type { marketMarketplaceSol };
-import type * as pdxDisputeResolutionSol from "./PDXDisputeResolution.sol";
-export type { pdxDisputeResolutionSol };
 import type * as pdXbazarSol from "./PDXbazar.sol";
 export type { pdXbazarSol };
 import type * as pdXhelperContractSol from "./PDXhelperContract.sol";

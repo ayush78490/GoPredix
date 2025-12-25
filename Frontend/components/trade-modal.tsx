@@ -294,6 +294,26 @@ export default function TradeModal({
     const valueWei: bigint = ethers.parseEther(bnbAmount)
     await ensureSufficientBNBBalance(valueWei)
 
+    // 🔍 LOG FEE BREAKDOWN
+    const tradeAmount = parseFloat(bnbAmount)
+    const totalFee = tradeAmount * 0.005 // 0.5% total fee
+    const lpFee = totalFee * 0.7 // 70% to LPs
+    const platformFee = totalFee * 0.3 // 30% to platform
+
+    console.log('\n=== 💰 TRADE FEE BREAKDOWN ===')
+    console.log(`Market ID: ${marketId}`)
+    console.log(`Market Creator: ${market?.creator || 'Unknown'}`)
+    console.log(`Trade Amount: ${tradeAmount.toFixed(6)} BNB`)
+    console.log(`Buying: ${outcome}`)
+    console.log('\n📊 Fee Distribution:')
+    console.log(`  Total Fee (0.5%): ${totalFee.toFixed(6)} BNB`)
+    console.log(`  ├─ LP Fee (70%): ${lpFee.toFixed(6)} BNB → Goes to liquidity providers`)
+    console.log(`  └─ Platform Fee (30%): ${platformFee.toFixed(6)} BNB → Goes to platform`)
+    console.log('\n💡 Creator Earnings:')
+    console.log(`  Direct Creator Fee: 0 BNB (not implemented)`)
+    console.log(`  Creator earns via LP tokens if they provided liquidity`)
+    console.log(`  If creator owns 100% of LP tokens → earns ${lpFee.toFixed(6)} BNB from this trade`)
+    console.log('==========================\n')
 
     if (outcome === "YES") {
       return await bnbHook.buyYesWithBNB(marketId, minOut, bnbAmount)

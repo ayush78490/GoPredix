@@ -154,14 +154,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.PDXTradingBot__factory>;
     getContractFactory(
-      name: "IPDX",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.IPDX__factory>;
-    getContractFactory(
-      name: "PDXDisputeResolution",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.PDXDisputeResolution__factory>;
-    getContractFactory(
       name: "PDXFaucet",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.PDXFaucet__factory>;
@@ -358,16 +350,6 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.PDXTradingBot>;
     getContractAt(
-      name: "IPDX",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.IPDX>;
-    getContractAt(
-      name: "PDXDisputeResolution",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.PDXDisputeResolution>;
-    getContractAt(
       name: "PDXFaucet",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -533,14 +515,6 @@ declare module "hardhat/types/runtime" {
       name: "PDXTradingBot",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PDXTradingBot>;
-    deployContract(
-      name: "IPDX",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IPDX>;
-    deployContract(
-      name: "PDXDisputeResolution",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.PDXDisputeResolution>;
     deployContract(
       name: "PDXFaucet",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -737,16 +711,6 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PDXTradingBot>;
-    deployContract(
-      name: "IPDX",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IPDX>;
-    deployContract(
-      name: "PDXDisputeResolution",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.PDXDisputeResolution>;
     deployContract(
       name: "PDXFaucet",
       args: any[],

@@ -20,9 +20,9 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 // Import the ABI
 import FAUCET_ABI from "@/contracts/pdxfaucet.json"
 
-const FAUCET_CONTRACT_ADDRESS = "0xD3561841A6dd046943739B704bcc737aAeE4cd77"
+const FAUCET_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_PDX_FAUCET_ADDRESS as string
 // Your PDX token address
-const PDX_TOKEN_ADDRESS = "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8"
+const PDX_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_PDX_TOKEN_ADDRESS as string
 
 export default function FaucetPage() {
   const { address, isConnected, chain } = useAccount()
@@ -124,7 +124,7 @@ export default function FaucetPage() {
   }
 
   const addTokenToWallet = async () => {
-    const tokenAddress = "0xeE943aCCAa07ED556DfAc9d3a76015050fA78BC8"
+    const tokenAddress = PDX_TOKEN_ADDRESS
     const tokenSymbol = "PDX"
     const tokenDecimals = 18
     const tokenImage = "" // Optional: add your token logo URL here
