@@ -125,27 +125,61 @@ export function usePredictionMarketPDX() {
   const [helperContract, setHelperContract] = useState<ethers.Contract | null>(null)
   const [pdxTokenContract, setPdxTokenContract] = useState<ethers.Contract | null>(null)
   const [isContractReady, setIsContractReady] = useState(false)
+  const [pdxBalance, setPdxBalance] = useState<string | null>(null)
 
   // Create ethers provider from wagmi public client (for read operations only)
+  // ✅ FIX 1: Create providers correctly
+  // For READ operations - use JsonRpcProvider (no wallet needed)
   const getProvider = useCallback(() => {
-    if (!publicClient) return null
-
-    // Create a proper ethers provider from viem public client
     return new ethers.JsonRpcProvider('https://data-seed-prebsc-1-s1.bnbchain.org:8545')
-  }, [publicClient])
+  }, [])
 
-  // Get signer for write operations
+  // For WRITE operations - use wagmi's walletClient (RainbowKit compatible)
   const getSigner = useCallback(async () => {
     if (!walletClient || !account) return null
 
-    // Create ethers wallet from wagmi wallet client
-    const provider = getProvider()
-    if (!provider) return null
+    // RainbowKit/wagmi provides walletClient with EIP-1193 provider
+    // We need to use the walletClient's transport as the provider
+    const provider = new ethers.BrowserProvider(walletClient.transport)
+    return await provider.getSigner(account)
+  }, [walletClient, account])
 
-    // Use BrowserProvider with the wallet client's transport
-    const browserProvider = new ethers.BrowserProvider(walletClient as any)
-    return await browserProvider.getSigner(account)
-  }, [walletClient, account, getProvider])
+  // ✅ FIX 3: Helper functions for PDX token READ and WRITE
+  const getPDXRead = useCallback(() => {
+    return new ethers.Contract(PDX_TOKEN_ADDRESS, ERC20_ABI, getProvider())
+  }, [getProvider])
+
+  const getPDXWrite = useCallback(async () => {
+    const signer = await getSigner()
+    if (!signer) throw new Error('No signer available')
+    return new ethers.Contract(PDX_TOKEN_ADDRESS, ERC20_ABI, signer)
+  }, [getSigner])
+
+  // ✅ FIX 4: Safe ERC20 call wrapper (BEP20-safe)
+  async function safeBalanceOf(token: ethers.Contract, user: string): Promise<bigint> {
+    try {
+      return await token.balanceOf(user)
+    } catch (error: any) {
+      console.error('❌ balanceOf failed:', error)
+      throw new Error(
+        `Invalid or incompatible PDX token at ${PDX_TOKEN_ADDRESS}.\n` +
+        `The token contract may not be a valid BEP20 token.\n` +
+        `Error: ${error.message || 'Unknown error'}`
+      )
+    }
+  }
+
+  async function safeAllowance(token: ethers.Contract, owner: string, spender: string): Promise<bigint> {
+    try {
+      return await token.allowance(owner, spender)
+    } catch (error: any) {
+      console.error('❌ allowance failed:', error)
+      throw new Error(
+        `Failed to check PDX token allowance.\n` +
+        `Error: ${error.message || 'Unknown error'}`
+      )
+    }
+  }
 
   // Initialize contracts when provider changes
   useEffect(() => {
@@ -220,6 +254,30 @@ export function usePredictionMarketPDX() {
 
     initializeContracts()
   }, [getProvider])
+
+  // Fetch PDX balance when account changes
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (!account) {
+        setPdxBalance(null)
+        return
+      }
+
+      try {
+        const pdxRead = getPDXRead()
+        const balance = await safeBalanceOf(pdxRead, account)
+        setPdxBalance(ethers.formatEther(balance))
+      } catch (error) {
+        console.error('Error fetching PDX balance:', error)
+        setPdxBalance(null)
+      }
+    }
+
+    fetchBalance()
+    // Refresh balance every 10 seconds
+    const interval = setInterval(fetchBalance, 10000)
+    return () => clearInterval(interval)
+  }, [account, getPDXRead])
 
   // ==================== VIEW FUNCTIONS ====================
 
@@ -548,8 +606,11 @@ export function usePredictionMarketPDX() {
         throw new Error('Question too long (max 200 characters)')
       }
 
-      // Check PDX balance
-      const balance = await (pdxWithSigner as any).balanceOf(account)
+      // ✅ FIX 2: Use READ contract for balance/allowance checks
+      const pdxRead = getPDXRead()
+
+      // Check PDX balance using safe wrapper
+      const balance = await safeBalanceOf(pdxRead, account)
       const balanceFormatted = ethers.formatEther(balance)
 
       if (balance < totalValue) {
@@ -561,8 +622,8 @@ export function usePredictionMarketPDX() {
         )
       }
 
-      // Check current allowance
-      const currentAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
+      // Check current allowance using safe wrapper
+      const currentAllowance = await safeAllowance(pdxRead, account, PDX_PREDICTION_MARKET_ADDRESS)
 
       // Only approve if needed
       if (currentAllowance < totalValue) {
@@ -582,8 +643,8 @@ export function usePredictionMarketPDX() {
       } else {
       }
 
-      // Verify approval was successful
-      const newAllowance = await (pdxWithSigner as any).allowance(account, PDX_PREDICTION_MARKET_ADDRESS)
+      // Verify approval was successful using safe wrapper
+      const newAllowance = await safeAllowance(pdxRead, account, PDX_PREDICTION_MARKET_ADDRESS)
 
       if (newAllowance < totalValue) {
         throw new Error(
@@ -1291,6 +1352,10 @@ export function usePredictionMarketPDX() {
 
 
   return {
+    // State
+    isContractReady,
+    pdxBalance,
+
     // Market management
     createMarketWithPDX,
     getPDXMarket,
@@ -1338,7 +1403,6 @@ export function usePredictionMarketPDX() {
     marketAddress: PDX_PREDICTION_MARKET_ADDRESS,
     helperAddress: PDX_HELPER_ADDRESS,
     pdxTokenAddress: PDX_TOKEN_ADDRESS,
-    isContractReady,
 
     // Constants
     MarketStatus,

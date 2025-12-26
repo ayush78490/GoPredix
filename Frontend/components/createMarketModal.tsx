@@ -46,8 +46,8 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
   const [question, setQuestion] = useState("")
   const [endDate, setEndDate] = useState("")
   const [endTime, setEndTime] = useState("")
-  const [initialYes, setInitialYes] = useState("0.1")
-  const [initialNo, setInitialNo] = useState("0.1")
+  const [initialYes, setInitialYes] = useState("5")
+  const [initialNo, setInitialNo] = useState("5")
   const [paymentToken, setPaymentToken] = useState<PaymentToken>("BNB")
   const [isProcessing, setIsProcessing] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
@@ -394,8 +394,19 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
       return
     }
 
-    if (totalLiquidity < 0.01) {
-      setError(`Total liquidity must be at least 0.01 ${paymentToken}`)
+    // Check minimum liquidity based on payment token
+    const minLiquidity = paymentToken === "BNB" ? 0.01 : 0.01
+    const actualLiquidity = showUsdInputs && bnbPrice
+      ? parseFloat(usdToBnb((yesAmount + noAmount).toString(), bnbPrice))
+      : totalLiquidity
+
+    if (actualLiquidity < minLiquidity) {
+      if (showUsdInputs && bnbPrice) {
+        const minUsd = (minLiquidity * bnbPrice).toFixed(2)
+        setError(`Total liquidity must be at least $${minUsd} USD (${minLiquidity} BNB)`)
+      } else {
+        setError(`Total liquidity must be at least ${minLiquidity} ${paymentToken}`)
+      }
       return
     }
 
@@ -533,8 +544,26 @@ export default function CreateMarketModal({ onClose, onSuccess }: CreateMarketMo
               </button>
             </div>
             {paymentToken === "PDX" && (
-              <div className="mt-3 p-3 bg-purple-950/20 border border-purple-600/50 rounded-lg text-sm text-purple-300">
-                ℹ️ You'll need to approve PDX transfer before creating the market
+              <div className="mt-3 space-y-2">
+                <div className="p-3 bg-purple-950/20 border border-purple-600/50 rounded-lg text-sm text-purple-300">
+                  ℹ️ You'll need to approve PDX transfer before creating the market
+                </div>
+                {pdxHook.pdxBalance !== null && (
+                  <div className="p-3 bg-purple-950/30 border border-purple-500/30 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Your PDX Balance:</span>
+                      <span className="text-lg font-bold text-purple-400">
+                        {parseFloat(pdxHook.pdxBalance).toFixed(2)} PDX
+                      </span>
+                    </div>
+                    {parseFloat(pdxHook.pdxBalance) < 100 && (
+                      <div className="mt-2 text-xs text-yellow-400 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Minimum 100 PDX required (50 PDX per side). <a href="/faucetPDX" className="underline hover:text-yellow-300">Get PDX from faucet</a>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {paymentToken === "BNB" && (

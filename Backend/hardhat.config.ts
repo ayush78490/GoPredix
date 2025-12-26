@@ -23,6 +23,12 @@ const networks: Record<string, any> = {
     accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     chainId: 97,
   },
+  bscMainnet: {
+    url: "https://bsc-dataseed.binance.org/",
+    accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+    chainId: 56,
+    gasPrice: 3000000000, // 3 Gwei
+  },
   localhost: {
     url: "http://127.0.0.1:8545",
   },
@@ -39,7 +45,7 @@ const config: HardhatUserConfig = {
       viaIR: true, // enable IR pipeline per request
     },
   },
-  
+
   // ✓ Contract sizer plugin to track size during compilation
   contractSizer: {
     alphaSort: true,
@@ -48,11 +54,11 @@ const config: HardhatUserConfig = {
   },
 
   networks,
-  
+
   etherscan: {
     apiKey: BSCSCAN_API_KEY || "",
   },
-  
+
   paths: {
     sources: "./contracts",
     tests: "./test",

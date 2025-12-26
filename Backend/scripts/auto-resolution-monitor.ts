@@ -10,22 +10,23 @@
 import { ethers } from 'ethers'
 import * as fs from 'fs'
 import * as path from 'path'
+import dotenv from 'dotenv'
+
+// Load environment variables
+dotenv.config()
 
 // Configuration
 const RPC_URL = process.env.RPC_URL || 'https://bsc-testnet-rpc.publicnode.com'
 const PRIVATE_KEY = process.env.RESOLVER_PRIVATE_KEY || '' // Dedicated wallet for auto-resolution
 const CHECK_INTERVAL_MS = 60 * 1000 // Check every 1 minute
 
-// Contract addresses
-const BNB_MARKET_ADDRESS = '0x7b0fC4c0A9462b8DB2F2bb71e4D66eD60E6B2eB8'
-const PDX_MARKET_ADDRESS = '0x6DFAa6D31E3C99B9461f92524c83b8e4b10f7CDE'
+// Contract addresses (from deployments/latest.json)
+const BNB_MARKET_ADDRESS = '0x90FD905aB1F479399117F6EB6b3e3E58f94e26f1'
+const PDX_MARKET_ADDRESS = '0x151fE04C421E197B982A4F62a65Acd6F416af51a'
 
-// Load ABIs
-const bnbAbiPath = path.join(__dirname, '../deployments/latest.json')
-const pdxAbiPath = path.join(__dirname, '../deployments/pdx-latest.json')
-
-const bnbDeployment = JSON.parse(fs.readFileSync(bnbAbiPath, 'utf-8'))
-const pdxDeployment = JSON.parse(fs.readFileSync(pdxAbiPath, 'utf-8'))
+// Load ABI (both contracts use the same ABI)
+const abiPath = path.join(__dirname, '../abi.json')
+const contractAbi = JSON.parse(fs.readFileSync(abiPath, 'utf-8'))
 
 // Setup provider and wallet
 const provider = new ethers.JsonRpcProvider(RPC_URL)
@@ -34,13 +35,13 @@ const wallet = new ethers.Wallet(PRIVATE_KEY, provider)
 // Setup contracts
 const bnbMarketContract = new ethers.Contract(
     BNB_MARKET_ADDRESS,
-    bnbDeployment.abi,
+    contractAbi,
     wallet
 )
 
 const pdxMarketContract = new ethers.Contract(
     PDX_MARKET_ADDRESS,
-    pdxDeployment.abi,
+    contractAbi,
     wallet
 )
 
@@ -61,7 +62,7 @@ async function checkAndResolveMarket(
         }
 
         // Get market details
-        const market = await contract.getMarket(BigInt(marketId))
+        const market = await contract.getMarketInfo(BigInt(marketId))
 
         const endTime = Number(market.endTime)
         const status = Number(market.status)

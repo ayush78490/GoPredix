@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -28,7 +28,7 @@ export default function RootLayout({
         {/* For Apple devices */}
         <link rel="apple-touch-icon" sizes="180x180" href="/logo.png" />
       </head>
-      <body className={`${inter.className} font-sans antialiased`}>
+      <body className={`${inter.className} font-sans antialiased`} suppressHydrationWarning>
         <Providers>
           {children}
           <Analytics />

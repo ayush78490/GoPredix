@@ -60,8 +60,6 @@ export type { PDXPredictionMarket } from "./contracts/PDXbazar.sol/PDXPrediction
 export { PDXPredictionMarket__factory } from "./factories/contracts/PDXbazar.sol/PDXPredictionMarket__factory";
 export type { PDXTradingBot } from "./contracts/PDXbazar.sol/PDXTradingBot";
 export { PDXTradingBot__factory } from "./factories/contracts/PDXbazar.sol/PDXTradingBot__factory";
-export type { PDXDisputeResolution } from "./contracts/PDXDisputeResolution.sol/PDXDisputeResolution";
-export { PDXDisputeResolution__factory } from "./factories/contracts/PDXDisputeResolution.sol/PDXDisputeResolution__factory";
 export type { PDXFaucet } from "./contracts/pdxfaucet.sol/PDXFaucet";
 export { PDXFaucet__factory } from "./factories/contracts/pdxfaucet.sol/PDXFaucet__factory";
 export type { IPDXPredictionMarketCore } from "./contracts/PDXhelperContract.sol/IPDXPredictionMarketCore";

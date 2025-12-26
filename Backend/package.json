@@ -20,6 +20,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251225.0",
     "@nomicfoundation/hardhat-ethers": "^3.1.2",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@nomicfoundation/hardhat-verify": "^2.1.3",

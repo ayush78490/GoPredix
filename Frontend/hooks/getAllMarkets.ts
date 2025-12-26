@@ -208,8 +208,8 @@ export function useAllMarkets() {
 
       // PERSIST TO LOCALSTORAGE SO DATA SURVIVES PAGE REFRESH
       try {
-        localStorage.setItem('cachedMarkets_v3', JSON.stringify(marketsData))
-        localStorage.setItem('marketsCacheTime_v3', Date.now().toString())
+        localStorage.setItem('cachedMarkets_v4', JSON.stringify(marketsData))
+        localStorage.setItem('marketsCacheTime_v4', Date.now().toString())
       } catch (e) {
       }
 
@@ -255,7 +255,7 @@ export function useAllMarkets() {
   // NEW: Restore cached markets on mount (BEFORE contracts load)
   useEffect(() => {
     try {
-      const cached = localStorage.getItem('cachedMarkets_v3')
+      const cached = localStorage.getItem('cachedMarkets_v4')
       if (cached) {
         const cachedMarkets = JSON.parse(cached)
         setMarkets(cachedMarkets)

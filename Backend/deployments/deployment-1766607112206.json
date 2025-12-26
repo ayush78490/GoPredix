@@ -1,0 +1,21 @@
+{
+  "network": "BSC Testnet",
+  "chainId": 97,
+  "timestamp": "2025-12-24T20:11:52.206Z",
+  "deployer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "contracts": {
+    "predictionMarket": "0xd577a9C0b5d94e961FDb5b06E2496911254A145f",
+    "helperContract": "0x15CdB56C95011Eb2b459E900EcCef987AE808c57",
+    "pdxToken": "0x19a97f3954d060B581c90Bf21FE58e98d13ae21D",
+    "pdxFaucet": "0x6450CC43B614550C71EB271445Cfc6773df626b7",
+    "pdxBazar": "0x0eb2C270D30b5fE273b5767CE998F35ecFD7247b",
+    "pdxHelperContract": "0x594c826Fc030468c946a85e8598D3D260F7DfEfD",
+    "custodialMarketplace": "0x859A9E75f80C36d5deEB23AfD098E6ddbfc87426"
+  },
+  "config": {
+    "feeBps": 50,
+    "lpFeeBps": 7000,
+    "marketplaceFeeBps": 200,
+    "resolutionServer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e"
+  }
+}
