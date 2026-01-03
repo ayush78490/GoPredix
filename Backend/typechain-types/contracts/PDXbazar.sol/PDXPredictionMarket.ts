@@ -87,6 +87,33 @@ export declare namespace IPDXPredictionMarket {
   };
 }
 
+export declare namespace PDXPredictionMarket {
+  export type TradeInfoStruct = {
+    trader: AddressLike;
+    isBuy: boolean;
+    isYes: boolean;
+    amount: BigNumberish;
+    tokenAmount: BigNumberish;
+    timestamp: BigNumberish;
+  };
+
+  export type TradeInfoStructOutput = [
+    trader: string,
+    isBuy: boolean,
+    isYes: boolean,
+    amount: bigint,
+    tokenAmount: bigint,
+    timestamp: bigint
+  ] & {
+    trader: string;
+    isBuy: boolean;
+    isYes: boolean;
+    amount: bigint;
+    tokenAmount: bigint;
+    timestamp: bigint;
+  };
+}
+
 export interface PDXPredictionMarketInterface extends Interface {
   getFunction(
     nameOrSignature:
@@ -106,6 +133,7 @@ export interface PDXPredictionMarketInterface extends Interface {
       | "getCurrentMultipliers"
       | "getMarketInfo"
       | "getOrderInfo"
+      | "getRecentTrades"
       | "getUserOrders"
       | "markets"
       | "nextMarketId"
@@ -203,6 +231,10 @@ export interface PDXPredictionMarketInterface extends Interface {
   encodeFunctionData(
     functionFragment: "getOrderInfo",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getRecentTrades",
+    values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "getUserOrders",
@@ -334,6 +366,10 @@ export interface PDXPredictionMarketInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "getOrderInfo",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getRecentTrades",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -873,6 +909,12 @@ export interface PDXPredictionMarket extends BaseContract {
     "view"
   >;
 
+  getRecentTrades: TypedContractMethod<
+    [marketId: BigNumberish, count: BigNumberish],
+    [PDXPredictionMarket.TradeInfoStructOutput[]],
+    "view"
+  >;
+
   getUserOrders: TypedContractMethod<[user: AddressLike], [bigint[]], "view">;
 
   markets: TypedContractMethod<
@@ -1159,6 +1201,13 @@ export interface PDXPredictionMarket extends BaseContract {
   ): TypedContractMethod<
     [id: BigNumberish],
     [IPDXPredictionMarket.OrderInfoStructOutput],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getRecentTrades"
+  ): TypedContractMethod<
+    [marketId: BigNumberish, count: BigNumberish],
+    [PDXPredictionMarket.TradeInfoStructOutput[]],
     "view"
   >;
   getFunction(

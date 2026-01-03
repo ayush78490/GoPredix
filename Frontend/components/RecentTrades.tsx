@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 import { Card } from '@/components/ui/card'
-import { ExternalLink, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { ExternalLink, Loader2 } from 'lucide-react'
 import BNB_MARKET_ABI from '@/contracts/Bazar.json'
 import PDX_MARKET_ABI from '@/contracts/PDXbazar.json'
 
@@ -10,9 +9,10 @@ interface Trade {
     trader: string
     isBuy: boolean
     isYes: boolean
-    amount: bigint
-    tokenAmount: bigint
-    timestamp: bigint
+    amount: string
+    tokenAmount: string
+    timestamp: number
+    txHash: string
 }
 
 interface RecentTradesProps {
@@ -20,19 +20,21 @@ interface RecentTradesProps {
     paymentToken: 'BNB' | 'PDX'
 }
 
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545'
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://bsc-testnet.publicnode.com'
 const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS!
 const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS!
+const BSCSCAN_BASE_URL = "https://testnet.bscscan.com/tx/"
 
 export default function RecentTrades({ marketId, paymentToken }: RecentTradesProps) {
     const [trades, setTrades] = useState<Trade[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
+        let isMounted = true
+
         const fetchTrades = async () => {
+            if (!isMounted) return
             setIsLoading(true)
-            setError(null)
 
             try {
                 const provider = new ethers.JsonRpcProvider(RPC_URL)
@@ -40,28 +42,103 @@ export default function RecentTrades({ marketId, paymentToken }: RecentTradesPro
                 const contractABI = paymentToken === 'BNB' ? BNB_MARKET_ABI : PDX_MARKET_ABI
                 const contract = new ethers.Contract(contractAddress, contractABI, provider)
 
-                // Call the smart contract function to get recent trades
+                // 1. Get trades from contract state (Fast and reliable visibility)
                 const recentTrades = await contract.getRecentTrades(marketId, 20)
 
-                setTrades(recentTrades)
-            } catch (err: any) {
+                const mappedTrades = recentTrades.map((t: any) => ({
+                    trader: t.trader || t[0],
+                    isBuy: t.isBuy !== undefined ? t.isBuy : t[1],
+                    isYes: t.isYes !== undefined ? t.isYes : t[2],
+                    amount: ethers.formatEther(t.amount || t[3]),
+                    tokenAmount: ethers.formatEther(t.tokenAmount || t[4]),
+                    timestamp: Number(t.timestamp || t[5]),
+                    txHash: '' // Will try to find this below
+                }))
+
+                if (isMounted) {
+                    setTrades(mappedTrades)
+                    setIsLoading(false)
+                }
+
+                // 2. Attempt to find txHashes in background (Non-blocking)
+                try {
+                    const currentBlock = await provider.getBlockNumber()
+                    const fromBlock = Math.max(0, currentBlock - 800) // Smaller range to be safer
+                    const buyEventName = paymentToken === 'BNB' ? 'BuyWithBNB' : 'BuyWithPDX'
+                    const sellEventName = paymentToken === 'BNB' ? 'SellForBNB' : 'SellForPDX'
+
+                    // Sequential fetching with delay to avoid rate limits
+                    const buyLogs = await contract.queryFilter(contract.filters[buyEventName](marketId), fromBlock, 'latest')
+
+                    // Delay before next call to avoid batch rate limits
+                    await new Promise(r => setTimeout(r, 800))
+
+                    const sellLogs = await contract.queryFilter(contract.filters[sellEventName](marketId), fromBlock, 'latest')
+
+                    const logs = [
+                        ...(buyLogs as any[]).map(l => ({ ...l, isBuy: true })),
+                        ...(sellLogs as any[]).map(l => ({ ...l, isBuy: false }))
+                    ]
+
+                    if (isMounted) {
+                        setTrades(prev =>
+                            prev.map(trade => {
+                                const matchingLog = logs.find(log => {
+                                    const args = (log as any).args
+                                    if (!args) return false
+
+                                    const logIsBuy = (log as any).isBuy ?? true
+                                    const logMarketId = Number(args.marketId ?? args[0])
+                                    const logTrader = (args.user ?? args[1]).toLowerCase()
+                                    const logIsYes = args.buyYes ?? args.sellYes ?? args.isYes ?? args[2]
+
+                                    // Identify amount: Buy uses index 3, Sell uses index 4
+                                    const logAmountRaw = logIsBuy ? (args.amount ?? args[3]) : (args.bnbOut ?? args.pdxOut ?? args[4])
+                                    const logAmount = ethers.formatEther(logAmountRaw || '0')
+
+                                    return (
+                                        logMarketId === marketId &&
+                                        logTrader === trade.trader.toLowerCase() &&
+                                        logIsBuy === trade.isBuy &&
+                                        logIsYes === trade.isYes &&
+                                        parseFloat(logAmount).toFixed(6) ===
+                                        parseFloat(trade.amount).toFixed(6)
+                                    )
+                                })
+
+                                return matchingLog
+                                    ? { ...trade, txHash: matchingLog.transactionHash }
+                                    : trade
+                            })
+                        )
+                    }
+                } catch (logErr) {
+                    console.warn('Log fetching sync failed (likely rate limited)', logErr)
+                }
+
+            } catch (err) {
                 console.error('Error fetching trades:', err)
-                setError('Failed to load recent trades')
             } finally {
-                setIsLoading(false)
+                if (isMounted) setIsLoading(false)
             }
         }
 
         fetchTrades()
+        const interval = setInterval(fetchTrades, 30000)
+        return () => {
+            isMounted = false
+            clearInterval(interval)
+        }
     }, [marketId, paymentToken])
 
     const formatAddress = (address: string) => {
         return `${address.slice(0, 6)}...${address.slice(-4)}`
     }
 
-    const formatTimeAgo = (timestamp: bigint) => {
+    const formatTimeAgo = (timestamp: number) => {
+        if (!timestamp) return 'Recent'
         const now = Math.floor(Date.now() / 1000)
-        const diff = now - Number(timestamp)
+        const diff = now - timestamp
 
         if (diff < 60) return 'Just now'
         if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
@@ -69,110 +146,86 @@ export default function RecentTrades({ marketId, paymentToken }: RecentTradesPro
         return `${Math.floor(diff / 86400)}d ago`
     }
 
-    const getTradeType = (trade: Trade): 'BUY_YES' | 'BUY_NO' | 'SELL_YES' | 'SELL_NO' => {
-        if (trade.isBuy && trade.isYes) return 'BUY_YES'
-        if (trade.isBuy && !trade.isYes) return 'BUY_NO'
-        if (!trade.isBuy && trade.isYes) return 'SELL_YES'
-        return 'SELL_NO'
+    const getTradeLabel = (trade: Trade) => {
+        const type = trade.isBuy ? 'Buy' : 'Sell'
+        const side = trade.isYes ? 'YES' : 'NO'
+        return `${type} ${side}`
     }
 
-    const getTradeColor = (type: string) => {
-        if (type === 'BUY_YES' || type === 'SELL_NO') return 'text-green-400'
+    const getTradeColor = (trade: Trade) => {
+        if ((trade.isBuy && trade.isYes) || (!trade.isBuy && !trade.isYes)) return 'text-green-400'
         return 'text-red-400'
     }
 
-    const getTradeIcon = (type: string) => {
-        if (type.startsWith('BUY')) {
-            return <TrendingUp className="w-4 h-4" />
-        }
-        return <TrendingDown className="w-4 h-4" />
-    }
-
-    const getTradeLabel = (type: string) => {
-        switch (type) {
-            case 'BUY_YES': return 'Buy YES'
-            case 'BUY_NO': return 'Buy NO'
-            case 'SELL_YES': return 'Sell YES'
-            case 'SELL_NO': return 'Sell NO'
-            default: return type
-        }
-    }
-
-    if (isLoading) {
+    if (isLoading && trades.length === 0) {
         return (
-            <Card className="p-6 backdrop-blur-sm bg-card/80">
-                <h3 className="text-lg font-semibold mb-4">Recent Trades</h3>
+            <Card className="p-6 backdrop-blur-sm bg-card/80 border-white/10">
+                <h3 className="text-lg font-semibold mb-4 text-white">Recent Trades</h3>
                 <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                    <span className="ml-2 text-muted-foreground">Loading trades...</span>
-                </div>
-            </Card>
-        )
-    }
-
-    if (error) {
-        return (
-            <Card className="p-6 backdrop-blur-sm bg-card/80">
-                <h3 className="text-lg font-semibold mb-4">Recent Trades</h3>
-                <div className="text-center py-8">
-                    <p className="text-muted-foreground text-sm">{error}</p>
-                </div>
-            </Card>
-        )
-    }
-
-    if (trades.length === 0) {
-        return (
-            <Card className="p-6 backdrop-blur-sm bg-card/80">
-                <h3 className="text-lg font-semibold mb-4">Recent Trades</h3>
-                <div className="text-center py-8 text-muted-foreground">
-                    <p>No trades yet. Be the first to trade!</p>
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
             </Card>
         )
     }
 
     return (
-        <Card className="p-6 backdrop-blur-sm bg-card/80">
-            <h3 className="text-lg font-semibold mb-4">Recent Trades</h3>
+        <Card className="p-6 backdrop-blur-sm bg-card/80 border-white/10">
+            <h3 className="text-lg font-semibold mb-4 text-white">Recent Trades</h3>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
                 {trades.map((trade, index) => {
-                    const tradeType = getTradeType(trade)
-                    // Generate a unique key using trader address, timestamp, and index
-                    const tradeKey = `${trade.trader}-${trade.timestamp.toString()}-${index}`
+                    const txUrl = trade.txHash ? `${BSCSCAN_BASE_URL}${trade.txHash}` : null
 
-                    return (
-                        <div
-                            key={tradeKey}
-                            className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                        >
-                            <div className="flex items-center gap-3 flex-1">
-                                <div className={getTradeColor(tradeType)}>
-                                    {getTradeIcon(tradeType)}
+                    const Content = (
+                        <div className={`flex items-center justify-between p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-all border border-white/5 group ${txUrl ? 'cursor-pointer' : ''}`}>
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${getTradeColor(trade)}`}>
+                                        {getTradeLabel(trade)}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                        {formatTimeAgo(trade.timestamp)}
+                                    </span>
                                 </div>
+                                <span className="text-xs font-medium text-white/50">
+                                    {formatAddress(trade.trader)}
+                                </span>
+                            </div>
 
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className={`font-medium text-sm ${getTradeColor(tradeType)}`}>
-                                            {getTradeLabel(tradeType)}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                            {formatTimeAgo(trade.timestamp)}
-                                        </span>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-xs text-muted-foreground">
-                                            {formatAddress(trade.trader)}
-                                        </span>
-                                        <span className="text-xs font-medium">
-                                            {parseFloat(ethers.formatEther(trade.amount)).toFixed(4)} {paymentToken}
-                                        </span>
-                                    </div>
-                                </div>
+                            <div className="flex flex-col items-end gap-1">
+                                <span className="text-sm font-bold text-white italic">
+                                    {parseFloat(trade.amount).toFixed(4)} {paymentToken}
+                                </span>
+                                {txUrl && (
+                                    <span className="text-[9px] text-primary group-hover:text-white transition-colors uppercase flex items-center gap-1 font-bold">
+                                        Explorer <ExternalLink className="w-2.5 h-2.5" />
+                                    </span>
+                                )}
                             </div>
                         </div>
+                    )
+
+                    return txUrl ? (
+                        <a
+                            key={`${trade.txHash || index}-${index}`}
+                            href={txUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block no-underline outline-none"
+                            onClick={() => {
+                                console.log('Trade clicked:', {
+                                    trader: trade.trader,
+                                    amount: trade.amount,
+                                    hash: trade.txHash,
+                                    url: txUrl,
+                                    type: getTradeLabel(trade)
+                                });
+                            }}
+                        >
+                            {Content}
+                        </a>
+                    ) : (
+                        <div key={index}>{Content}</div>
                     )
                 })}
             </div>

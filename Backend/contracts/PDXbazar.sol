@@ -201,6 +201,17 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
         TakeProfit
     }
 
+    error MarketNotOpen();
+    error InsufficientBalance();
+    error SlippageExceeded();
+    error InsufficientLiquidity();
+    error Unauthorized();
+    error InvalidTrade();
+    error ZeroAmount();
+    error MarketDoesNotExist();
+    error InvalidOrder();
+    error OrderNotActive();
+
     struct Market {
         address creator;
         string question;
@@ -240,6 +251,15 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
         uint256 lastUpdated;
     }
 
+    struct TradeInfo {
+        address trader;
+        bool isBuy; // true = buy, false = sell
+        bool isYes; // true = YES token, false = NO token
+        uint256 amount; // PDX amount
+        uint256 tokenAmount; // Token amount received/sold
+        uint256 timestamp;
+    }
+
     uint256 public nextMarketId;
     uint256 public nextOrderId;
     mapping(uint256 => Market) public markets;
@@ -247,6 +267,11 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
     mapping(address => uint256[]) public userOrders;
     mapping(uint256 => mapping(address => UserInvestment))
         public userInvestments;
+
+    // Trade history: marketId => array of trades
+    mapping(uint256 => TradeInfo[]) private marketTrades;
+    mapping(uint256 => uint256) private tradeHead; // Next index to write to in circular buffer
+    uint256 constant MAX_TRADES_STORED = 50;
 
     address public immutable pdxToken;
     address public resolutionServer;
@@ -529,20 +554,17 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
         bool isYes,
         uint256 pdxAmount
     ) internal {
-        require(beneficiary != address(0), "zero address");
+        if (beneficiary == address(0)) revert Unauthorized();
         Market storage m = markets[id];
-        require(
-            m.status == MarketStatus.Open &&
-                block.timestamp < m.endTime &&
-                pdxAmount > 0,
-            "invalid trade"
-        );
+        if (
+            m.status != MarketStatus.Open ||
+            block.timestamp >= m.endTime ||
+            pdxAmount == 0
+        ) revert InvalidTrade();
 
         // Transfer PDX from user
-        require(
-            IPDX(pdxToken).transferFrom(msg.sender, address(this), pdxAmount),
-            "PDX transfer failed"
-        );
+        if (!IPDX(pdxToken).transferFrom(msg.sender, address(this), pdxAmount))
+            revert InsufficientBalance();
 
         _updateUserInvestment(id, beneficiary, pdxAmount);
 
@@ -563,14 +585,12 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
             );
         }
 
-        uint256 outAmount;
         uint256 totalOut;
+        uint256 outAmount; // Declare outAmount here
         if (isYes) {
             outAmount = _getAmountOut(amountToPool, m.noPool, m.yesPool);
-            require(
-                outAmount <= m.yesPool && outAmount + pdxAmount >= minOut,
-                "slippage exceeded"
-            );
+            if (outAmount > m.yesPool || outAmount + pdxAmount < minOut)
+                revert SlippageExceeded();
             totalOut = outAmount + pdxAmount;
 
             m.yesPool += amountToPool;
@@ -578,10 +598,8 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
             m.yesToken.mint(beneficiary, totalOut);
         } else {
             outAmount = _getAmountOut(amountToPool, m.yesPool, m.noPool);
-            require(
-                outAmount <= m.noPool && outAmount + pdxAmount >= minOut,
-                "slippage exceeded"
-            );
+            if (outAmount > m.noPool || outAmount + pdxAmount < minOut)
+                revert SlippageExceeded();
             totalOut = outAmount + pdxAmount;
 
             m.noPool += amountToPool;
@@ -589,6 +607,9 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
             m.noToken.mint(beneficiary, totalOut);
         }
         m.totalBacking += pdxAmount;
+
+        // Record the trade
+        _recordTrade(id, beneficiary, true, isYes, pdxAmount, totalOut);
 
         emit BuyWithPDX(id, beneficiary, isYes, pdxAmount, totalOut);
     }
@@ -616,18 +637,15 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
         bool isYes
     ) internal {
         Market storage m = markets[id];
-        require(
-            m.status == MarketStatus.Open &&
-                block.timestamp < m.endTime &&
-                tokenAmount > 0,
-            "invalid trade"
-        );
+        if (
+            m.status != MarketStatus.Open ||
+            block.timestamp >= m.endTime ||
+            tokenAmount == 0
+        ) revert InvalidTrade();
 
         OutcomeToken token = isYes ? m.yesToken : m.noToken;
-        require(
-            token.balanceOf(msg.sender) >= tokenAmount,
-            "insufficient balance"
-        );
+        if (token.balanceOf(msg.sender) < tokenAmount)
+            revert InsufficientBalance();
 
         uint256 outAmount;
         if (isYes) {
@@ -642,11 +660,9 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
             m.noPool -= outAmount;
         }
 
-        require(outAmount >= minPDXOut, "slippage exceeded");
-        require(
-            IPDX(pdxToken).balanceOf(address(this)) >= outAmount,
-            "insufficient PDX balance"
-        );
+        if (outAmount < minPDXOut) revert SlippageExceeded();
+        if (IPDX(pdxToken).balanceOf(address(this)) < outAmount)
+            revert InsufficientLiquidity();
 
         // 3% total fee from PDX output: 2% creator + 1% platform
         uint256 totalFee = (outAmount * 300) / 10000; // 3% total
@@ -662,17 +678,16 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
 
         // Send creator fee to market creator
         if (creatorFee > 0) {
-            require(
-                IPDX(pdxToken).transfer(m.creator, creatorFee),
-                "creator payout failed"
-            );
+            if (!IPDX(pdxToken).transfer(m.creator, creatorFee))
+                revert InsufficientBalance();
         }
 
         // Send remaining to user
-        require(
-            IPDX(pdxToken).transfer(msg.sender, userReceives),
-            "PDX transfer failed"
-        );
+        if (!IPDX(pdxToken).transfer(msg.sender, userReceives))
+            revert InsufficientBalance();
+
+        // Record the trade
+        _recordTrade(id, msg.sender, false, isYes, userReceives, tokenAmount);
 
         emit SellForPDX(id, msg.sender, isYes, tokenAmount, userReceives);
     }
@@ -719,25 +734,19 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
         OrderType orderType
     ) internal returns (uint256) {
         Market storage m = markets[marketId];
-        require(
-            m.status == MarketStatus.Open && tokenAmount > 0,
-            "invalid order"
-        );
+        if (m.status != MarketStatus.Open || tokenAmount == 0)
+            revert InvalidOrder();
 
         if (orderType == OrderType.StopLoss) {
-            require(
-                triggerPrice > 0 && triggerPrice < 10000,
-                "invalid stop loss"
-            );
+            if (triggerPrice == 0 || triggerPrice >= 10000)
+                revert InvalidOrder();
         } else {
-            require(triggerPrice > 10000, "invalid take profit");
+            if (triggerPrice <= 10000) revert InvalidOrder();
         }
 
         OutcomeToken token = isYes ? m.yesToken : m.noToken;
-        require(
-            token.balanceOf(msg.sender) >= tokenAmount,
-            "insufficient balance"
-        );
+        if (token.balanceOf(msg.sender) < tokenAmount)
+            revert InsufficientBalance();
 
         uint256 orderId = nextOrderId++;
         orders[orderId] = Order(
@@ -1110,6 +1119,71 @@ contract PDXPredictionMarket is IPDXPredictionMarket {
             result[i] = strBytes[i];
         }
         return string(result);
+    }
+
+    function _recordTrade(
+        uint256 marketId,
+        address trader,
+        bool isBuy,
+        bool isYes,
+        uint256 amount,
+        uint256 tokenAmount
+    ) internal {
+        TradeInfo[] storage trades = marketTrades[marketId];
+        TradeInfo memory newTrade = TradeInfo({
+            trader: trader,
+            isBuy: isBuy,
+            isYes: isYes,
+            amount: amount,
+            tokenAmount: tokenAmount,
+            timestamp: block.timestamp
+        });
+
+        uint256 len = trades.length;
+        if (len < MAX_TRADES_STORED) {
+            trades.push(newTrade);
+        } else {
+            uint256 head = tradeHead[marketId];
+            trades[head] = newTrade;
+            tradeHead[marketId] = (head + 1) % MAX_TRADES_STORED;
+        }
+    }
+
+    // View function to get recent trades for a market
+    function getRecentTrades(
+        uint256 marketId,
+        uint256 count
+    ) external view returns (TradeInfo[] memory) {
+        TradeInfo[] storage trades = marketTrades[marketId];
+        uint256 len = trades.length;
+
+        if (len == 0) return new TradeInfo[](0);
+
+        uint256 returnCount = count > len ? len : count;
+        TradeInfo[] memory recentTrades = new TradeInfo[](returnCount);
+
+        // Find where the most recent trade is
+        // If the buffer is full, the most recent is at (tradeHead - 1) % MAX
+        // If not full, it's at len - 1
+        uint256 current;
+        if (len < MAX_TRADES_STORED) {
+            current = len - 1;
+        } else {
+            current =
+                (tradeHead[marketId] + MAX_TRADES_STORED - 1) %
+                MAX_TRADES_STORED;
+        }
+
+        for (uint256 i = 0; i < returnCount; i++) {
+            recentTrades[i] = trades[current];
+            if (current == 0) {
+                current = MAX_TRADES_STORED - 1;
+            } else {
+                current--;
+            }
+        }
+
+        return recentTrades;
     }
 }
 

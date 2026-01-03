@@ -1,0 +1,14 @@
+{
+  "network": "bsc-testnet",
+  "deployer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "timestamp": "2026-01-03T10:44:40.316Z",
+  "contracts": {
+    "PDXPredictionMarket": "0x33CCC9f2C9DF73EeCcbc5468b5f01Aaac3654c65"
+  },
+  "parameters": {
+    "pdxToken": "0x62C900A234643Ec5865409b738F27413edFD8794",
+    "feeBps": 300,
+    "creatorFeeBps": 6667,
+    "resolutionServer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e"
+  }
+}
