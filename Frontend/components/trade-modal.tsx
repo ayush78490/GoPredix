@@ -573,8 +573,16 @@ export default function TradeModal({
 
   const payoutMultiplier = useMemo(() => {
     if (!numAmount || !expectedPayout || numAmount <= 0) return null
-    return expectedPayout / numAmount
-  }, [numAmount, expectedPayout])
+
+    // Convert both to BNB for accurate multiplier calculation
+    // expectedPayout is already in BNB
+    // numAmount needs to be converted to BNB if showing USD inputs
+    const amountInBnb = showUsdInputs && bnbPrice ? usdToBnb(numAmount.toString(), bnbPrice) : numAmount
+    const amountInBnbNum = typeof amountInBnb === 'number' ? amountInBnb : parseFloat(amountInBnb)
+
+    if (amountInBnbNum <= 0) return null
+    return expectedPayout / amountInBnbNum
+  }, [numAmount, expectedPayout, showUsdInputs, bnbPrice])
 
   const minPayout = useMemo(() => {
     if (!expectedPayout) return null

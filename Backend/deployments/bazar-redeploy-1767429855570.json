@@ -1,0 +1,13 @@
+{
+  "network": "bsc-testnet",
+  "deployer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e",
+  "timestamp": "2026-01-03T08:44:15.570Z",
+  "contracts": {
+    "PredictionMarketWithMultipliers": "0xcAAAcb61D570261a73bCE6fE509aaBa6418FDdBD"
+  },
+  "parameters": {
+    "feeBps": 300,
+    "lpFeeBps": 5000,
+    "resolutionServer": "0xd84fdA5439152A51fBc11C2a5838F3aFF57ce02e"
+  }
+}

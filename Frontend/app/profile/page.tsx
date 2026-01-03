@@ -80,6 +80,11 @@ interface MarketPosition {
   marketStatus: number
   endTime: number
   paymentToken: "BNB" | "PDX"
+  outcome: number // 0 = NO, 1 = YES, 2 = Undecided
+  // Claim status
+  hasClaimed?: boolean
+  claimTxHash?: string
+  isWinner?: boolean // true if user has winning tokens
   // Dispute-related fields
   disputeId?: number
   disputeStatus?: number
@@ -548,6 +553,20 @@ export default function ProfilePage() {
             (disputeInfo?.hasDispute &&
               disputeInfo.status === 3) || false // Dispute resolved
 
+          // Determine if user is a winner and if they've claimed
+          // Only consider as winner if market is FULLY RESOLVED (status 3)
+          const isWinner =
+            position.market.status === 3 && // Must be fully resolved
+            ((position.market.outcome === 1 && parseFloat(position.yesBalance) > 0) || // YES outcome with YES tokens
+              (position.market.outcome === 0 && parseFloat(position.noBalance) > 0))     // NO outcome with NO tokens
+
+          // If market is resolved and user was a winner but has 0 winning tokens, they've likely claimed
+          const hasClaimed =
+            position.market.status === 3 && // Resolved
+            position.market.outcome !== 2 && // Not Undecided
+            ((position.market.outcome === 1 && parseFloat(position.yesBalance) === 0 && parseFloat(position.bnbInvested || position.pdxInvested || "0") > 0) ||
+              (position.market.outcome === 0 && parseFloat(position.noBalance) === 0 && parseFloat(position.bnbInvested || position.pdxInvested || "0") > 0))
+
           return {
             marketId: position.market.id,
             question: position.market.question,
@@ -566,6 +585,9 @@ export default function ProfilePage() {
             yesPrice: prices.yesPrice,
             noPrice: prices.noPrice,
             paymentToken: position.paymentToken,
+            outcome: position.market.outcome, // 0 = NO, 1 = YES, 2 = Undecided
+            isWinner,
+            hasClaimed,
             // Dispute-related fields
             disputeId: disputeInfo?.disputeId,
             disputeStatus: disputeInfo?.status,
@@ -975,6 +997,53 @@ export default function ProfilePage() {
     setError(null)
 
     try {
+      // Validate that user has winning tokens before attempting to claim
+      const outcome = position.outcome
+
+      console.log('=== CLAIM VALIDATION DEBUG ===')
+      console.log('Market ID:', position.marketId)
+      console.log('Payment Token:', position.paymentToken)
+      console.log('Market Status:', position.marketStatus, '(3 = Resolved)')
+      console.log('Outcome:', outcome, '(0 = NO, 1 = YES, 2 = Undecided)')
+      console.log('YES Tokens:', position.yesTokens)
+      console.log('NO Tokens:', position.noTokens)
+      console.log('Is Winner:', position.isWinner)
+      console.log('Has Claimed:', position.hasClaimed)
+
+      // Check if market is actually resolved
+      if (position.marketStatus !== 3) {
+        const statusText = position.marketStatus === 2
+          ? "awaiting resolution from the server"
+          : position.marketStatus === 0
+            ? "still open"
+            : "not yet resolved"
+        setError(`Market is ${statusText}. You can only claim after the market has been fully resolved.`)
+        setActionLoading(null)
+        return
+      }
+
+      if (outcome === undefined || outcome === 2) { // 2 = Undecided
+        setError("Market outcome is not yet decided. Cannot claim winnings.")
+        setActionLoading(null)
+        return
+      }
+
+      const hasWinningTokens =
+        (outcome === 1 && position.yesTokens > 0) || // YES outcome and has YES tokens
+        (outcome === 0 && position.noTokens > 0)     // NO outcome and has NO tokens
+
+      console.log('Has Winning Tokens:', hasWinningTokens)
+
+      if (!hasWinningTokens) {
+        const outcomeText = outcome === 1 ? "YES" : "NO"
+        const userTokens = position.yesTokens > 0 ? "YES" : "NO"
+        setError(`Cannot claim: Market resolved to ${outcomeText} but you only have ${userTokens} tokens.`)
+        setActionLoading(null)
+        return
+      }
+
+      console.log('✅ Validation passed, attempting claim...')
+
       let txReceipt
       if (position.paymentToken === "BNB") {
         txReceipt = await bnbHook.claimRedemption(position.marketId)
@@ -984,10 +1053,15 @@ export default function ProfilePage() {
 
       // Show success dialog with transaction details
       if (txReceipt) {
-        setClaimTxHash(txReceipt.hash || txReceipt.transactionHash)
+        const txHash = txReceipt.hash || txReceipt.transactionHash
+        setClaimTxHash(txHash)
         setClaimAmount(`${position.currentValue.toFixed(4)} ${position.paymentToken}`)
         setClaimTimestamp(Math.floor(Date.now() / 1000))
         setShowClaimSuccess(true)
+
+        // Update the position to mark as claimed with tx hash
+        position.hasClaimed = true
+        position.claimTxHash = txHash
       }
 
       // Refresh data after claim
@@ -995,7 +1069,18 @@ export default function ProfilePage() {
 
     } catch (err: any) {
       console.error("Error claiming winnings:", err)
-      setError(err.message || "Failed to claim winnings")
+      let errorMessage = err.message || "Failed to claim winnings"
+
+      // Provide more helpful error messages
+      if (errorMessage.includes("invalid BigNumberish") || errorMessage.includes("null")) {
+        errorMessage = "Unable to claim: You may not have winning tokens or the market outcome is not finalized."
+      } else if (errorMessage.includes("market not resolved")) {
+        errorMessage = "Market is not yet resolved. Please wait for resolution."
+      } else if (errorMessage.includes("no tokens")) {
+        errorMessage = "You don't have any tokens to claim for this outcome."
+      }
+
+      setError(errorMessage)
     } finally {
       setActionLoading(null)
     }
@@ -1013,7 +1098,9 @@ export default function ProfilePage() {
       if (selectedMarketForLP.paymentToken === "BNB") {
         await bnbHook.removeLiquidity(selectedMarketForLP.id, lpRemovalAmount)
       } else {
-        await pdxHook.removePDXLiquidity(selectedMarketForLP.id, lpRemovalAmount)
+        // TODO: PDX markets don't support liquidity removal yet
+        throw new Error("PDX markets don't support liquidity removal at this time")
+        // await pdxHook.removePDXLiquidity(selectedMarketForLP.id, lpRemovalAmount)
       }
 
       // Close modal and refresh data
@@ -1428,24 +1515,56 @@ export default function ProfilePage() {
                                   </Button>
                                 )}
 
-                                {/* Show Claim button for resolved/ended markets where user has tokens */}
-                                {position.status === "Resolved" && (position.yesTokens > 0 || position.noTokens > 0) && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => handleClaimWinnings(position)}
-                                    disabled={actionLoading === `claim-${position.marketId}`}
-                                    className="backdrop-blur-sm bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
-                                  >
-                                    {actionLoading === `claim-${position.marketId}` ? (
-                                      <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Claiming...
-                                      </>
-                                    ) : (
-                                      "🏆 Claim Winnings"
+                                {/* Claim Status Display for Resolved Markets */}
+                                {position.status === "Resolved" && position.outcome !== undefined && position.outcome !== 2 && (
+                                  <>
+                                    {/* Already Claimed */}
+                                    {position.hasClaimed && (
+                                      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-green-500/10 border border-green-500/30 backdrop-blur-sm">
+                                        <span className="text-green-600 text-sm font-medium">✅ Already Claimed</span>
+                                        {position.claimTxHash && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-2 text-xs"
+                                            onClick={() => window.open(`https://testnet.bscscan.com/tx/${position.claimTxHash}`, '_blank')}
+                                          >
+                                            <ExternalLink className="w-3 h-3" />
+                                          </Button>
+                                        )}
+                                      </div>
                                     )}
-                                  </Button>
+
+                                    {/* Can Claim - User Won */}
+                                    {!position.hasClaimed && position.isWinner && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() => handleClaimWinnings(position)}
+                                        disabled={actionLoading === `claim-${position.marketId}`}
+                                        className="backdrop-blur-sm bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
+                                      >
+                                        {actionLoading === `claim-${position.marketId}` ? (
+                                          <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Claiming...
+                                          </>
+                                        ) : (
+                                          "🏆 Claim Winnings"
+                                        )}
+                                      </Button>
+                                    )}
+
+                                    {/* User Lost */}
+                                    {!position.hasClaimed && !position.isWinner && (
+                                      <div className="px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
+                                        <span className="text-red-600 text-sm font-medium">
+                                          ❌ You Lost
+                                          {position.outcome === 1 ? " (Market: YES)" : " (Market: NO)"}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </>
                                 )}
 
                                 {/* Create Dispute Button */}

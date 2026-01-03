@@ -213,6 +213,15 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
         uint256 lastUpdated;
     }
 
+    struct TradeInfo {
+        address trader;
+        bool isBuy; // true = buy, false = sell
+        bool isYes; // true = YES token, false = NO token
+        uint256 amount; // BNB/PDX amount
+        uint256 tokenAmount; // Token amount received/sold
+        uint256 timestamp;
+    }
+
     uint256 public nextMarketId;
     uint256 public nextOrderId;
     mapping(uint256 => Market) public markets;
@@ -221,6 +230,10 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
     mapping(address => uint256[]) public userOrders;
     mapping(uint256 => mapping(address => UserInvestment))
         public userInvestments;
+
+    // Trade history: marketId => array of trades (max 100 per market)
+    mapping(uint256 => TradeInfo[]) private marketTrades;
+    uint256 constant MAX_TRADES_STORED = 100;
 
     address public resolutionServer;
     address public owner;
@@ -507,6 +520,9 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
         }
         m.totalBacking += amountIn;
 
+        // Record the trade
+        _recordTrade(id, beneficiary, true, isYes, amountIn, totalOut);
+
         emit BuyWithBNB(id, beneficiary, isYes, amountIn, totalOut);
     }
 
@@ -581,6 +597,9 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
 
         // Send remaining to user
         _transferBNB(msg.sender, userReceives);
+
+        // Record the trade
+        _recordTrade(id, msg.sender, false, isYes, userReceives, tokenAmount);
 
         emit SellForBNB(id, msg.sender, isYes, tokenAmount, userReceives);
     }
@@ -1079,6 +1098,63 @@ contract PredictionMarketWithMultipliers is IPredictionMarket {
             result[i] = strBytes[i];
         }
         return string(result);
+    }
+
+    // Helper function to record a trade
+    function _recordTrade(
+        uint256 marketId,
+        address trader,
+        bool isBuy,
+        bool isYes,
+        uint256 amount,
+        uint256 tokenAmount
+    ) internal {
+        TradeInfo[] storage trades = marketTrades[marketId];
+
+        // If we've hit the max, remove the oldest trade
+        if (trades.length >= MAX_TRADES_STORED) {
+            // Shift all elements left by one (remove first element)
+            for (uint256 i = 0; i < trades.length - 1; i++) {
+                trades[i] = trades[i + 1];
+            }
+            trades.pop();
+        }
+
+        // Add new trade
+        trades.push(
+            TradeInfo({
+                trader: trader,
+                isBuy: isBuy,
+                isYes: isYes,
+                amount: amount,
+                tokenAmount: tokenAmount,
+                timestamp: block.timestamp
+            })
+        );
+    }
+
+    // View function to get recent trades for a market
+    function getRecentTrades(
+        uint256 marketId,
+        uint256 count
+    ) external view returns (TradeInfo[] memory) {
+        TradeInfo[] storage trades = marketTrades[marketId];
+        uint256 totalTrades = trades.length;
+
+        if (totalTrades == 0) {
+            return new TradeInfo[](0);
+        }
+
+        // Return the last 'count' trades, or all if count > totalTrades
+        uint256 returnCount = count > totalTrades ? totalTrades : count;
+        TradeInfo[] memory recentTrades = new TradeInfo[](returnCount);
+
+        // Copy trades in reverse order (most recent first)
+        for (uint256 i = 0; i < returnCount; i++) {
+            recentTrades[i] = trades[totalTrades - 1 - i];
+        }
+
+        return recentTrades;
     }
 
     receive() external payable {}

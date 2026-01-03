@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation"
 import Header from "@/components/header"
 import PriceChart from "@/components/price-chart"
 import TradeModal from "@/components/trade-modal"
+import RecentTrades from "@/components/RecentTrades"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ArrowLeft, Volume2, TrendingUp, Loader2, Calendar, User, Coins } from "lucide-react"
@@ -17,6 +18,20 @@ import Footer from "@/components/footer"
 import LightRays from "@/components/LightRays"
 import { useAccount, useChainId } from "wagmi"
 import { LogoLoading } from "@/components/ui/logo-loading"
+
+// Import contract ABIs
+import BNB_MARKET_ARTIFACT from "@/contracts/Bazar.json"
+import PDX_MARKET_ARTIFACT from "@/contracts/PDXbazar.json"
+
+const extractABI = (artifact: any) => {
+  return ('abi' in artifact ? artifact.abi : artifact)
+}
+
+const BNB_MARKET_ABI = extractABI(BNB_MARKET_ARTIFACT)
+const PDX_MARKET_ABI = extractABI(PDX_MARKET_ARTIFACT)
+
+const BNB_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS!
+const PDX_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PDX_MARKET_ADDRESS!
 
 const safeStringify = (obj: any): string => {
   return JSON.stringify(obj, (_, value) => {
@@ -845,6 +860,14 @@ export default function MarketPage() {
                   </div>
                 )}
               </Card>
+
+              {/* Recent Trades - Below Current Odds */}
+              <div className="mt-6">
+                <RecentTrades
+                  marketId={market.numericId}
+                  paymentToken={market.paymentToken}
+                />
+              </div>
             </div>
 
             {/* Details & Chart Column - Mobile Order 3, Desktop Left Col */}

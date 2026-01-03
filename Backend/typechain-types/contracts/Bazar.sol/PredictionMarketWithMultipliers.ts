@@ -87,6 +87,33 @@ export declare namespace IPredictionMarket {
   };
 }
 
+export declare namespace PredictionMarketWithMultipliers {
+  export type TradeInfoStruct = {
+    trader: AddressLike;
+    isBuy: boolean;
+    isYes: boolean;
+    amount: BigNumberish;
+    tokenAmount: BigNumberish;
+    timestamp: BigNumberish;
+  };
+
+  export type TradeInfoStructOutput = [
+    trader: string,
+    isBuy: boolean,
+    isYes: boolean,
+    amount: bigint,
+    tokenAmount: bigint,
+    timestamp: bigint
+  ] & {
+    trader: string;
+    isBuy: boolean;
+    isYes: boolean;
+    amount: bigint;
+    tokenAmount: bigint;
+    timestamp: bigint;
+  };
+}
+
 export interface PredictionMarketWithMultipliersInterface extends Interface {
   getFunction(
     nameOrSignature:
@@ -106,6 +133,7 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
       | "getCurrentMultipliers"
       | "getMarketInfo"
       | "getOrderInfo"
+      | "getRecentTrades"
       | "getUserOrders"
       | "lpBalances"
       | "lpFeeBps"
@@ -203,6 +231,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   encodeFunctionData(
     functionFragment: "getOrderInfo",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getRecentTrades",
+    values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "getUserOrders",
@@ -330,6 +362,10 @@ export interface PredictionMarketWithMultipliersInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "getOrderInfo",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getRecentTrades",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -889,6 +925,12 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
     "view"
   >;
 
+  getRecentTrades: TypedContractMethod<
+    [marketId: BigNumberish, count: BigNumberish],
+    [PredictionMarketWithMultipliers.TradeInfoStructOutput[]],
+    "view"
+  >;
+
   getUserOrders: TypedContractMethod<[user: AddressLike], [bigint[]], "view">;
 
   lpBalances: TypedContractMethod<
@@ -1164,6 +1206,13 @@ export interface PredictionMarketWithMultipliers extends BaseContract {
   ): TypedContractMethod<
     [id: BigNumberish],
     [IPredictionMarket.OrderInfoStructOutput],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getRecentTrades"
+  ): TypedContractMethod<
+    [marketId: BigNumberish, count: BigNumberish],
+    [PredictionMarketWithMultipliers.TradeInfoStructOutput[]],
     "view"
   >;
   getFunction(
